@@ -169,7 +169,6 @@ class WebEntity extends Entity
     {
         super.makeMove();
         super.endMove();
-
     }
 
 }

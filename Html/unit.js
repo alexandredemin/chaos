@@ -36,7 +36,7 @@ class Unit extends BaseUnit
     {
         if(this.player != null)this.player.removeUnit(this);
         units.splice(units.indexOf(this),1);
-        //this.destroy();
+        this.destroy();
         if(selectedUnit === this)
         {
             selectedUnit = null;
@@ -256,6 +256,19 @@ class Unit extends BaseUnit
         this.processedAbility.start(this);
         this.processedAbility.next();
     }
+    
+    endAbility()
+    {
+        this.processedAbility = null;
+        if(this.player.control === PlayerControl.human)
+        {
+            setInteractionScenario(userInteractionScenario.movement);
+        }
+        else
+        {
+            this.player.aiControl.step(this);
+        }
+    }
 
     stopAbility()
     {
@@ -263,7 +276,7 @@ class Unit extends BaseUnit
         {
             if(this.processedAbility.spell != null)
             {
-                spellTypes[this.processedAbility.spell.type].stop();
+                spellTypes[this.processedAbility.spell.type].stop(false);
             }
             else
             {

@@ -19,10 +19,11 @@ class Spell
 
     stop(res)
     {
-        //this.wizard = null;
-        //this.spellConfig = null;
-        if(this.callbackObject != null)this.callbackObject.onSpellCallback(res);
-        //this.callbackObject = null;
+      this.wizard = null;
+      this.spellConfig = null;
+      let cb = this.callbackObject;
+      this.callbackObject = null;  
+      if(cb != null) cb.onSpellCallback(res);
     }
 
     next()

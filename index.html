@@ -327,7 +327,7 @@
         }
         else
         {
-            players[playerInd].startTurn()
+            players[playerInd].startTurn();
         }
         /*
         let dmap = players[1].aiControl.getDistanceMap(players[0].units[0].mapX,players[0].units[0].mapY);
@@ -342,14 +342,14 @@
 
 	function moveEntites()
 	{
-        let allMoved = true;
+    let allMoved = true;
 		for(let i=0;i<entities.length;i++)
 		{
 			if(entities[i].moved === false)
 			{
 				allMoved = false;
 				entities[i].makeMove();
-				break;
+				return;
 			}
 		}
 		if(allMoved)
@@ -358,13 +358,13 @@
 			playerInd = 0;
 			console.log('next player '+playerInd);
 			console.log('units: '+players[playerInd].units.length);
-            startTurn();
+      startTurn();
 		}
 	}
 
 	function endTurn()
 	{
-        setInteractionScenario(userInteractionScenario.movement);
+    setInteractionScenario(userInteractionScenario.movement);
 		console.log('end turn');
 		console.log('prev player '+playerInd);
 		playerInd++;
@@ -376,7 +376,7 @@
 		{
 			console.log('next player '+playerInd);
 			console.log('units: '+players[playerInd].units.length);
-            startTurn();
+      startTurn();
 		}
 	}
 

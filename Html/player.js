@@ -47,18 +47,6 @@ class Player
                 return;
             }
         }
-    }
-
-    recover()
-    {
-        this.units.forEach(item => item.recovered = false);
-        this.processRecover();
-    }
-
-    startTurn()
-    {
-        this.units.forEach(item => {item.visible=true; checkUnitVisibility(item);});
-        this.recover();
         if(this.control === PlayerControl.human) {
             if (this.units.length > 0)
             {
@@ -69,5 +57,12 @@ class Player
         else{
             this.aiControl.startTurn();
         }
+    }
+
+    startTurn()
+    {
+        this.units.forEach(item => {item.visible=true; checkUnitVisibility(item);});
+        this.units.forEach(item => item.recovered = false);
+        this.processRecover();
     }
 }
