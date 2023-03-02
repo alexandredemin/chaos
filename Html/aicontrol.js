@@ -15,17 +15,14 @@ class AIControl
     {
         if(this.player.units.length === 0)
         {
-            endTurn();
+            setTimeout(endTurn,1);
             return;
         }
         this.availableUnits = [];
-        this.availableUnits.push(this.player.units[0]);
-        /*
         for(let i=this.player.units.length-1;i>=0;i--)
         {
             this.availableUnits.push(this.player.units[i]);
         }
-         */
         this.passStage = 1;
         this.pass();
     }
@@ -43,7 +40,6 @@ class AIControl
             if(this.passStage === 1) {
                 this.passStage = 2;
                 for (let i = this.player.units.length - 1; i >= 0; i--) {
-                    if(i>0)break;
                     let unt = this.player.units[i];
                     if (unt.features.move > 0 || unt.features.abilityPoints > 0) this.availableUnits.push(unt);
                 }
@@ -51,40 +47,31 @@ class AIControl
             }
             else
             {
-                endTurn();
+                setTimeout(endTurn,1);
             }
         }
     }
 
     step(unit)
     {
+        if(unit.died)
+        {
+            this.pass();
+            return;
+        }
         if(unit.config.name === "wizard")
         {
             this.stepWizard(unit);
             return;
         }
-        this.stepUnit(unit);
         /*
-        let availableSteps = [];
-        if(unit.features.move > 0)
+        if(unit.config.name === "muddy")
         {
-            for (let y = -1; y <= 1; y++)
-                for (let x = -1; x <= 1; x++)
-                {
-                    if (x === 0 && y === 0) continue;
-                    if (unit.canStepTo(x, y)) availableSteps.push([unit.mapX + x, unit.mapY + y]);
-                }
-
-        }
-        if(availableSteps.length>0)
-        {
-            let ind = randomInt(0,availableSteps.length-1);
-            unit.stepTo(availableSteps[ind][0],availableSteps[ind][1]);
-        }
-        else{
-            this.pass();
+            this.stepMuddy(unit);
+            return;
         }
         */
+        this.stepUnit(unit);
     }
 
     stepUnit(unit)
@@ -129,6 +116,97 @@ class AIControl
         else
         {
             this.pass();
+        }
+    }
+
+    stepMuddy(unit)
+    {
+        if(!unit.aiControl)
+        {
+            unit.aiControl = {target: null};
+        }
+        if(unit.aicontrol.target == null)
+        {
+            let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+            let stepPlaces = getAvailableCells(dMap,unit,null,true);
+            for(let i=0;i<stepPlaces.length;i++)
+            {
+                let place = stepPlaces[i];
+                place.weight = 0;
+                targets = selectUnits(place.cell[0], place.cell[1], null, [unit], unit.config.abilities.gas.config.range);
+                for(let j=0;j<targets.length;j++)
+                {
+                    //if(this.canAtack(trgt)===false) continue;
+                    let trgt = targets[j];
+                    if(trgt.player !== unit.player)
+                    {
+                        place.weight = place.weight + unit.config.abilities.gas.config.damage;
+                        if(place.dist < unit.features.move && Math.abs(unit.mapX - trgt.mapX) <= 1 && Math.abs(unit.mapY - trgt.mapY) <= 1)
+                        {
+                            place.weight = place.weight + unit.config.features.strength;
+                        }
+                    }
+                    else
+                    {
+                        place.weight = place.weight - unit.config.abilities.gas.config.damage;    
+                    }
+                }
+            }
+            let bestPlace = stepPlaces[0];  
+            for(let i=1;i<stepPlaces.length;i++)
+            {
+                if(stepPlaces[i].weight > bestPlace.weight) bestPlace = stepPlaces[i].weight;
+            }
+            if(bestPlace.weight > 0)
+            {
+                unit.aicontrol.target = bestPlace.cell;    
+            }
+            else
+            {
+                let dist = map.height + map.width;
+                players.forEach(pl => {
+                    if(pl !== unit.player && pl.wizard)
+                    {
+                        if(dmap[pl.wizard.mapY][pl.wizard.mapX] < dist)
+                        {
+                            dist = dmap[pl.wizard.mapY][pl.wizard.mapX];
+                            unit.aicontrol.target = [pl.wizard.mapX,pl.wizard.mapY];
+                        }
+                    }
+                });    
+            }
+        }
+        if(unit.aicontrol.target == null)
+        {
+            this.pass();
+            return;
+        }
+        else
+        {
+            if(unit.mapX === unit.aicontrol.target[0] && unit.mapY === unit.aicontrol.target[1])
+            {
+                //atack
+            }
+            else
+            {
+                let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+                let cell = this.getOptimalStep(dmap,unit.aicontrol.target);
+                if(cell != null)
+                {
+                    if(unit.canStepTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) unit.stepTo(cell[0],cell[1]);
+                    else if(unit.canAtackTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) unit.atackTo(cell[0], cell[1]);
+                    else
+                    {
+                      unit.aicontrol.target = null;  
+                      this.pass();
+                    }
+                }
+                else
+                {
+                  unit.aicontrol.target = null;  
+                  this.pass();
+                }
+            }
         }
     }
 
@@ -271,6 +349,27 @@ class AIControl
             }
             else return null;
         }
+    }
+
+    getAvailableCells(dMap,unit,bypassEntities,bypassUnits)
+    {
+        let cells = [];
+        let range = unit.features.move;
+        for(let yy=unit.mapY-range; yy<=unit.mapY+range; yy++)
+            for(let xx=unit.mapX-range; xx<=unit.mapX+range; xx++)
+            {
+                if((xx<0)||(xx>=map.width)||(yy<0)||(yy>=map.height)||( (xx===cell[0])&&(yy===cell[1])))continue;
+                if(bypassEntities)
+                {
+                    if(Entity.getEntityAtMap(xx,yy) != null)continue;
+                }
+                if(bypassUnits)
+                {
+                    if(getUnitAtMap(xx,yy) != null)continue;
+                }
+                if(dMap[yy][xx] > -1 && dMap[yy][xx] <= range) cells.push({cell:[xx,yy],dist:dMap[yy][xx]});
+            }
+        return cells;
     }
 
 }

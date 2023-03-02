@@ -316,6 +316,11 @@
     }
 
     function startTurn(){
+        if(players[playerInd].units.length === 0)
+        {
+            setTimeout(endTurn,1);
+            return;
+        }
         units.forEach(unt => unt.visible=false);
         pointerBlocked = true;
         hideArrows();
@@ -358,13 +363,13 @@
 			playerInd = 0;
 			console.log('next player '+playerInd);
 			console.log('units: '+players[playerInd].units.length);
-      startTurn();
+            startTurn();
 		}
 	}
 
 	function endTurn()
 	{
-    setInteractionScenario(userInteractionScenario.movement);
+        setInteractionScenario(userInteractionScenario.movement);
 		console.log('end turn');
 		console.log('prev player '+playerInd);
 		playerInd++;
@@ -376,7 +381,7 @@
 		{
 			console.log('next player '+playerInd);
 			console.log('units: '+players[playerInd].units.length);
-      startTurn();
+            startTurn();
 		}
 	}
 
@@ -389,7 +394,7 @@
         resetInteractionScenario();
         pointerBlocked = true;
         let scrollMsg = new ScrollMsg(uiScene,'Are you sure?',function(res){
-            if(res){endTurn();}
+            if(res){setTimeout(endTurn,1);}
             else{
                 pointerBlocked = false;
             }

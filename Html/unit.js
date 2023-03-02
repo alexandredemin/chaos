@@ -34,6 +34,7 @@ class Unit extends BaseUnit
 
     die()
     {
+        this.died = true;
         if(this.player != null)this.player.removeUnit(this);
         units.splice(units.indexOf(this),1);
         this.destroy();
@@ -115,6 +116,7 @@ class Unit extends BaseUnit
         {
             showArrows(this);
             cam.stopFollow(this);
+            if(this.player.control === PlayerControl.computer) this.player.aiControl.step(this);
         }
         checkUnitVisibility(this);
     }
@@ -294,7 +296,6 @@ class Unit extends BaseUnit
             if (distance < 2)
             {
                 this.endStep();
-                if(this.player.control === PlayerControl.computer) this.player.aiControl.step(this);
             }
         }
         else
