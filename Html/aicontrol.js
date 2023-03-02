@@ -15,17 +15,14 @@ class AIControl
     {
         if(this.player.units.length === 0)
         {
-            endTurn();
+            setTimeout(endTurn,1);
             return;
         }
         this.availableUnits = [];
-        this.availableUnits.push(this.player.units[0]);
-        /*
         for(let i=this.player.units.length-1;i>=0;i--)
         {
             this.availableUnits.push(this.player.units[i]);
         }
-         */
         this.passStage = 1;
         this.pass();
     }
@@ -51,40 +48,24 @@ class AIControl
             }
             else
             {
-                endTurn();
+                setTimeout(endTurn,1);
             }
         }
     }
 
     step(unit)
     {
+        if(unit.died)
+        {
+            this.pass();
+            return;
+        }
         if(unit.config.name === "wizard")
         {
             this.stepWizard(unit);
             return;
         }
         this.stepUnit(unit);
-        /*
-        let availableSteps = [];
-        if(unit.features.move > 0)
-        {
-            for (let y = -1; y <= 1; y++)
-                for (let x = -1; x <= 1; x++)
-                {
-                    if (x === 0 && y === 0) continue;
-                    if (unit.canStepTo(x, y)) availableSteps.push([unit.mapX + x, unit.mapY + y]);
-                }
-
-        }
-        if(availableSteps.length>0)
-        {
-            let ind = randomInt(0,availableSteps.length-1);
-            unit.stepTo(availableSteps[ind][0],availableSteps[ind][1]);
-        }
-        else{
-            this.pass();
-        }
-        */
     }
 
     stepUnit(unit)

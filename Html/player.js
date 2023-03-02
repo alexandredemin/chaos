@@ -53,6 +53,10 @@ class Player
                 if(this.wizard != null) selectUnit(this.wizard);
                 else selectUnit(this.units[0]);
             }
+            else
+            {
+                setTimeout(endTurn,1);
+            }
         }
         else{
             this.aiControl.startTurn();
