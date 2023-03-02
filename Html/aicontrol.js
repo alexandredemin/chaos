@@ -19,10 +19,13 @@ class AIControl
             return;
         }
         this.availableUnits = [];
+        this.availableUnits.push(this.player.units[0]);
+        /*
         for(let i=this.player.units.length-1;i>=0;i--)
         {
             this.availableUnits.push(this.player.units[i]);
         }
+         */
         this.passStage = 1;
         this.pass();
     }
@@ -40,6 +43,7 @@ class AIControl
             if(this.passStage === 1) {
                 this.passStage = 2;
                 for (let i = this.player.units.length - 1; i >= 0; i--) {
+                    if(i>0)break;
                     let unt = this.player.units[i];
                     if (unt.features.move > 0 || unt.features.abilityPoints > 0) this.availableUnits.push(unt);
                 }

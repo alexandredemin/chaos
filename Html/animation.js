@@ -91,6 +91,7 @@ class HitAnimation extends Phaser.GameObjects.RenderTexture
 
     onComplete()
     {
+        HitAnimation.Object.tween.remove();
         HitAnimation.Object.setActive(false).setVisible(false);
         if(HitAnimation.Object.callbackObject != null)
         {
@@ -140,6 +141,7 @@ class DamageAnimation extends Phaser.GameObjects.Image
 
     onComplete()
     {
+        DamageAnimation.Object.tween.remove();
         DamageAnimation.Object.setActive(false).setVisible(false);
         if(DamageAnimation.Object.callbackObject != null)
         {

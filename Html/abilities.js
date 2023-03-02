@@ -13,14 +13,7 @@ class UnitAbility
 
     stop(unit)
     {
-        if(unit.player.control === PlayerControl.human)
-        {
-            setInteractionScenario(userInteractionScenario.movement);
-        }
-        else
-        {
-            unit.player.aiControl.step(unit);
-        }
+      unit.endAbility();  
     }
 
     setTarget(target)
@@ -59,10 +52,10 @@ class ConjureAbility extends UnitAbility
         {
             this.unit.features.abilityPoints--;
             this.unit.features.mana = this.unit.features.mana - this.spell.cost;
-            if(this.unit.player.control === PlayerControl.computer)
-            {
-                this.unit.player.aiControl.onCastSpell(this.unit,res);
-            }
+        }
+        if(this.unit.player.control === PlayerControl.computer)
+        {
+            this.unit.player.aiControl.onCastSpell(this.unit,res);
         }
         this.next();
     }
@@ -72,6 +65,14 @@ class ConjureAbility extends UnitAbility
         this.step = 0;
         this.unit = unit;
         this.spell = null;
+    }
+  
+    stop(unit)
+    {
+        this.step = 0;
+        this.unit = null;
+        this.spell = null;
+        super.stop(unit);
     }
 
     next()
@@ -147,6 +148,7 @@ class FireAbility extends UnitAbility
         this.step = 0;
         this.unit = null;
         this.target = null;
+        super.stop(unit);
     }
 
     setTarget(target)
@@ -244,6 +246,7 @@ class GasAbility  extends UnitAbility
         this.step = 0;
         this.unit = null;
         this.targets = null;
+        super.stop(unit);
     }
 
     canAtack(unit)
