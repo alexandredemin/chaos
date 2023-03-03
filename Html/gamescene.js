@@ -43,7 +43,7 @@ var GameScene = new Phaser.Class({
             player.control = PlayerControl.computer;
             player.aiControl = new AIControl(player);
         }
-        players[0].control = PlayerControl.human;
+        //players[0].control = PlayerControl.human;
 
         fireballAnimation = new FireballAnimation(this,200,200);
         gasAnimation = new GasAnimation(this,200,200);

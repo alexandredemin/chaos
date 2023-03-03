@@ -249,9 +249,9 @@ class GasAbility  extends UnitAbility
         super.stop(unit);
     }
 
-    canAtack(unit)
+    canAtack(unit,target)
     {
-        var type=unit.config.name;
+        var type=target.config.name;
         if(type==='muddy')return false;
         return true;
     }
@@ -295,7 +295,7 @@ class GasAbility  extends UnitAbility
                     this.targets = selectUnits(this.unit.mapX, this.unit.mapY, null, [this.unit], this.unit.config.abilities.gas.config.range);
                     for(let i=this.targets.length-1;i>=0;i--)
                     {
-                        if(this.canAtack(this.targets[i])===false)this.targets.splice(i,1);
+                        if(this.canAtack(this.unit,this.targets[i])===false)this.targets.splice(i,1);
                     }
                 }
                 if(this.targets.length > 0)
