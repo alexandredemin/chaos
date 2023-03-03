@@ -64,77 +64,138 @@ class AIControl
             this.stepWizard(unit);
             return;
         }
-        /*
         if(unit.config.name === "muddy")
         {
             this.stepMuddy(unit);
             return;
         }
-        */
-        this.stepUnit(unit);
+        if(!this.stepCommonUnit(unit)) this.pass();
     }
 
-    stepUnit(unit)
+    stepToTarget(unit,target,dmap)
     {
-        let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-        let target = null;
-        let dist = map.height + map.width;
-        players.forEach(pl => {
-            if(pl !== unit.player && pl.wizard)
-            {
-                if(dmap[pl.wizard.mapY][pl.wizard.mapX] < dist)
-                {
-                    dist = dmap[pl.wizard.mapY][pl.wizard.mapX];
-                    target = pl.wizard;
-                }
-            }
-        });
+        if(!dmap) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+        let cell = this.getOptimalStep(dmap,target);
+        if(cell != null)
+        {
+            if(unit.canStepTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) unit.stepTo(cell[0],cell[1]);
+            else if(unit.canAtackTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) unit.atackTo(cell[0], cell[1]);
+            else return false;
+        }
+        else return false;
+        return true;
+    }
+
+    stepCommonUnit(unit,dmap)
+    {
+        if(!dmap) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+        let target = this.getNearestEnemyWizard(dmap,unit);
         if(target == null || dmap[target.mapY][target.mapX] > unit.features.move) {
-            let trgUnits = [];
-            players.forEach(pl => {
-                if (pl !== unit.player) {
-                    pl.units.forEach(unt => {
-                        if (dmap[unt.mapY][unt.mapX] <= unit.features.move) trgUnits.push(unt);
-                    });
-                }
-            });
+            let trgUnits = this.getAvailableEnemies(dmap,unit,unit.features.move);
             if(trgUnits.length > 0) target = trgUnits[randomInt(0,trgUnits.length-1)];
         }
         if(target != null)
         {
-            let cell = this.getOptimalStep(dmap,[target.mapX,target.mapY]);
-            if(cell != null)
-            {
-                if(unit.canStepTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) unit.stepTo(cell[0],cell[1]);
-                else if(unit.canAtackTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) unit.atackTo(cell[0], cell[1]);
-                else this.pass();
-            }
-            else{
-                this.pass();
-            }
+            if (!this.stepToTarget(unit, [target.mapX, target.mapY], dmap)) return false;
         }
-        else
-        {
-            this.pass();
-        }
+        else return false;
+        return true;
     }
 
     stepMuddy(unit)
     {
-        let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-        let target = null;
-        let dist = map.height + map.width;
-        let stepPlaces = getAvailableCells(dMap,unit,null,true);
-        /*
-        players.forEach(pl => {
-            if (pl !== unit.player) {
-                pl.units.forEach(unt => {
-                    if (dmap[unt.mapY][unt.mapX] <= unit.features.move + unit.features.abilities.gas.config.range) trgUnits.push(unt);
-                });
+        if(!unit.aiControl)
+        {
+            unit.aiControl = {target: null};
+        }
+        if(unit.aiControl.target == null)
+        {
+            let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+            let stepPlaces = this.getAvailableCells(dmap,unit,null,true);
+            for(let i=0;i<stepPlaces.length;i++)
+            {
+                let place = stepPlaces[i];
+                place.gasWeight = 0;
+                place.atackWeight = 0;
+                let range = unit.config.abilities.gas.config.range;
+                if(unit.features.abilityPoints === 0) range = 0;
+                let targets = selectUnits(place.cell[0], place.cell[1], null, [unit], range);
+                let gasAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
+                for(let j=0;j<targets.length;j++)
+                {
+                    let trgt = targets[j];
+                    if(trgt.player !== unit.player && place.dist < unit.features.move)
+                    {
+                        place.atackWeight = place.atackWeight + unit.config.features.strength;
+                    }
+                    if(gasAbility.canAtack(unit,trgt))
+                    {
+                        if (trgt.player !== unit.player) place.gasWeight = place.gasWeight + unit.config.abilities.gas.config.damage;
+                        else place.gasWeight = place.gasWeight - unit.config.abilities.gas.config.damage;
+                    }
+                    place.bestWeight = place.atackWeight;
+                    if(place.gasWeight > 0) place.bestWeight = place.bestWeight + place.gasWeight;
+                }
             }
-        targets = selectUnits(this.unit.mapX, this.unit.mapY, null, [this.unit], this.unit.config.abilities.gas.config.range);
-        });
-        */
+            let bestPlace = stepPlaces[0];  
+            for(let i=1;i<stepPlaces.length;i++)
+            {
+                if (stepPlaces[i].bestWeight > bestPlace.bestWeight) bestPlace = stepPlaces[i];
+            }
+            if(bestPlace.bestWeight > 0)
+            {
+                unit.aiControl.target = bestPlace.cell;
+                if (bestPlace.gasWeight <= 0) unit.features.abilityPoints = 0;
+            }
+            else
+            {
+                let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
+                if(trgtWiz) unit.aiControl.target = [trgtWiz.mapX,trgtWiz.mapY];
+            }
+        }
+        if(unit.aiControl.target == null)
+        {
+            this.pass();
+            return;
+        }
+        else
+        {
+            if(unit.mapX === unit.aiControl.target[0] && unit.mapY === unit.aiControl.target[1])
+            {
+                if(unit.features.abilityPoints > 0)
+                {
+                    unit.startAbility();
+                }
+                else if(unit.features.move > 0)
+                {
+                    let trg = null;
+                    for(let dy=-1;dy<=1;dy++)
+                        for(let dx=-1;dx<=1;dx++)
+                            if(unit.canAtackTo(dx,dy)===true)
+                                if(trg == null || randomInt(0,1) === 1) trg = [unit.mapX+dx,unit.mapY+dy];
+                    if(trg) unit.atackTo(trg[0], trg[1]);
+                    else
+                    {
+                        unit.aiControl.target = null;
+                        this.stepMuddy(unit);
+                    }
+                }
+                else
+                {
+                    unit.aiControl.target = null;
+                    this.pass();
+                    return;
+                }
+            }
+            else
+            {
+                if(!this.stepToTarget(unit,unit.aiControl.target))
+                {
+                    unit.aiControl.target = null;
+                    this.pass();
+                }
+            }
+        }
     }
 
     stepWizard(unit)
@@ -161,7 +222,10 @@ class AIControl
                     for (let spl in spellConfigs) {
                         if (spellConfigs[spl].type === 'summon') summonSpells.push(spl);
                     }
-                    unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['muddy'];
+                    //else if(unit.player.name === "Player2") unit.aiControl.plannedSpell = spellConfigs['rat'];
+                    else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    //unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                 }
             }
             if(unit.features.mana >= unit.aiControl.plannedSpell.cost)
@@ -212,6 +276,39 @@ class AIControl
         res.x = places[i][0];
         res.y = places[i][1];
         return res;
+    }
+
+    getNearestEnemyWizard(dMap,unit)
+    {
+        let wiz = null;
+        let dist = map.height + map.width;
+        players.forEach(pl => {
+            if(pl !== unit.player && pl.wizard)
+            {
+                if(dMap[pl.wizard.mapY][pl.wizard.mapX] <= dist)
+                {
+                    if(dMap[pl.wizard.mapY][pl.wizard.mapX] < dist || randomInt(0,1) === 1)
+                    {
+                        dist = dMap[pl.wizard.mapY][pl.wizard.mapX];
+                        wiz = pl.wizard;
+                    }
+                }
+            }
+        });
+        return wiz;
+    }
+
+    getAvailableEnemies(dMap,unit,dist)
+    {
+        let enemies = [];
+        players.forEach(pl => {
+            if (pl !== unit.player) {
+                pl.units.forEach(unt => {
+                    if (dMap[unt.mapY][unt.mapX] <= dist) enemies.push(unt);
+                });
+            }
+        });
+        return enemies;
     }
 
     getDistanceMap(unit,x,y)
@@ -280,12 +377,12 @@ class AIControl
 
     getAvailableCells(dMap,unit,bypassEntities,bypassUnits)
     {
-        let cells = [];
+        let cells = [{cell:[unit.mapX,unit.mapY],dist:0}];
         let range = unit.features.move;
         for(let yy=unit.mapY-range; yy<=unit.mapY+range; yy++)
             for(let xx=unit.mapX-range; xx<=unit.mapX+range; xx++)
             {
-                if((xx<0)||(xx>=map.width)||(yy<0)||(yy>=map.height)||( (xx===cell[0])&&(yy===cell[1])))continue;
+                if((xx<0)||(xx>=map.width)||(yy<0)||(yy>=map.height)||( (xx===unit.mapX)&&(yy===unit.mapY)))continue;
                 if(bypassEntities)
                 {
                     if(Entity.getEntityAtMap(xx,yy) != null)continue;
@@ -294,7 +391,7 @@ class AIControl
                 {
                     if(getUnitAtMap(xx,yy) != null)continue;
                 }
-                if(dMap[yy][xx] > -1 && dMap[yy][xx] <= range) cells.push([xx,yy]);
+                if(dMap[yy][xx] > -1 && dMap[yy][xx] <= range) cells.push({cell:[xx,yy],dist:dMap[yy][xx]});
             }
         return cells;
     }
