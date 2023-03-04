@@ -205,9 +205,17 @@ class FireAbility extends UnitAbility
                 }
                 else
                 {
-                    this.target = this.unit.player.aiControl.selectTarget(this.unit, targets);
-                    this.step++;
-                    this.next();
+                    this.target = this.unit.player.aiControl.selectFireTarget(this.unit, targets);
+                    if(this.target == null)
+                    {
+                        if(this.unit.player.control === PlayerControl.computer) this.unit.player.aiControl.onFire(this.unit,false);
+                        this.stop(this.unit);
+                    }
+                    else
+                    {
+                        this.step++;
+                        this.next();
+                    }
                 }
                 break;
             case 1:

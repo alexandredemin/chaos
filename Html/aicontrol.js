@@ -130,7 +130,7 @@ class AIControl
                 for(let j=0;j<targets.length;j++)
                 {
                     let trgt = targets[j];
-                    if(!canAttack && trgt.player !== unit.player && place.dist < unit.features.move)
+                    if(!canAttack && trgt.player !== unit.player && place.dist < unit.features.move && Math.abs(trgt.mapX-place.cell[0]) <= 1 && Math.abs(trgt.mapY-place.cell[1]) <=1)
                     {
                         place.atackWeight = place.atackWeight + unit.config.features.strength;
                         canAttack = true;
@@ -138,7 +138,14 @@ class AIControl
                     if(gasAbility.canAtack(unit,trgt))
                     {
                         if (trgt.player !== unit.player) place.gasWeight = place.gasWeight + unit.config.abilities.gas.config.damage;
-                        else place.gasWeight = place.gasWeight - unit.config.abilities.gas.config.damage;
+                        else if(trgt === unit.player.wizard)
+                        {
+                            place.gasWeight = -100;
+                        }
+                        else
+                        {
+                            place.gasWeight = place.gasWeight - unit.config.abilities.gas.config.damage;
+                        }
                     }
                 }
                 place.bestWeight = place.atackWeight;
@@ -233,10 +240,10 @@ class AIControl
                     {
                       if(!canFire && fireAbility.canAtack(unit,trgt))
                       {
-                          place.fireWeight + unit.config.abilities.fire.config.damage;
+                          place.fireWeight = place.fireWeight + unit.config.abilities.fire.config.damage;
                           canFire = true;
                       }
-                      if(!canAttack && place.dist < unit.features.move)
+                      if(!canAttack && place.dist < unit.features.move && Math.abs(trgt.mapX-place.cell[0]) <= 1 && Math.abs(trgt.mapY-place.cell[1]) <=1)
                       {
                           place.atackWeight = place.atackWeight + unit.config.features.strength;
                           canAttack = true;
@@ -322,19 +329,25 @@ class AIControl
                 this.pass();
                 return;
             }
+            let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+            let enemies = this.getAvailableEnemies(dmap,unit,3);
+            if(enemies.length > 0)
+            {
+                let availableSpells = [];
+                for (let spl in spellConfigs) if (spellConfigs[spl].type === 'summon' && spellConfigs[spl].cost <= unit.features.mana) availableSpells.push(spl);
+                if(availableSpells.length > 0) unit.aiControl.plannedSpell = spellConfigs[availableSpells[randomInt(0, availableSpells.length - 1)]];
+            }
             if(unit.aiControl.plannedSpell == null) {
                 if (!unit.aiControl.pentagramCreated && randomInt(0,1) === 1) {
                     unit.aiControl.plannedSpell = spellConfigs['pentagram'];
                 }
                 else {
                     let summonSpells = [];
-                    for (let spl in spellConfigs) {
-                        if (spellConfigs[spl].type === 'summon') summonSpells.push(spl);
-                    }
-                    if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['muddy'];
+                    for (let spl in spellConfigs) if (spellConfigs[spl].type === 'summon') summonSpells.push(spl);
+                    //if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['demon'];
                     //else if(unit.player.name === "Player2") unit.aiControl.plannedSpell = spellConfigs['rat'];
-                    else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
-                    //unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    //else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                 }
             }
             if(unit.features.mana >= unit.aiControl.plannedSpell.cost)
@@ -387,6 +400,21 @@ class AIControl
         return res;
     }
 
+    onFire(unit,res)
+    {
+        if(!res) unit.features.abilityPoints = 0;
+    }
+
+    selectFireTarget(unit,targets)
+    {
+        let res = null;
+        targets.forEach(trg => {
+            if(trg === trg.player.wizard) return trg;
+            if(!res || (trg.features.strength > res.features.strength || (trg.features.strength === res.features.strength && randomInt(0,1) === 1))) res = trg;
+        });
+        return res;
+    }
+
     getNearestEnemyWizard(dMap,unit)
     {
         let wiz = null;
@@ -394,7 +422,7 @@ class AIControl
         players.forEach(pl => {
             if(pl !== unit.player && pl.wizard)
             {
-                if(dMap[pl.wizard.mapY][pl.wizard.mapX] <= dist)
+                if(dMap[pl.wizard.mapY][pl.wizard.mapX] > 0 && dMap[pl.wizard.mapY][pl.wizard.mapX] <= dist)
                 {
                     if(dMap[pl.wizard.mapY][pl.wizard.mapX] < dist || randomInt(0,1) === 1)
                     {
@@ -413,7 +441,7 @@ class AIControl
         players.forEach(pl => {
             if (pl !== unit.player) {
                 pl.units.forEach(unt => {
-                    if (dMap[unt.mapY][unt.mapX] <= dist) enemies.push(unt);
+                    if(dMap[unt.mapY][unt.mapX] > 0 && dMap[unt.mapY][unt.mapX] <= dist) enemies.push(unt);
                 });
             }
         });
