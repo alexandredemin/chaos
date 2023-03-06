@@ -321,6 +321,18 @@
             setTimeout(endTurn,1);
             return;
         }
+        let isWinner = true;
+        for(let i=0;i<players.length;i++)
+        {
+            if(i !== playerInd && players[i].units.length > 0){isWinner = false; break;}
+        }
+        if(isWinner)
+        {
+            pointerBlocked = true;
+            let scrollMsg = new ScrollMsg(uiScene, 'Player ' + (playerInd + 1) + ' won!', null);
+            scrollMsg.show();
+            return;
+        }
         units.forEach(unt => unt.visible=false);
         pointerBlocked = true;
         hideArrows();
@@ -334,15 +346,6 @@
         {
             players[playerInd].startTurn();
         }
-        /*
-        let dmap = players[1].aiControl.getDistanceMap(players[0].units[0].mapX,players[0].units[0].mapY);
-        for(let yy=0;yy<map.height;yy++)
-            for(let xx=0;xx<map.width;xx++)
-            {
-                let pos = map.tileToWorldXY(xx, yy);
-                players[0].units[0].scene.add.bitmapText(pos.x + 8, pos.y + 8, 'atari', dmap[yy][xx]).setFontSize(4)
-            }
-        */
     }
 
 	function moveEntites()

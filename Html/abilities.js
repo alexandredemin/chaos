@@ -156,6 +156,11 @@ class FireAbility extends UnitAbility
         this.target = target;
     }
 
+    canAtack(unit,target)
+    {
+        return checkLineOfSight(unit.mapX,unit.mapY,target.mapX,target.mapY)
+    }
+
     atack()
     {
         this.unit.features.abilityPoints--;
@@ -182,17 +187,36 @@ class FireAbility extends UnitAbility
     {
         switch (this.step) {
             case 0:
-                setInteractionScenario(userInteractionScenario.targetSelection);
-                rangeRenderer.showAtUnit(this.unit, this.unit.config.abilities.fire.config.range*16+8);
                 let enemies = [];
-                players.forEach(pl => {if(pl !== this.unit.player)enemies.push(pl);});
-                let targets = selectUnits(this.unit.mapX, this.unit.mapY, enemies, null, this.unit.config.abilities.fire.config.range);
-                targets = selectOnLineOfSight(this.unit.mapX, this.unit.mapY,targets);
-                targets.forEach(unit => {
-                    unit.setPipeline('Custom');//,{ gray: 1 });
-                    unit.filtered = true;
+                players.forEach(pl => {
+                    if (pl !== this.unit.player) enemies.push(pl);
                 });
-                this.step++;
+                let targets = selectUnits(this.unit.mapX, this.unit.mapY, enemies, null, this.unit.config.abilities.fire.config.range);
+                targets = selectOnLineOfSight(this.unit.mapX, this.unit.mapY, targets);
+                if(this.unit.player.control === PlayerControl.human)
+                {
+                    setInteractionScenario(userInteractionScenario.targetSelection);
+                    rangeRenderer.showAtUnit(this.unit, this.unit.config.abilities.fire.config.range * 16 + 8);
+                    targets.forEach(unit => {
+                        unit.setPipeline('Custom');//,{ gray: 1 });
+                        unit.filtered = true;
+                    });
+                    this.step++;
+                }
+                else
+                {
+                    this.target = this.unit.player.aiControl.selectFireTarget(this.unit, targets);
+                    if(this.target == null)
+                    {
+                        if(this.unit.player.control === PlayerControl.computer) this.unit.player.aiControl.onFire(this.unit,false);
+                        this.stop(this.unit);
+                    }
+                    else
+                    {
+                        this.step++;
+                        this.next();
+                    }
+                }
                 break;
             case 1:
                 pointerBlocked = true;

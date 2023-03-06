@@ -34,7 +34,7 @@ var GameScene = new Phaser.Class({
         }
         for(let i=0;i<playerCount;i++)
         {
-            let player = new Player('Player' + i);
+            let player = new Player('Player' + (i + 1));
             players.push(player);
             let wiz = new Unit(unitConfigs['wizard'], this, 0, 0);
             wiz.setPositionFromMap(startPos[i].x, startPos[i].y);
