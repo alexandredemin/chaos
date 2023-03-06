@@ -151,7 +151,7 @@ class AIControl
                 place.bestWeight = place.atackWeight;
                 if(place.gasWeight > 0) place.bestWeight = place.bestWeight + place.gasWeight;
             }
-            let bestPlace = stepPlaces[0];  
+            let bestPlace = stepPlaces[0];
             for(let i=1;i<stepPlaces.length;i++)
             {
                 if (stepPlaces[i].bestWeight > bestPlace.bestWeight) bestPlace = stepPlaces[i];
@@ -238,22 +238,22 @@ class AIControl
                     let trgt = targets[j];
                     if(trgt.player !== unit.player)
                     {
-                      if(!canFire && fireAbility.canAtack(unit,trgt))
-                      {
-                          place.fireWeight = place.fireWeight + unit.config.abilities.fire.config.damage;
-                          canFire = true;
-                      }
-                      if(!canAttack && place.dist < unit.features.move && Math.abs(trgt.mapX-place.cell[0]) <= 1 && Math.abs(trgt.mapY-place.cell[1]) <=1)
-                      {
-                          place.atackWeight = place.atackWeight + unit.config.features.strength;
-                          canAttack = true;
-                      }
-                    }   
+                        if(!canFire && fireAbility.canAtack(unit,trgt))
+                        {
+                            place.fireWeight = place.fireWeight + unit.config.abilities.fire.config.damage;
+                            canFire = true;
+                        }
+                        if(!canAttack && place.dist < unit.features.move && Math.abs(trgt.mapX-place.cell[0]) <= 1 && Math.abs(trgt.mapY-place.cell[1]) <=1)
+                        {
+                            place.atackWeight = place.atackWeight + unit.config.features.strength;
+                            canAttack = true;
+                        }
+                    }
                     if(canFire && canAttack) break;
                 }
                 place.bestWeight = place.atackWeight + place.fireWeight;
             }
-            let bestPlace = stepPlaces[0];  
+            let bestPlace = stepPlaces[0];
             for(let i=1;i<stepPlaces.length;i++)
             {
                 if (stepPlaces[i].bestWeight > bestPlace.bestWeight) bestPlace = stepPlaces[i];
@@ -312,8 +312,8 @@ class AIControl
                 }
             }
         }
-    }  
-  
+    }
+
     stepWizard(unit)
     {
         if(unit.features.abilityPoints > 0)
@@ -344,10 +344,11 @@ class AIControl
                 else {
                     let summonSpells = [];
                     for (let spl in spellConfigs) if (spellConfigs[spl].type === 'summon') summonSpells.push(spl);
-                    //if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['demon'];
-                    //else if(unit.player.name === "Player2") unit.aiControl.plannedSpell = spellConfigs['rat'];
-                    //else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
-                    unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['demon'];
+                    else if(unit.player.name === "Player2") unit.aiControl.plannedSpell = spellConfigs['muddy'];
+                    else if(unit.player.name === "Player3") unit.aiControl.plannedSpell = spellConfigs['goblin'];
+                    else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    //unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                 }
             }
             if(unit.features.mana >= unit.aiControl.plannedSpell.cost)

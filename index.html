@@ -1,11 +1,12 @@
-<html lang="en"> 
-<head> 
-	<meta charset="UTF-8" />
+<html lang="en">
+<head>
+    <meta charSet="UTF-8"/>
     <meta name="format-detection" content="telephone=no">
     <meta name="msapplication-tap-highlight" content="no">
-    <meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width">
+    <meta name="viewport"
+          content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width">
     <title>Chaos</title>
-	<script type="text/javascript" src="Html/phaser.min.js"></script>
+    <script type="text/javascript" src="Html/phaser.min.js"></script>
     <script type="text/javascript" src="Html/configs.js"></script>
     <script type="text/javascript" src="Html/ui.js"></script>
     <script type="text/javascript" src="Html/magicbook.js"></script>
@@ -23,527 +24,477 @@
     <script type="text/javascript" src="Html/gamescene.js"></script>
     <script type="text/javascript" src="Html/uiscene.js"></script>
     <script type="text/javascript" src="Html/aicontrol.js"></script>
-    <style> body { margin: 0; } </style>
+    <style> body {
+        margin: 0;
+    } </style>
 </head>
 
 <body>
 <script>
 
-//---------------------------- Global functions ----------------------------
-	const userInteractionScenario = { movement: 'movement', targetSelection: 'targetSelection', placeSelection: 'placeSelection'};
+    //---------------------------- Global functions ----------------------------
+    const userInteractionScenario = {
+        movement: 'movement',
+        targetSelection: 'targetSelection',
+        placeSelection: 'placeSelection'
+    };
 
-    function setInteractionScenario(scenario)
-    {
-        if(scenario === userInteractionScenario.movement)
-        {      	
-        	if(selectedUnit != null)
-        	{
-        		cam.startFollow(selectedUnit);
-        		showArrows(selectedUnit);
-        		cam.stopFollow(selectedUnit);
-        	}
-        } 
-        else if((scenario === userInteractionScenario.targetSelection) || (scenario === userInteractionScenario.placeSelection))
-        {
-			hideArrows();
-			if(selectedUnit != null)
-        	{
-				cam.startFollow(selectedUnit);    	
-				cam.stopFollow(selectedUnit);
-			}
+    function setInteractionScenario(scenario) {
+        if (scenario === userInteractionScenario.movement) {
+            if (selectedUnit != null) {
+                cam.startFollow(selectedUnit);
+                showArrows(selectedUnit);
+                cam.stopFollow(selectedUnit);
+            }
+        } else if ((scenario === userInteractionScenario.targetSelection) || (scenario === userInteractionScenario.placeSelection)) {
+            hideArrows();
+            if (selectedUnit != null) {
+                cam.startFollow(selectedUnit);
+                cam.stopFollow(selectedUnit);
+            }
         }
         activeInteractionScenario = scenario;
     }
 
-	function randomInt(min, max)
-	{
-  		min = Math.ceil(min);
-  		max = Math.floor(max);
-  		return Math.floor(Math.random() * (max - min + 1)) + min;
-	}
-
-	function randomFloat(min, max)
-	{
-	  	return (Math.random() * (max - min + 1)) + min;
-	}
-
-	function createArrows(unit)
-	{
-		let arrU = new Arrow(ArrowType.U, unit.scene, unit.x, unit.y,'arrow');
-		let arrRU = new Arrow(ArrowType.RU, unit.scene, unit.x, unit.y,'arrow');
-		let arrR = new Arrow(ArrowType.R, unit.scene, unit.x, unit.y,'arrow');
-		let arrRD = new Arrow(ArrowType.RD, unit.scene, unit.x, unit.y,'arrow');
-		let arrD = new Arrow(ArrowType.D, unit.scene, unit.x, unit.y,'arrow');
-		let arrLD = new Arrow(ArrowType.LD, unit.scene, unit.x, unit.y,'arrow');
-		let arrL = new Arrow(ArrowType.L, unit.scene, unit.x, unit.y,'arrow');
-		let arrLU = new Arrow(ArrowType.LU, unit.scene, unit.x, unit.y,'arrow');
-		arrows.push(arrLU,arrU,arrRU,arrL,arrR,arrLD,arrD,arrRD);
-	}
-
-	function hideArrows()
-	{
-		arrows.forEach(item => item.visible = false);
-	}
-
-	function showArrows(unit)
-	{
-		if(unit != null)
-		{
-            if(unit.player.control === PlayerControl.computer) return;
-            if(arrows.length === 0)createArrows(unit);
-			arrows.forEach(item => 
-				{
-					if(unit.canAtackTo(item.mapOffsetX,item.mapOffsetY)===true)
-					{
-						item.setState(ArrowState.red);
-					}
-					else
-					{					
-						if(unit.canStepTo(item.mapOffsetX,item.mapOffsetY)===true)
-						{
-							item.setState(ArrowState.green);
-						}
-						else
-						{
-							item.setState(ArrowState.disable);
-						}
-					}
-					item.setPositionToUnit(unit);
-				}
-			);
-		}
-		pointerBlocked = false;
-	}
-
-	function getUnitAtMap(mapX, mapY, player=null)
-	{
-		let untArr = units;
-        if(player) untArr=player.units;
-        for(let i=0; i<untArr.length; i++)
-		   	{
-		   		if((untArr[i].mapX === mapX) && (untArr[i].mapY === mapY)){return untArr[i];}
-		   	}
-		return null;
-	}
-
-	function selectUnit(unit)
-	{
-		console.log('select unit '+unit.name);
-		if(selectedUnit!=null){
-			selectedUnit.resetPipeline();
-		}
-		selectedUnit = unit;
-		selectedUnit.setPipeline('Custom');//,{ gray: 1 });
-		cam.startFollow(unit);
-		showArrows(unit);
-		cam.stopFollow();
-	}
-
-	function selectAdjacentPlaces(centerMapX, centerMapY)
-	{
-		let res = [];
-		for(let y=centerMapY-1; y<=centerMapY+1; y++)
-			for(let x=centerMapX-1; x<=centerMapX+1; x++)
-		   		{
-		   			if((x<0)||(x>=map.width)||(y<0)||(y>=map.height)||( (x===centerMapX)&&(y===centerMapY)))continue;
-		   			res.push([x,y]);
-		   		}
-		return res;
-	}
-
-	function selectFreeAdjacentPlaces(centerMapX, centerMapY)
-	{
-		let res = [];
-		selectAdjacentPlaces(centerMapX, centerMapY).forEach( x => {
-			let wallTile = wallsLayer.getTileAt(x[0],x[1]);
-			if(wallTile == null)
-			{			
-				let unitAtPos = getUnitAtMap(x[0],x[1]);
-				if(unitAtPos == null) res.push(x);
-			}
-		});
-		return res;	
-	}
-
-	function selectUnits(centerMapX, centerMapY, playerArr, unitArr, radius)
-    {
-	    let arr = [];
-    	let res = [];
-    	if(playerArr == null)
-    	{
-        	arr = units;
-    	}
-    	else
-    	{
-        	playerArr.forEach(pl => arr=arr.concat(pl.units));
-    	}
-        arr.forEach(unit => {
-        	let fl = true;
-        	if(unitArr != null)
-        	{
-        		if(unitArr.includes(unit)) fl = false;
-        	}
-        	if(fl)
-        	{
-	            if(radius > 0)
-	            {
-		            let dX = Math.abs(unit.mapX-centerMapX);
-		            let dY = Math.abs(unit.mapY-centerMapY);
-		            if(dX*dX+dY*dY <= radius*radius)
-		            {
-		                res.push(unit);
-		            }
-		        }
-		        else
-		        {
-		        	if((Math.abs(unit.mapX-centerMapX) <= 1)&&(Math.abs(unit.mapY-centerMapY) <=1 ))
-		        	{
-		        		res.push(unit);
-		        	}
-		        }
-	        }
-        });
-        return res;
-	}
-
-	function deselectUnits()
-	{
-    	units.forEach(unit => {
-		    if(unit.filtered === true)
-		    {
-                unit.filtered = false;
-                unit.resetPipeline();
-		    }
-	    });
-	}
-
-	function checkLineOfSight(x1,y1,x2,y2,onWall,onEntity,onUnit)
-	{
-		if(x1===x2 && y1===y2)return true;
-		let xx1=x1;
-        let xx2=x2;
-        let yy1=y1;
-        let yy2=y2;
-        let invFlag=false;
-		if(Math.abs(y2-y1) > Math.abs(x2-x1))
-		{
-			invFlag=true;
-			xx1=y1;
-			xx2=y2;
-			yy1=x1;
-			yy2=x2;
-		}
-        let k=(yy2-yy1)/(xx2-xx1);
-        let b=yy1-k*xx1;
-        let dx=1;
-		if(xx2<xx1)dx=-1;
-		for(let x=xx1+dx;x!==xx2;x=x+dx)
-		{
-			let y=Math.round(k*x+b);
-			let resX=x;
-			let resY=y;
-			if(invFlag)
-			{
-				resX=y;
-				resY=x;
-			}
-            let unit=getUnitAtMap(resX,resY);
-			if(unit!=null){
-                if(onUnit) {
-                    if(onUnit(unit)===false)return false;
-                }
-                else return false;
-            }
-            let entity=Entity.getEntityAtMap(resX,resY);
-			if(entity!=null){
-                if(onEntity) {
-                    if(onEntity(entity)===false)return false;
-                }
-                else return false;
-            }
-			let wallTile = wallsLayer.getTileAt(resX,resY);
-			if(wallTile != null)
-			{
-                //if(wallTile.properties['collides'] == true)
-                if(onWall) {
-                    if(onWall(wallTile)===false)return false;
-                }
-                else return false;
-			}
-		}
-		return true;
-	}
-
-	function selectOnLineOfSight(centerX,centerY,units,onWall,onEntity,onUnit)
-	{
-        let res = [];
-		units.forEach(unit => {if(checkLineOfSight(centerX,centerY,unit.mapX,unit.mapY,onWall,onEntity,onUnit)===true)res.push(unit);} );
-		return res;
-	}
-
-	function selectPlacesOnLineOfSight(centerX,centerY,radius,withUnits=false,withEntities=false)
-	{
-        let res = [];
-		for(let r=1; r<=radius; r++)
-		{
-			for(let y=centerY-r; y<=centerY+r; y++)
-			{
-				for(let x=centerX-r; x<=centerX+r; x++)
-				{
-					if((x<0)||(x>=map.width)||(y<0)||(y>=map.height)||((x===centerX)&&(y===centerY)))continue;
-					if((withUnits===false)&&(getUnitAtMap(x,y)!=null))continue;
-					if((withEntities===false)&&(Entity.getEntityAtMap(x,y)!=null))continue;
-					let wallTile = wallsLayer.getTileAt(x,y);
-					if(wallTile != null)continue;
-					let dX = Math.abs(x-centerX);
-		            let dY = Math.abs(y-centerY);
-		            if(dX*dX+dY*dY > r*r) continue;
-		            if(checkLineOfSight(centerX,centerY,x,y)===true)res.push([x,y]);
-				}
-			}
-		}
-		return res;
-	}
-
-    function checkUnitVisibility(unit){
-        let enemies = [];
-        players.forEach(pl => {if(pl !== unit.player)enemies.push(pl);});
-        //let targets = selectUnits(unit.mapX, unit.mapY, enemies, null, 20); //unit.config.abilities.fire.config.range);
-        let targets = [];
-        selectUnits(unit.mapX, unit.mapY, enemies, null, 20).forEach(unt => {if(!unt.visible)targets.push(unt);});
-        targets = selectOnLineOfSight(unit.mapX, unit.mapY,targets,null,null,() => {return true});
-        targets.forEach(unt => {unt.visible = true;});
+    function randomInt(min, max) {
+        min = Math.ceil(min);
+        max = Math.floor(max);
+        return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
-    function startTurn(){
-        if(players[playerInd].units.length === 0)
-        {
-            setTimeout(endTurn,1);
+    function randomFloat(min, max) {
+        return (Math.random() * (max - min + 1)) + min;
+    }
+
+    function createArrows(unit) {
+        let arrU = new Arrow(ArrowType.U, unit.scene, unit.x, unit.y, 'arrow');
+        let arrRU = new Arrow(ArrowType.RU, unit.scene, unit.x, unit.y, 'arrow');
+        let arrR = new Arrow(ArrowType.R, unit.scene, unit.x, unit.y, 'arrow');
+        let arrRD = new Arrow(ArrowType.RD, unit.scene, unit.x, unit.y, 'arrow');
+        let arrD = new Arrow(ArrowType.D, unit.scene, unit.x, unit.y, 'arrow');
+        let arrLD = new Arrow(ArrowType.LD, unit.scene, unit.x, unit.y, 'arrow');
+        let arrL = new Arrow(ArrowType.L, unit.scene, unit.x, unit.y, 'arrow');
+        let arrLU = new Arrow(ArrowType.LU, unit.scene, unit.x, unit.y, 'arrow');
+        arrows.push(arrLU, arrU, arrRU, arrL, arrR, arrLD, arrD, arrRD);
+    }
+
+    function hideArrows() {
+        arrows.forEach(item => item.visible = false);
+    }
+
+    function showArrows(unit) {
+        if (unit != null) {
+            if (unit.player.control === PlayerControl.computer) return;
+            if (arrows.length === 0) createArrows(unit);
+            arrows.forEach(item => {
+                    if (unit.canAtackTo(item.mapOffsetX, item.mapOffsetY) === true) {
+                        item.setState(ArrowState.red);
+                    } else {
+                        if (unit.canStepTo(item.mapOffsetX, item.mapOffsetY) === true) {
+                            item.setState(ArrowState.green);
+                        } else {
+                            item.setState(ArrowState.disable);
+                        }
+                    }
+                    item.setPositionToUnit(unit);
+                }
+            );
+        }
+        pointerBlocked = false;
+    }
+
+    function getUnitAtMap(mapX, mapY, player = null) {
+        let untArr = units;
+        if (player) untArr = player.units;
+        for (let i = 0; i < untArr.length; i++) {
+            if ((untArr[i].mapX === mapX) && (untArr[i].mapY === mapY)) {
+                return untArr[i];
+            }
+        }
+        return null;
+    }
+
+    function selectUnit(unit) {
+        console.log('select unit ' + unit.name);
+        if (selectedUnit != null) {
+            selectedUnit.resetPipeline();
+        }
+        selectedUnit = unit;
+        selectedUnit.setPipeline('Custom');//,{ gray: 1 });
+        cam.startFollow(unit);
+        showArrows(unit);
+        cam.stopFollow();
+    }
+
+    function selectAdjacentPlaces(centerMapX, centerMapY) {
+        let res = [];
+        for (let y = centerMapY - 1; y <= centerMapY + 1; y++)
+            for (let x = centerMapX - 1; x <= centerMapX + 1; x++) {
+                if ((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === centerMapX) && (y === centerMapY))) continue;
+                res.push([x, y]);
+            }
+        return res;
+    }
+
+    function selectFreeAdjacentPlaces(centerMapX, centerMapY) {
+        let res = [];
+        selectAdjacentPlaces(centerMapX, centerMapY).forEach(x => {
+            let wallTile = wallsLayer.getTileAt(x[0], x[1]);
+            if (wallTile == null) {
+                let unitAtPos = getUnitAtMap(x[0], x[1]);
+                if (unitAtPos == null) res.push(x);
+            }
+        });
+        return res;
+    }
+
+    function selectUnits(centerMapX, centerMapY, playerArr, unitArr, radius) {
+        let arr = [];
+        let res = [];
+        if (playerArr == null) {
+            arr = units;
+        } else {
+            playerArr.forEach(pl => arr = arr.concat(pl.units));
+        }
+        arr.forEach(unit => {
+            let fl = true;
+            if (unitArr != null) {
+                if (unitArr.includes(unit)) fl = false;
+            }
+            if (fl) {
+                if (radius > 0) {
+                    let dX = Math.abs(unit.mapX - centerMapX);
+                    let dY = Math.abs(unit.mapY - centerMapY);
+                    if (dX * dX + dY * dY <= radius * radius) {
+                        res.push(unit);
+                    }
+                } else {
+                    if ((Math.abs(unit.mapX - centerMapX) <= 1) && (Math.abs(unit.mapY - centerMapY) <= 1)) {
+                        res.push(unit);
+                    }
+                }
+            }
+        });
+        return res;
+    }
+
+    function deselectUnits() {
+        units.forEach(unit => {
+            if (unit.filtered === true) {
+                unit.filtered = false;
+                unit.resetPipeline();
+            }
+        });
+    }
+
+    function checkLineOfSight(x1, y1, x2, y2, onWall, onEntity, onUnit) {
+        if (x1 === x2 && y1 === y2) return true;
+        let xx1 = x1;
+        let xx2 = x2;
+        let yy1 = y1;
+        let yy2 = y2;
+        let invFlag = false;
+        if (Math.abs(y2 - y1) > Math.abs(x2 - x1)) {
+            invFlag = true;
+            xx1 = y1;
+            xx2 = y2;
+            yy1 = x1;
+            yy2 = x2;
+        }
+        let k = (yy2 - yy1) / (xx2 - xx1);
+        let b = yy1 - k * xx1;
+        let dx = 1;
+        if (xx2 < xx1) dx = -1;
+        for (let x = xx1 + dx; x !== xx2; x = x + dx) {
+            let y = Math.round(k * x + b);
+            let resX = x;
+            let resY = y;
+            if (invFlag) {
+                resX = y;
+                resY = x;
+            }
+            let unit = getUnitAtMap(resX, resY);
+            if (unit != null) {
+                if (onUnit) {
+                    if (onUnit(unit) === false) return false;
+                } else return false;
+            }
+            let entity = Entity.getEntityAtMap(resX, resY);
+            if (entity != null) {
+                if (onEntity) {
+                    if (onEntity(entity) === false) return false;
+                } else return false;
+            }
+            let wallTile = wallsLayer.getTileAt(resX, resY);
+            if (wallTile != null) {
+                //if(wallTile.properties['collides'] == true)
+                if (onWall) {
+                    if (onWall(wallTile) === false) return false;
+                } else return false;
+            }
+        }
+        return true;
+    }
+
+    function selectOnLineOfSight(centerX, centerY, units, onWall, onEntity, onUnit) {
+        let res = [];
+        units.forEach(unit => {
+            if (checkLineOfSight(centerX, centerY, unit.mapX, unit.mapY, onWall, onEntity, onUnit) === true) res.push(unit);
+        });
+        return res;
+    }
+
+    function selectPlacesOnLineOfSight(centerX, centerY, radius, withUnits = false, withEntities = false) {
+        let res = [];
+        for (let r = 1; r <= radius; r++) {
+            for (let y = centerY - r; y <= centerY + r; y++) {
+                for (let x = centerX - r; x <= centerX + r; x++) {
+                    if ((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === centerX) && (y === centerY))) continue;
+                    if ((withUnits === false) && (getUnitAtMap(x, y) != null)) continue;
+                    if ((withEntities === false) && (Entity.getEntityAtMap(x, y) != null)) continue;
+                    let wallTile = wallsLayer.getTileAt(x, y);
+                    if (wallTile != null) continue;
+                    let dX = Math.abs(x - centerX);
+                    let dY = Math.abs(y - centerY);
+                    if (dX * dX + dY * dY > r * r) continue;
+                    if (checkLineOfSight(centerX, centerY, x, y) === true) res.push([x, y]);
+                }
+            }
+        }
+        return res;
+    }
+
+    function checkUnitVisibility(unit) {
+        let enemies = [];
+        players.forEach(pl => {
+            if (pl !== unit.player) enemies.push(pl);
+        });
+        //let targets = selectUnits(unit.mapX, unit.mapY, enemies, null, 20); //unit.config.abilities.fire.config.range);
+        let targets = [];
+        selectUnits(unit.mapX, unit.mapY, enemies, null, 20).forEach(unt => {
+            if (!unt.visible) targets.push(unt);
+        });
+        targets = selectOnLineOfSight(unit.mapX, unit.mapY, targets, null, null, () => {
+            return true
+        });
+        targets.forEach(unt => {
+            unt.visible = true;
+        });
+    }
+
+    function startTurn() {
+        if (players[playerInd].units.length === 0) {
+            setTimeout(endTurn, 1);
             return;
         }
         let isWinner = true;
-        for(let i=0;i<=players.length;i++)
-        {
-            if(i !== playerInd && players[i].units.length > 0){isWinner = false; break;}
+        for (let i = 0; i < players.length; i++) {
+            if (i !== playerInd && players[i].units.length > 0) {
+                isWinner = false;
+                break;
+            }
         }
-        if(isWinner)
-        {
+        if (isWinner) {
             pointerBlocked = true;
             let scrollMsg = new ScrollMsg(uiScene, 'Player ' + (playerInd + 1) + ' won!', null);
             scrollMsg.show();
             return;
         }
-        units.forEach(unt => unt.visible=false);
+        units.forEach(unt => unt.visible = false);
         pointerBlocked = true;
         hideArrows();
-        if(players[playerInd].control === PlayerControl.human) {
+        if (players[playerInd].control === PlayerControl.human) {
             let scrollMsg = new ScrollMsg(uiScene, 'Player ' + (playerInd + 1) + ' turn', function () {
                 players[playerInd].startTurn();
             });
             scrollMsg.show();
-        }
-        else
-        {
+        } else {
             players[playerInd].startTurn();
         }
     }
 
-	function moveEntites()
-	{
-    let allMoved = true;
-		for(let i=0;i<entities.length;i++)
-		{
-			if(entities[i].moved === false)
-			{
-				allMoved = false;
-				entities[i].makeMove();
-				return;
-			}
-		}
-		if(allMoved)
-		{
-			entities.forEach(ent => ent.moved=false);
-			playerInd = 0;
-			console.log('next player '+playerInd);
-			console.log('units: '+players[playerInd].units.length);
+    function moveEntites() {
+        let allMoved = true;
+        for (let i = 0; i < entities.length; i++) {
+            if (entities[i].moved === false) {
+                allMoved = false;
+                entities[i].makeMove();
+                return;
+            }
+        }
+        if (allMoved) {
+            entities.forEach(ent => ent.moved = false);
+            playerInd = 0;
+            console.log('next player ' + playerInd);
+            console.log('units: ' + players[playerInd].units.length);
             startTurn();
-		}
-	}
+        }
+    }
 
-	function endTurn()
-	{
+    function endTurn() {
         setInteractionScenario(userInteractionScenario.movement);
-		console.log('end turn');
-		console.log('prev player '+playerInd);
-		playerInd++;
-		if(playerInd >= players.length)
-		{
-			moveEntites();
-		}
-		else
-		{
-			console.log('next player '+playerInd);
-			console.log('units: '+players[playerInd].units.length);
+        console.log('end turn');
+        console.log('prev player ' + playerInd);
+        playerInd++;
+        if (playerInd >= players.length) {
+            moveEntites();
+        } else {
+            console.log('next player ' + playerInd);
+            console.log('units: ' + players[playerInd].units.length);
             startTurn();
-		}
-	}
+        }
+    }
 
-    function resetInteractionScenario(){
-        if(selectedUnit!=null)selectedUnit.stopAbility();
+    function resetInteractionScenario() {
+        if (selectedUnit != null) selectedUnit.stopAbility();
         setInteractionScenario(userInteractionScenario.movement);
     }
 
-    function onEndTurn(){
+    function onEndTurn() {
         resetInteractionScenario();
         pointerBlocked = true;
-        let scrollMsg = new ScrollMsg(uiScene,'Are you sure?',function(res){
-            if(res){setTimeout(endTurn,1);}
-            else{
+        let scrollMsg = new ScrollMsg(uiScene, 'Are you sure?', function (res) {
+            if (res) {
+                setTimeout(endTurn, 1);
+            } else {
                 pointerBlocked = false;
             }
-        },ScrollType.yesno);
+        }, ScrollType.yesno);
         scrollMsg.show();
     }
 
-	function resize() // (gameSize, baseSize, displaySize, resolution)
-    {      
+    function resize() // (gameSize, baseSize, displaySize, resolution)
+    {
         let displayTileWidth = window.innerWidth / 20;
         let displayTileHeight = window.innerHeight / 20;
         let displayTileSize = displayTileWidth;
-        if(displayTileWidth<displayTileHeight)displayTileSize=displayTileHeight;
-        if(displayTileSize>64)displayTileSize=64;
-        let zoomFactor=displayTileSize/16;
+        if (displayTileWidth < displayTileHeight) displayTileSize = displayTileHeight;
+        if (displayTileSize > 64) displayTileSize = 64;
+        let zoomFactor = displayTileSize / 16;
 
         let prevGroundPosX = groundLayer.x;
         let prevGroundPosY = groundLayer.y;
 
-        game.scale.resize(window.innerWidth, window.innerHeight); 
+        game.scale.resize(window.innerWidth, window.innerHeight);
 
-        let gameW=map.widthInPixels;
-  	  	if(gameW*zoomFactor<window.innerWidth)gameW=window.innerWidth/zoomFactor;
-  	  	let gameH=map.heightInPixels;
-  	  	if(gameH*zoomFactor<window.innerHeight)gameH=window.innerHeight/zoomFactor;
-  	  	game.config.width=gameW;
-  	  	game.config.height=gameH;
+        let gameW = map.widthInPixels;
+        if (gameW * zoomFactor < window.innerWidth) gameW = window.innerWidth / zoomFactor;
+        let gameH = map.heightInPixels;
+        if (gameH * zoomFactor < window.innerHeight) gameH = window.innerHeight / zoomFactor;
+        game.config.width = gameW;
+        game.config.height = gameH;
 
-        groundLayer.setPosition((game.config.width-map.widthInPixels)/2, (game.config.height-map.heightInPixels)/2);
-        wallsLayer.setPosition((game.config.width-map.widthInPixels)/2, (game.config.height-map.heightInPixels)/2);
+        groundLayer.setPosition((game.config.width - map.widthInPixels) / 2, (game.config.height - map.heightInPixels) / 2);
+        wallsLayer.setPosition((game.config.width - map.widthInPixels) / 2, (game.config.height - map.heightInPixels) / 2);
 
         let offsetX = groundLayer.x - prevGroundPosX;
         let offsetY = groundLayer.y - prevGroundPosY;
 
-        entities.forEach(item => item.setPosition(item.x+offsetX, item.y+offsetY));
-        units.forEach(item => item.setPosition(item.x+offsetX, item.y+offsetY));
-        arrows.forEach(item => item.setPosition(item.x+offsetX, item.y+offsetY));
+        entities.forEach(item => item.setPosition(item.x + offsetX, item.y + offsetY));
+        units.forEach(item => item.setPosition(item.x + offsetX, item.y + offsetY));
+        arrows.forEach(item => item.setPosition(item.x + offsetX, item.y + offsetY));
 
-        PlaceSelector.icons.forEach(item => item.setPosition(item.x+offsetX, item.y+offsetY));
-        if(rangeRenderer != null)
-        {
-        	rangeRenderer.setPosition(groundLayer.x, groundLayer.y);
-        	if(rangeRenderer.visible === true)rangeRenderer.redraw();
+        PlaceSelector.icons.forEach(item => item.setPosition(item.x + offsetX, item.y + offsetY));
+        if (rangeRenderer != null) {
+            rangeRenderer.setPosition(groundLayer.x, groundLayer.y);
+            if (rangeRenderer.visible === true) rangeRenderer.redraw();
         }
 
         //const cam = game.scene.scenes[0].cameras.main;
 
-        console.log('game.scene.scenes[0] '+game.scene.scenes[0]);
+        console.log('game.scene.scenes[0] ' + game.scene.scenes[0]);
 
         cam.setViewport(0, 0, window.innerWidth, window.innerHeight);
         cam.setZoom(zoomFactor);
         cam.setBounds(0, 0, game.config.width, game.config.height);
-        cam.centerToBounds(); 
+        cam.centerToBounds();
         //cam.roundPixels = true;
-        
-        let leftBorder= 0 ;
-        if(map.widthInPixels*zoomFactor<window.innerWidth)leftBorder = groundLayer.x * zoomFactor;
-        if(buttonEndTurn!=null)buttonEndTurn.setPosition(leftBorder + buttonEndTurn.width/2 + 10, window.innerHeight - buttonEndTurn.height/2 - 10);
 
-        if((book != null)&&(book.visible === true))book.resize();
+        let leftBorder = 0;
+        if (map.widthInPixels * zoomFactor < window.innerWidth) leftBorder = groundLayer.x * zoomFactor;
+        if (buttonEndTurn != null) buttonEndTurn.setPosition(leftBorder + buttonEndTurn.width / 2 + 10, window.innerHeight - buttonEndTurn.height / 2 - 10);
+
+        if ((book != null) && (book.visible === true)) book.resize();
         uiElements.forEach(elm => {
-           if(elm.visible === true)elm.resize();
+            if (elm.visible === true) elm.resize();
         });
     }
 
-	var collideCallback = function(gameObject1, gameObject2)
-	{
+    var collideCallback = function (gameObject1, gameObject2) {
         let activeUnit = null;
         let passiveUnit = null;
-    	if(gameObject2.isMoving === true)
-    	{
-    		activeUnit = gameObject2;
-    		passiveUnit = gameObject1;
-    	}
-    	else if(gameObject1.isMoving === true)
-    	{
-    			activeUnit = gameObject1;
-    			passiveUnit = gameObject2;
-    	}
-    	if(activeUnit!=null)
-    	{
-    		if(passiveUnit.constructor.name !== 'Unit')
-    		{
-    			var targetXY = map.tileToWorldXY(activeUnit.mapX, activeUnit.mapY);
-				activeUnit.body.reset(targetXY.x + 8, targetXY.y + 8);
-				activeUnit.isMoving = false;
-				activeUnit.anims.play('stop', true);
-				showArrows(activeUnit);
-			}
-		}
-	}
+        if (gameObject2.isMoving === true) {
+            activeUnit = gameObject2;
+            passiveUnit = gameObject1;
+        } else if (gameObject1.isMoving === true) {
+            activeUnit = gameObject1;
+            passiveUnit = gameObject2;
+        }
+        if (activeUnit != null) {
+            if (passiveUnit.constructor.name !== 'Unit') {
+                var targetXY = map.tileToWorldXY(activeUnit.mapX, activeUnit.mapY);
+                activeUnit.body.reset(targetXY.x + 8, targetXY.y + 8);
+                activeUnit.isMoving = false;
+                activeUnit.anims.play('stop', true);
+                showArrows(activeUnit);
+            }
+        }
+    }
 
-//---------------------------- Global vars ----------------------------
+    //---------------------------- Global vars ----------------------------
 
-	var config = {
-	    type: Phaser.AUTO,
-	    parent: 'game',
-	    pixelArt: true,
-	    scale: {
-        	mode: Phaser.Scale.NONE //,
-        	//autoCenter: Phaser.Scale.CENTER_BOTH
-    	},
-	    width: 800,
-	    height: 600,
-	    debug: true,
-	    physics: {
-	        default: 'arcade',
-	        arcade: {
-	            debug: false
-	        }
-	    },
-	    scene: [
-	    	BootScene,
+    var config = {
+        type: Phaser.AUTO,
+        parent: 'game',
+        pixelArt: true,
+        scale: {
+            mode: Phaser.Scale.NONE //,
+            //autoCenter: Phaser.Scale.CENTER_BOTH
+        },
+        width: 800,
+        height: 600,
+        debug: true,
+        physics: {
+            default: 'arcade',
+            arcade: {
+                debug: false
+            }
+        },
+        scene: [
+            BootScene,
             GameScene,
             UIScene
-	    ],
-	    pipeline: { 'Custom': CustomPipeline, 'Gray': GrayScalePipeline }
-	};
-    
-	var map;
-	var groundLayer;
-	var wallsLayer;
-	var fireballAnimation = null;
-	var gasAnimation = null;
-	var players = [];
-	var playerInd = 0;
-	var entities = [];
-	var units = [];
-	var arrows = [];
-	var selectedUnit = null;
-	var pointerBlocked = false;
-	var pointerPressed = false;
-	var activeInteractionScenario = userInteractionScenario.movement;
-	var grayScalePipeline;
-	var customPipeline;
-	var rangeRenderer = null;
-	var placeSelector = null;
+        ],
+        pipeline: {'Custom': CustomPipeline, 'Gray': GrayScalePipeline}
+    };
 
-	var baseShader;
-	var cam;
-	
-	var buttonEndTurn = null;
-	var book = null;
+    var map;
+    var groundLayer;
+    var wallsLayer;
+    var fireballAnimation = null;
+    var gasAnimation = null;
+    var players = [];
+    var playerInd = 0;
+    var entities = [];
+    var units = [];
+    var arrows = [];
+    var selectedUnit = null;
+    var pointerBlocked = false;
+    var pointerPressed = false;
+    var activeInteractionScenario = userInteractionScenario.movement;
+    var grayScalePipeline;
+    var customPipeline;
+    var rangeRenderer = null;
+    var placeSelector = null;
+
+    var baseShader;
+    var cam;
+
+    var buttonEndTurn = null;
+    var book = null;
     var uiScene = null;
     var uiElements = [];
-	var game = new Phaser.Game(config);
+    var game = new Phaser.Game(config);
 
 </script>
 </body>
