@@ -300,6 +300,17 @@
             scrollMsg.show();
             return;
         }
+        //+
+        let wiz = players[playerInd].wizard;
+        let places = wiz.player.aiControl.getWebPlanMap(wiz);
+        wiz.player.icons = [];
+        places.forEach( x => {
+            let pos = map.tileToWorldXY(x.cell[0], x.cell[1]);
+            let circle = wiz.scene.add.circle(pos.x + 8, pos.y + 8, 2, Math.sqrt(x.dist)*10);
+            wiz.player.icons.push(circle);
+            circle.setDepth(10000);
+        });
+        //-
         units.forEach(unt => unt.visible = false);
         pointerBlocked = true;
         hideArrows();
@@ -332,6 +343,12 @@
     }
 
     function endTurn() {
+        //+
+        if(players[playerInd].icons){
+            players[playerInd].icons.forEach( icon => icon.destroy() );
+            players[playerInd].icons = [];
+        }
+        //-
         setInteractionScenario(userInteractionScenario.movement);
         console.log('end turn');
         console.log('prev player ' + playerInd);

@@ -533,5 +533,30 @@ class AIControl
             }
         return cells;
     }
+  
+    getWebPlanMap(wizard)
+    {
+        let res = [];
+        const minR = 3;
+        const maxR = 10;
+        let r = maxR;
+        //for (let r = minR; r <= maxR; r++) {
+            for (let y = wizard.mapY - r; y <= wizard.mapY + r; y++) {
+                for (let x = wizard.mapX - r; x <= wizard.mapX + r; x++) {
+                    if((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === wizard.mapX) && (y === wizard.mapY))) continue;
+                    if(Entity.getEntityAtMap(x, y) != null) continue;
+                    let wallTile = wallsLayer.getTileAt(x, y);
+                    if (wallTile != null) continue;
+                    let dX = Math.abs(x - wizard.mapX);
+                    let dY = Math.abs(y - wizard.mapY);
+                    let dr = dX*dX + dY*dY;
+                    if(dr > maxR * maxR) continue;
+                    if(dr <= minR * minR) continue;
+                    if (checkLineOfSight(wizard.mapX, wizard.mapY, x, y, null, null, function(){return true;}) === true) res.push({cell: [x, y], dist: dr});
+                }
+            }
+        //}
+        return res;
+    }
 
 }
