@@ -74,6 +74,11 @@ class AIControl
             this.stepDemon(unit);
             return;
         }
+        if(unit.config.name === "spider")
+        {
+            this.stepSpider(unit);
+            return;
+        }
         if(!this.stepCommonUnit(unit)) this.pass();
     }
 
@@ -313,6 +318,117 @@ class AIControl
             }
         }
     }
+  
+    stepSpider(unit)
+    {
+        if(!unit.aiControl)
+        {
+            unit.aiControl = {target: null};
+        }
+        if(unit.aiControl.target == null)
+        {
+            let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+            let stepPlaces = this.getAvailableCells(dmap,unit,null,true);
+            let wiz = unit.player.wizard;
+            if(wiz != null) {
+                if(!wiz.webPlan) wiz.webPlan = this.getWebPlanMap(wiz);
+                let webPlan = wiz.webPlan;
+                //let dmapWiz = this.getDistanceMap(wiz, wiz.mapX, wiz.mapY);
+                //let enemies = this.getAvailableEnemies(dmapWiz, wiz, 3);
+                //if (enemies.length === 0) enemies = this.getAvailableEnemies(dmap, unit, unit.features.move);
+                let enemies = this.getAvailableEnemies(dmap, unit, unit.features.move);
+                for (let i = 0; i < stepPlaces.length; i++) {
+                    let place = stepPlaces[i];
+                    place.webWeight = 0;
+                    place.atackWeight = 0;
+                    for(let w of webPlan)if(place.cell[0] === w.cell[0] && place.cell[1] === w.cell[1]){
+                        if(Entity.getEntityAtMap(w.cell[0], w.cell[1]) != null) continue;
+                        if(this.checkWebCell(wiz,place.cell)) place.webWeight = 1.0/w.dist;
+                        break;
+                    }
+                    for (let j = 0; j < enemies.length; j++) {
+                        let enemy = enemies[j];
+                        if (enemy.player !== unit.player) {
+                            if (place.dist < unit.features.move && Math.abs(enemy.mapX - place.cell[0]) <= 1 && Math.abs(enemy.mapY - place.cell[1]) <= 1) {
+                                place.atackWeight = place.atackWeight + unit.config.features.strength;
+                                break;
+                            }
+                        }
+                    }
+                    place.bestWeight = place.atackWeight + place.webWeight;
+                }
+                let bestPlace = stepPlaces[0];
+                for(let i=1;i<stepPlaces.length;i++)
+                {
+                    if (stepPlaces[i].bestWeight > bestPlace.bestWeight) bestPlace = stepPlaces[i];
+                }
+                if(bestPlace.bestWeight > 0)
+                {
+                    unit.aiControl.target = bestPlace.cell;
+                    //if (bestPlace.webWeight <= 0) unit.features.abilityPoints = 0;
+                    if(bestPlace.cell[0] === unit.mapX && bestPlace.cell[1] === unit.mapY && unit.features.abilityPoints === 0) unit.aiControl.target = null;
+                }
+                else
+                {
+                    let bestWebCell = null;
+                    for(let w of webPlan)
+                    {
+                        if(Entity.getEntityAtMap(w.cell[0], w.cell[1]) != null) continue;
+                        if(this.checkWebCell(wiz,w.cell)) if(bestWebCell == null || bestWebCell.dist > w.dist) bestWebCell = w;
+                    }
+                    if(bestWebCell) unit.aiControl.target = [bestWebCell.cell[0],bestWebCell.cell[1]];
+                }
+            }
+            else
+            {
+                let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
+                if(trgtWiz) unit.aiControl.target = [trgtWiz.mapX,trgtWiz.mapY];
+            }
+        }
+        if(unit.aiControl.target == null)
+        {
+            this.pass();
+            return;
+        }
+        else
+        {
+            if(unit.mapX === unit.aiControl.target[0] && unit.mapY === unit.aiControl.target[1])
+            {
+                if(unit.features.abilityPoints > 0)
+                {
+                    unit.startAbility();
+                }
+                else if(unit.features.move > 0)
+                {
+                    let trg = null;
+                    for(let dy=-1;dy<=1;dy++)
+                        for(let dx=-1;dx<=1;dx++)
+                            if(unit.canAtackTo(dx,dy)===true)
+                                if(trg == null || randomInt(0,1) === 1) trg = [unit.mapX+dx,unit.mapY+dy];
+                    if(trg) unit.atackTo(trg[0], trg[1]);
+                    else
+                    {
+                        unit.aiControl.target = null;
+                        this.stepSpider(unit);
+                    }
+                }
+                else
+                {
+                    unit.aiControl.target = null;
+                    this.pass();
+                    return;
+                }
+            }
+            else
+            {
+                if(!this.stepToTarget(unit,unit.aiControl.target))
+                {
+                    unit.aiControl.target = null;
+                    this.pass();
+                }
+            }
+        }
+    }
 
     stepWizard(unit)
     {
@@ -344,9 +460,9 @@ class AIControl
                 else {
                     let summonSpells = [];
                     for (let spl in spellConfigs) if (spellConfigs[spl].type === 'summon') summonSpells.push(spl);
-                    if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['demon'];
-                    else if(unit.player.name === "Player2") unit.aiControl.plannedSpell = spellConfigs['muddy'];
-                    else if(unit.player.name === "Player3") unit.aiControl.plannedSpell = spellConfigs['goblin'];
+                    if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['spider'];
+                    //else if(unit.player.name === "Player2") unit.aiControl.plannedSpell = spellConfigs['muddy'];
+                    //else if(unit.player.name === "Player3") unit.aiControl.plannedSpell = spellConfigs['goblin'];
                     else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                     //unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                 }
@@ -449,7 +565,7 @@ class AIControl
         return enemies;
     }
 
-    getDistanceMap(unit,x,y)
+    getDistanceMap(unit,x,y,onEntity,onUnit,onCell)
     {
         let distMap = [];
         for(let i=0;i<map.height;i++) distMap[i]=[];
@@ -471,7 +587,21 @@ class AIControl
                         let wallTile = wallsLayer.getTileAt(xx,yy);
                         if(wallTile != null) continue;
                         let unt = getUnitAtMap(xx, yy, unit.player);
-                        if(unt) continue;
+                        if(unt != null) {
+                            if(onUnit) {
+                                if(onUnit(unt) === false) continue;
+                            }
+                            else continue;
+                        }
+                        let entity = Entity.getEntityAtMap(xx, yy);
+                        if(entity != null) {
+                            if(onEntity) {
+                                if(onEntity(entity) === false) continue;
+                            }
+                        }
+                        if(onCell){
+                            if(onCell([xx,yy]) === false) continue;
+                        }
                         border2.push([xx,yy,cell[2]+1]);
                         distMap[yy][xx] = cell[2]+1;
                     }
@@ -557,6 +687,24 @@ class AIControl
             }
         //}
         return res;
+    }
+
+    checkWebCell(wizard,cell)
+    {
+        let dMapBefore = this.getDistanceMap(wizard,wizard.mapX,wizard.mapY,function(ent){return false;},function(unt){return true;},null);
+        let dMapAfter = this.getDistanceMap(wizard,wizard.mapX,wizard.mapY,function(ent){return false;},function(unt){return true;},function(c){
+            return !(c[0] === cell[0] && c[1] === cell[1]);
+        });
+        for(let yy=cell[1]-1; yy<=cell[1]+1; yy++)
+            for(let xx=cell[0]-1; xx<=cell[0]+1; xx++)
+            {
+                if((xx<0)||(xx>=map.width)||(yy<0)||(yy>=map.height)||( (xx===cell[0])&&(yy===cell[1])))continue;
+                if(dMapBefore[yy][xx] > -1){
+                    if(dMapAfter[yy][xx] < 0) return false;
+                    if(dMapAfter[yy][xx] - dMapBefore[yy][xx] > 5) return false;
+                }
+            }
+        return true;
     }
 
 }
