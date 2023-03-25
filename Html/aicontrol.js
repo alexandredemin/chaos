@@ -535,7 +535,7 @@ class AIControl
     getNearestEnemyWizard(dMap,unit)
     {
         let wiz = null;
-        let dist = map.height + map.width;
+        let dist = 999999999;
         players.forEach(pl => {
             if(pl !== unit.player && pl.wizard)
             {
@@ -602,7 +602,7 @@ class AIControl
                                 if(onEntity(entity) === false) continue;
                             }
                             else{
-                                d = entity.evaluateStep(unit);
+                                d = Math.floor(entity.evaluateStep(unit)+0.5) * unit.features.move;
                             }
                         }
                         if(onCell){
@@ -620,7 +620,7 @@ class AIControl
     getOptimalStep(dMap,targetCell)
     {
         if(dMap[targetCell[1]][targetCell[0]] === 1) return [targetCell[0],targetCell[1]];
-        let dist = map.height + map.width;
+        let dist = 999999999;
         let cell = [targetCell[0],targetCell[1]];
         while(true)
         {
