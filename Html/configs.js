@@ -130,7 +130,7 @@ const unitConfigs = {
         features: {
             move: 3,
             health: 1,
-            strength: 1,
+            strength: 2,
             defense: 1,
             abilityPoints: 1,
         }

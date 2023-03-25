@@ -318,7 +318,7 @@ class AIControl
             }
         }
     }
-  
+
     stepSpider(unit)
     {
         if(!unit.aiControl)
@@ -365,7 +365,7 @@ class AIControl
                 if(bestPlace.bestWeight > 0)
                 {
                     unit.aiControl.target = bestPlace.cell;
-                    //if (bestPlace.webWeight <= 0) unit.features.abilityPoints = 0;
+                    if (bestPlace.webWeight <= 0) unit.features.abilityPoints = 0;
                     if(bestPlace.cell[0] === unit.mapX && bestPlace.cell[1] === unit.mapY && unit.features.abilityPoints === 0) unit.aiControl.target = null;
                 }
                 else
@@ -460,11 +460,11 @@ class AIControl
                 else {
                     let summonSpells = [];
                     for (let spl in spellConfigs) if (spellConfigs[spl].type === 'summon') summonSpells.push(spl);
-                    if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['spider'];
+                    //if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['spider'];
                     //else if(unit.player.name === "Player2") unit.aiControl.plannedSpell = spellConfigs['muddy'];
                     //else if(unit.player.name === "Player3") unit.aiControl.plannedSpell = spellConfigs['goblin'];
-                    else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
-                    //unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    //else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                 }
             }
             if(unit.features.mana >= unit.aiControl.plannedSpell.cost)
@@ -584,6 +584,7 @@ class AIControl
                     {
                         if((xx<0)||(xx>=map.width)||(yy<0)||(yy>=map.height)||( (xx===cell[0])&&(yy===cell[1])))continue;
                         if(distMap[yy][xx] > -1) continue;
+                        let d = 1;
                         let wallTile = wallsLayer.getTileAt(xx,yy);
                         if(wallTile != null) continue;
                         let unt = getUnitAtMap(xx, yy, unit.player);
@@ -591,19 +592,24 @@ class AIControl
                             if(onUnit) {
                                 if(onUnit(unt) === false) continue;
                             }
-                            else continue;
+                            else{
+                                if(unt.player === unit.player) d = unit.features.move;
+                            }
                         }
                         let entity = Entity.getEntityAtMap(xx, yy);
                         if(entity != null) {
                             if(onEntity) {
                                 if(onEntity(entity) === false) continue;
                             }
+                            else{
+                                d = entity.evaluateStep(unit);
+                            }
                         }
                         if(onCell){
                             if(onCell([xx,yy]) === false) continue;
                         }
-                        border2.push([xx,yy,cell[2]+1]);
-                        distMap[yy][xx] = cell[2]+1;
+                        border2.push([xx,yy,cell[2]+d]);
+                        distMap[yy][xx] = cell[2]+d;
                     }
             }
             border = border2;
@@ -630,6 +636,7 @@ class AIControl
                         {
                             dist2 = dMap[yy][xx];
                             cell2 = [xx, yy];
+                            if(dist2 === 0) return cell;
                         }
                     }
                 }
@@ -637,7 +644,7 @@ class AIControl
             {
                 cell = [cell2[0],cell2[1]];
                 dist = dist2;
-                if(dist <= 1) return cell;
+                //if(dist <= 1) return cell;
             }
             else return null;
         }
@@ -663,7 +670,7 @@ class AIControl
             }
         return cells;
     }
-  
+
     getWebPlanMap(wizard)
     {
         let res = [];
@@ -671,20 +678,20 @@ class AIControl
         const maxR = 10;
         let r = maxR;
         //for (let r = minR; r <= maxR; r++) {
-            for (let y = wizard.mapY - r; y <= wizard.mapY + r; y++) {
-                for (let x = wizard.mapX - r; x <= wizard.mapX + r; x++) {
-                    if((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === wizard.mapX) && (y === wizard.mapY))) continue;
-                    if(Entity.getEntityAtMap(x, y) != null) continue;
-                    let wallTile = wallsLayer.getTileAt(x, y);
-                    if (wallTile != null) continue;
-                    let dX = Math.abs(x - wizard.mapX);
-                    let dY = Math.abs(y - wizard.mapY);
-                    let dr = dX*dX + dY*dY;
-                    if(dr > maxR * maxR) continue;
-                    if(dr <= minR * minR) continue;
-                    if (checkLineOfSight(wizard.mapX, wizard.mapY, x, y, null, null, function(){return true;}) === true) res.push({cell: [x, y], dist: dr});
-                }
+        for (let y = wizard.mapY - r; y <= wizard.mapY + r; y++) {
+            for (let x = wizard.mapX - r; x <= wizard.mapX + r; x++) {
+                if((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === wizard.mapX) && (y === wizard.mapY))) continue;
+                if(Entity.getEntityAtMap(x, y) != null) continue;
+                let wallTile = wallsLayer.getTileAt(x, y);
+                if (wallTile != null) continue;
+                let dX = Math.abs(x - wizard.mapX);
+                let dY = Math.abs(y - wizard.mapY);
+                let dr = dX*dX + dY*dY;
+                if(dr > maxR * maxR) continue;
+                if(dr <= minR * minR) continue;
+                if (checkLineOfSight(wizard.mapX, wizard.mapY, x, y, null, null, function(){return true;}) === true) res.push({cell: [x, y], dist: dr});
             }
+        }
         //}
         return res;
     }

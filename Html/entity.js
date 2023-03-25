@@ -72,6 +72,11 @@ class Entity extends BaseUnit
         return features;
     }
 
+    evaluateStep(unit)
+    {
+        return 1;
+    }
+
     onStepIn(unit)
     {
     }
@@ -119,6 +124,18 @@ class WebEntity extends Entity
         else
         {
             return super.transformFeatures(unit, features);
+        }
+    }
+
+    evaluateStep(unit)
+    {
+        if(unit.config.name === 'spider')
+        {
+            return 1;
+        }
+        else
+        {
+            return (unit.features.strength + this.features.strength)/unit.features.strength;
         }
     }
 
@@ -191,6 +208,11 @@ class FireEntity extends Entity
     {
         cam.stopFollow();
         this.atack();
+    }
+
+    evaluateStep(unit)
+    {
+        return 100;
     }
 
     onStepIn(unit)
@@ -329,6 +351,11 @@ class GlueBlobEntity extends Entity
     stop()
     {
         if(this.tween!=null)this.tween.stop();
+    }
+
+    evaluateStep(unit)
+    {
+        return (unit.features.strength + this.features.strength)/unit.features.strength;
     }
 
     onStepIn(unit)
