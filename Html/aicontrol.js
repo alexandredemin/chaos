@@ -430,6 +430,56 @@ class AIControl
         }
     }
 
+    computeAttackMatrix(unit,stepPlaces,dmap,enemies)
+    {
+        if(dmap == null) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+        if(enemies == null) enemies = this.getAvailableEnemies(dmap, unit, unit.features.move);
+        for (let i = 0; i < stepPlaces.length; i++) {
+            let place = stepPlaces[i];
+            place.atackWeight = 0;
+            for (let j = 0; j < enemies.length; j++) {
+                let enemy = enemies[j];
+                if (enemy.player !== unit.player) {
+                    if (place.dist < unit.features.move && Math.abs(enemy.mapX - place.cell[0]) <= 1 && Math.abs(enemy.mapY - place.cell[1]) <= 1) {
+                        place.atackWeight = place.atackWeight + unit.config.features.strength;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    computeGasMatrix(unit,stepPlaces)
+    {
+        if(!unit.config.abilities.gas)return;
+        let range = unit.config.abilities.gas.config.range;
+        let gasAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
+        if(targets == null)
+            for(let i=0;i<stepPlaces.length;i++)
+            {
+                let place = stepPlaces[i];
+                place.gasWeight = 0;
+                if(unit.features.abilityPoints === 0) continue;
+                let targets = selectUnits(place.cell[0], place.cell[1], null, [unit], range);
+                for(let j=0;j<targets.length;j++)
+                {
+                    let trgt = targets[j];
+                    if(gasAbility.canAtack(unit,trgt))
+                    {
+                        if(trgt.player !== unit.player) place.gasWeight = place.gasWeight + unit.config.abilities.gas.config.damage;
+                        else if(trgt === unit.player.wizard)
+                        {
+                            place.gasWeight = -100;
+                        }
+                        else
+                        {
+                            place.gasWeight = place.gasWeight - unit.config.abilities.gas.config.damage;
+                        }
+                    }
+                }
+            }
+    }
+
     stepWizard(unit)
     {
         if(unit.features.abilityPoints > 0)
