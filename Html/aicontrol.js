@@ -625,7 +625,7 @@ class AIControl
         }
         else
         {
-            for(place in stepPlaces) place.webWeight = 0;
+            for(let place in stepPlaces) place.webWeight = 0;
         }
     }
 
