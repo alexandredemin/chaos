@@ -15,13 +15,21 @@ var GameScene = new Phaser.Class({
         this.tileset = map.addTilesetImage('dungeon-tiles','tiles');
         groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
         wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);
+        objectLayer = map.getObjectLayer('Objects');
         wallsLayer.setCollisionByProperty({ collides: true });
         this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
-        let startPos = this.cache.tilemap.get('dungeon').data.startpos;
 
         cam = this.cameras.main;
         resize();
 
+        //to take from JSON
+        //let startPos = this.cache.tilemap.get('dungeon').data.startpos;
+        let startPos = [];
+        for(let i=0; i < objectLayer.objects.length; i++){
+            let obj = objectLayer.objects[i];
+            let objPos = map.worldToTileXY(obj.x,obj.y);
+            startPos.push({x:objPos.x,y:objPos.y});
+        }
         let playerCount = 4;
         if(playerCount > startPos.length)playerCount = startPos.length;
         for(let i=0;i<playerCount;i++)
