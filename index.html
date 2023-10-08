@@ -23,6 +23,7 @@
     <script type="text/javascript" src="Html/bootscene.js"></script>
     <script type="text/javascript" src="Html/gamescene.js"></script>
     <script type="text/javascript" src="Html/uiscene.js"></script>
+    <script type="text/javascript" src="Html/startscene.js"></script>
     <script type="text/javascript" src="Html/aicontrol.js"></script>
     <style> body {
         margin: 0;
@@ -296,7 +297,7 @@
         }
         if (isWinner) {
             pointerBlocked = true;
-            let scrollMsg = new ScrollMsg(uiScene, 'Player ' + (playerInd + 1) + ' won!', null);
+            let scrollMsg = new ScrollMsg(uiScene, players[playerInd].name + ' won!', null);
             scrollMsg.show();
             return;
         }
@@ -317,7 +318,7 @@
         pointerBlocked = true;
         hideArrows();
         if (players[playerInd].control === PlayerControl.human) {
-            let scrollMsg = new ScrollMsg(uiScene, 'Player ' + (playerInd + 1) + ' turn', function () {
+            let scrollMsg = new ScrollMsg(uiScene, players[playerInd].name + ' turn', function () {
                 players[playerInd].startTurn();
             });
             scrollMsg.show();
@@ -481,8 +482,9 @@
         },
         scene: [
             BootScene,
+            StartScene,
             GameScene,
-            UIScene
+            UIScene,
         ],
         pipeline: {'Custom': CustomPipeline, 'Gray': GrayScalePipeline}
     };
@@ -506,6 +508,8 @@
     var customPipeline;
     var rangeRenderer = null;
     var placeSelector = null;
+    
+    var playersSettings = [];
 
     var baseShader;
     var cam;
@@ -513,6 +517,7 @@
     var buttonEndTurn = null;
     var book = null;
     var uiScene = null;
+    var startScene = null;
     var uiElements = [];
     var game = new Phaser.Game(config);
 

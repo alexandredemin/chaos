@@ -30,7 +30,7 @@ var GameScene = new Phaser.Class({
             let objPos = map.worldToTileXY(obj.x,obj.y);
             startPos.push({x:objPos.x,y:objPos.y});
         }
-        let playerCount = 4;
+        let playerCount = playersSettings.length;
         if(playerCount > startPos.length)playerCount = startPos.length;
         for(let i=0;i<playerCount;i++)
         {
@@ -42,16 +42,16 @@ var GameScene = new Phaser.Class({
         }
         for(let i=0;i<playerCount;i++)
         {
-            let player = new Player('Player' + i);
+            if(playersSettings[i].control == null)continue;
+            let player = new Player(playersSettings[i].name);
             players.push(player);
             let wiz = new Unit(unitConfigs['wizard'], this, 0, 0);
             wiz.setPositionFromMap(startPos[i].x, startPos[i].y);
             player.addWizard(wiz);
             units.push(wiz);
-            player.control = PlayerControl.computer;
-            player.aiControl = new AIControl(player);
+            player.control = playersSettings[i].control;
+            if(playersSettings[i].control == PlayerControl.computer) player.aiControl = new AIControl(player);
         }
-        players[0].control = PlayerControl.human;
 
         fireballAnimation = new FireballAnimation(this,200,200);
         gasAnimation = new GasAnimation(this,200,200);

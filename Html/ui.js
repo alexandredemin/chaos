@@ -1,3 +1,4 @@
+
 //---------------------------- UI classes ----------------------------
 class TextButton extends Phaser.GameObjects.Text
 {
@@ -13,6 +14,139 @@ class TextButton extends Phaser.GameObjects.Text
         button.on('pointerover', () => {if(!pointerBlocked)button.setStyle({ fill: '#f39c12' })});
         button.on('pointerout', () => button.setStyle({ fill: '#FFF' }));
     }
+}
+
+//---------------------------- Menu class ------------------------------
+class MenuItem extends Phaser.GameObjects.BitmapText
+{
+    label = "Item";
+    action = null;
+    optionInd = 0;  
+    options = null;
+  
+    constructor(x, y, label, scene, action, options)
+    {
+        super(scene, x, y, 'atari', label);
+        this.setTint(0xFF0000);
+        this.setFontSize(30);
+        this.scene.add.existing(this);
+        this.setInteractive({useHandCursor: true});
+        this.label = label;
+        this.action = action;
+        this.options = options;
+        if(this.options!=null)
+        {
+            this.text = this.options[this.optionInd].text;
+            this.on('pointerdown', () => this.onClick());
+        }
+        else if(this.action!=null) this.on('pointerdown', () => this.action());
+    }
+  
+    onClick()
+    {
+        if(this.options!=null)
+        {
+            this.optionInd++;
+            if(this.optionInd >= this.options.length) this.optionInd = 0;
+            this.text = this.options[this.optionInd].text;
+        }
+        if(this.action!=null) this.action();
+    }
+}
+
+class Menu
+{
+    items = [];
+    space = 0.5;
+    size = 0.75;
+    maxWidth = 600;
+  
+    height = 0;
+    width = 0;
+    itemHeight = 0;
+    scale = 1.0;
+    visible = true;
+    
+  
+    constructor(scene, items)
+    {
+        let x = window.innerWidth / 2;
+        let y = window.innerHeight / 2;
+        for(let i=0;i<items.length;i++)
+        {
+            let MI = new MenuItem(x,y,items[i].label,scene,items[i].action,items[i].options);
+            MI.setActive(false).setVisible(false);
+            this.items.push(MI);
+            if(MI.width > this.width) this.width = MI.width;
+        }
+        this.itemHeight = this.items[0].height;
+        this.height = this.items.length * this.itemHeight + (this.items.length - 1) * this.itemHeight * this.space;
+        //uiElements.push(this);
+        this.draw();
+        this.hide();
+    }
+  
+    delete(){
+        //uiElements.splice(uiElements.indexOf(this),1);
+        for(let i=0;i<this.items.length;i++)
+        {
+            let MI = this.items[i];
+            MI.destroy();
+        }
+        //this.destroy();
+    }
+  
+    resize()
+    { 
+        let winRation = window.innerHeight/window.innerWidth;
+        let scrollRatio = this.height/this.width;
+        if(winRation < scrollRatio)
+        {
+            this.scale = window.innerHeight*this.size/this.height;
+        }
+        else
+        {
+            this.scale = window.innerWidth*this.size/this.width;
+        }
+        if(this.width*this.scale > this.maxWidth) this.scale = this.maxWidth/this.width;
+        this.draw();
+    }
+  
+    draw()
+    {
+        let x = window.innerWidth / 2;
+        let y = window.innerHeight / 2;
+        let top = y - this.height*this.scale/2;  
+        for(let i=0;i<this.items.length;i++)
+        {
+            let MI = this.items[i];
+            let ySpace = this.itemHeight*this.space*this.scale;
+            MI.setPosition(x - this.width*this.scale/2, top + i*this.itemHeight*this.scale + i*ySpace);
+            MI.scale = this.scale;
+        }
+    }
+  
+    show()
+    {
+        for(let i=0;i<this.items.length;i++)
+        {
+            let MI = this.items[i];
+            MI.setActive(true).setVisible(true);
+        }
+        this.visible = true;
+    }
+
+    hide()
+    {
+        pointerPressed = true;
+        for(let i=0;i<this.items.length;i++)
+        {
+            let MI = this.items[i];
+            MI.setActive(false).setVisible(false);
+        }
+        this.visible = false;
+    }
+  
 }
 
 //---------------------------- Scroll class ----------------------------

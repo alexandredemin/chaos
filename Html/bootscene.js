@@ -45,7 +45,8 @@ var BootScene = new Phaser.Class({
 
     create: function ()
     {
-        this.scene.start('GameScene');
-        this.scene.launch('UIScene');
+        this.scene.start('StartScene');
+        //this.scene.start('GameScene');
+        //this.scene.launch('UIScene');
     }
 });
