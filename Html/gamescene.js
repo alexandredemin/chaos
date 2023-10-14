@@ -9,9 +9,15 @@ var GameScene = new Phaser.Class({
             Phaser.Scene.call(this, { key: 'GameScene' });
         },
 
+    preload: function()
+    {
+        //this.load.image('tiles', 'img/dungeon-16-16.png');
+        this.load.tilemapTiledJSON(selectedMap, 'maps/'+selectedMap+'.json');
+    },
+  
     create: function ()
     {
-        map = this.make.tilemap({ key: 'dungeon', tileWidth: 16, tileHeight: 16 });
+        map = this.make.tilemap({ key: selectedMap, tileWidth: 16, tileHeight: 16 });
         this.tileset = map.addTilesetImage('dungeon-tiles','tiles');
         groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
         wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);
@@ -80,6 +86,8 @@ var GameScene = new Phaser.Class({
         window.addEventListener('resize', resize);
 
         playerInd = 0;
+      
+        startScene.scene.launch('UIScene');
     },
 
     update: function() {

@@ -11,7 +11,6 @@ var BootScene = new Phaser.Class({
     preload: function ()
     {
         this.load.image('tiles', 'img/dungeon-16-16.png');
-        this.load.tilemapTiledJSON('dungeon', 'img/dungeon.json');
         this.load.image('arrow','img/arrow4.png');
         this.load.image('flash','img/flash.png');
         this.load.spritesheet('explosion', 'img/explosion.png', { frameWidth: 128, frameHeight: 128 } );
@@ -46,7 +45,5 @@ var BootScene = new Phaser.Class({
     create: function ()
     {
         this.scene.start('StartScene');
-        //this.scene.start('GameScene');
-        //this.scene.launch('UIScene');
     }
 });

@@ -37,7 +37,9 @@ const StartScene = new Phaser.Class({
         if(this.mapMenu==null)
         {
             menuItems = [];
-            menuItems.push({label: "scenario: dungeon",action: null,options:[{text:"scenario: dungeon",value:0},{text:"scenario: dungeon2",value:1}]});
+            mapOptions = [];
+            for(let m of maps)mapOptions.push({text:"scenarion: " + m,value:m});
+            menuItems.push({label: "scenario: dungeon",action: null,options:mapOptions});
             menuItems.push({label: "",action:null});
             menuItems.push({label: "start game",action:()=>startScene.selectPlayers()});
             menuItems.push({label: "return",action:()=>startScene.showStartMenu()});
@@ -79,9 +81,9 @@ const StartScene = new Phaser.Class({
         for(let i=0;i<playersSettings.length;i++)
             if(playersSettings[i].control != null) playersCount++;
         if(playersCount < 2) return;
+        selectedMap = this.mapMenu.items[0].options[this.mapMenu.items[0].optionInd].value;
         this.deleteAllMenu();
         startScene.scene.start('GameScene');
-        startScene.scene.launch('UIScene');
     },
   
     setPalyersSetting: function()

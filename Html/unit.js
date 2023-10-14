@@ -69,11 +69,21 @@ class Unit extends BaseUnit
             this.flipX = false;
             this.body.setOffset(0, 12);
         }
+        //if(this.visible)
+        //{
         this.anims.play(this.config.sprite+'run', true);
         this.target = new Phaser.Math.Vector2();
         this.target.x = x;
         this.target.y = y;
         this.scene.physics.moveToObject(this, this.target, 25);
+        //}
+        //else
+        //{
+        //    this.target = new Phaser.Math.Vector2();
+        //    this.target.x = x;
+        //    this.target.y = y;
+        //    this.setPosition(x, y);
+        //}
         pointerBlocked = true;
         hideArrows();
         cam.startFollow(this);

@@ -365,7 +365,7 @@ const spellTypes = {
 //---------------------------- Attack features ----------------------------
 const atackFeatures = {
     'infectious': null
-}
+};
 
 //---------------------------- Unit abilities ----------------------------
 
@@ -375,3 +375,9 @@ const abilities = {
     'gas': null,
     'web': null
 };
+
+//---------------------------- Maps ---------------------------------------
+const maps = [
+  'arena',
+  'dungeon'
+];
