@@ -1,4 +1,18 @@
 //---------------------------- BaseUnit class ----------------------------
+function clone(obj)
+{
+    let objClone = {};
+    for (let key in obj)
+    {
+        if(typeof obj[key] === 'object'){
+            let subObj = clone(obj[key]);
+            objClone[key] = subObj;
+        }
+        else objClone[key] = obj[key];
+    }
+    return objClone;
+}
+
 class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
 {
     config = null;
@@ -6,10 +20,12 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
     mapY = 0;
     zOffset = 0;
     features = {};
+    abilities = {};
 
-    constructor(config, scene, x, y)
+    constructor(config, scene, x, y, visible=true)
     {
         super(scene, x, y, config.sprite);
+        this.visible = visible;
         this.setScale(config.scale);
         if(this.height*config.scale > 16)
         {
@@ -27,6 +43,7 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
         this.body.setOffset(0, 12);
         this.config = config;
         for (let key in config.features) {this.features[key] = config.features[key];}
+        this.abilities = clone(config.abilities);
     }
 
     setDepth(mapY)

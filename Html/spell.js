@@ -111,21 +111,38 @@ class SummonSpell extends Spell
                 }
                 break;
             case 1:
-                pointerBlocked = true;
-                placeSelector.hide();
-                let pos = map.tileToWorldXY(this.placeX, this.placeY);
-                let animation = new PortalAnimation(this.wizard.scene, pos.x+8, pos.y+8);
-                animation.playAt(pos.x+8, pos.y+8,this);
                 this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    pointerBlocked = true;
+                    placeSelector.hide();
+                    let pos = map.tileToWorldXY(this.placeX, this.placeY);
+                    let animation = new PortalAnimation(this.wizard.scene, pos.x+8, pos.y+8);
+                    animation.playAt(pos.x+8, pos.y+8,this);
+                }
+                else
+                {
+                    this.next();
+                }
                 break;
             case 2:
-                let unit = new Unit(unitConfigs[this.spellConfig.name], this.wizard.scene, 0, 0);
+                let unit = new Unit(unitConfigs[this.spellConfig.name], this.wizard.scene, 0, 0, false);
                 unit.scale = 0;
                 unit.setPositionFromMap(this.placeX, this.placeY);
                 this.wizard.player.addUnit(unit);
                 units.push(unit);
-                this.animateAppearance(unit);
                 this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    unit.visible = true;
+                    this.animateAppearance(unit);
+                    unit.scale=unit.config.scale;
+                }
+                else
+                {
+                    unit.scale=unit.config.scale;
+                    this.next();
+                }
                 break;
             case 3:
                 this.stop(true);
@@ -161,16 +178,23 @@ class SelfSpell extends Spell
     {
         switch (this.step) {
             case 0:
-                pointerBlocked = true;
-                hideArrows();
-                let animation = new PortalAnimation(this.wizard.scene, this.wizard.x, this.wizard.y);
-                animation.playAt(this.wizard.x, this.wizard.y, this);
                 this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    pointerBlocked = true;
+                    hideArrows();
+                    let animation = new PortalAnimation(this.wizard.scene, this.wizard.x, this.wizard.y);
+                    animation.playAt(this.wizard.x, this.wizard.y, this);
+                }
+                else
+                {
+                    this.next();
+                }
                 break;
             case 1:
                 if(this.spellConfig.entity != null)
                 {
-                    let entity = entityConfigs[this.spellConfig.entity].createFunction(this.wizard.scene, 0, 0);
+                    let entity = entityConfigs[this.spellConfig.entity].createFunction(this.wizard.scene, 0, 0, (gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human));
                     entity.setPositionFromMap(this.wizard.mapX, this.wizard.mapY);
                     entity.start();
                     entities.push(entity);
@@ -229,21 +253,35 @@ class EntitySpell extends Spell
                 this.step++;
                 break;
             case 1:
-                pointerBlocked = true;
-                placeSelector.hide();
-                let pos = map.tileToWorldXY(this.placeX, this.placeY);
-                let throwAnimation = new ThrowSpellAnimation(this.wizard.scene, this.wizard.x, this.wizard.y);
-                throwAnimation.playAt(this.wizard.x, this.wizard.y, pos.x+8, pos.y+8,this);
                 this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    pointerBlocked = true;
+                    placeSelector.hide();
+                    let pos = map.tileToWorldXY(this.placeX, this.placeY);
+                    let throwAnimation = new ThrowSpellAnimation(this.wizard.scene, this.wizard.x, this.wizard.y);
+                    throwAnimation.playAt(this.wizard.x, this.wizard.y, pos.x+8, pos.y+8,this);
+                }
+                else
+                {
+                    this.next();
+                }
                 break;
             case 2:
-                let pos2 = map.tileToWorldXY(this.placeX, this.placeY);
-                let portalAnimation = new PortalAnimation(this.wizard.scene, pos2.x+8, pos2.y+8);
-                portalAnimation.playAt(pos2.x+8, pos2.y+8,this);
                 this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    let pos2 = map.tileToWorldXY(this.placeX, this.placeY);
+                    let portalAnimation = new PortalAnimation(this.wizard.scene, pos2.x+8, pos2.y+8);
+                    portalAnimation.playAt(pos2.x+8, pos2.y+8,this);
+                }
+                else
+                {
+                    this.next();
+                }
                 break;
             case 3:
-                let entity = entityConfigs[this.spellConfig.entity].createFunction(this.wizard.scene, 0, 0);
+                let entity = entityConfigs[this.spellConfig.entity].createFunction(this.wizard.scene, 0, 0, (gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human));
                 entity.setPositionFromMap(this.placeX, this.placeY);
                 entity.start();
                 entities.push(entity);
@@ -302,12 +340,20 @@ class AtackSpell extends Spell
                 this.target.features.health--;
                 if(this.target.features.health <= 0) killed = true;
             }
-            let config = {hit: true, damaged: false, killed: false};
-            if(killed) config.killed = true;
-            if(damaged) config.damaged = true;
-            cam.startFollow(this.target);
-            let lm = new LossesAnimationManager(this.wizard.scene, 200, 200);
-            lm.playAt(this.target.x,this.target.y,this.target,this,config);
+            if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+            {
+                let config = {hit: true, damaged: false, killed: false};
+                if(killed) config.killed = true;
+                if(damaged) config.damaged = true;
+                cam.startFollow(this.target);
+                let lm = new LossesAnimationManager(this.wizard.scene, 200, 200);
+                lm.playAt(this.target.x,this.target.y,this.target,this,config);
+            }
+            else
+            {
+                if(killed) this.target.die();
+                this.next();
+            }
         }
     }
 
@@ -329,12 +375,19 @@ class AtackSpell extends Spell
                 this.step++;
                 break;
             case 1:
-                pointerBlocked = true;
-                if(rangeRenderer.visible === true)rangeRenderer.hide();
                 deselectUnits();
-                let fireballAnimation = new FireballAnimation(this.wizard.scene, this.wizard.x, this.wizard.y);
-                fireballAnimation.playAt(this.wizard,this.target,this);
                 this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    pointerBlocked = true;
+                    if(rangeRenderer.visible === true)rangeRenderer.hide();
+                    let fireballAnimation = new FireballAnimation(this.wizard.scene, this.wizard.x, this.wizard.y);
+                     fireballAnimation.playAt(this.wizard,this.target,this);
+                }
+                else
+                {
+                    this.next();
+                }
                 break;
             case 2:
                 this.atack();
@@ -400,12 +453,20 @@ class AtackPlaceSpell extends Spell
                 target.features.health--;
                 if(target.features.health <= 0) killed = true;
             }
-            let config = {hit: true, damaged: false, killed: false};
-            if(killed) config.killed = true;
-            if(damaged) config.damaged = true;
-            cam.startFollow(target);
-            let lm = new LossesAnimationManager(target.scene, 200, 200);
-            lm.playAt(target.x,target.y,target,this,config);
+            if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+            {
+                let config = {hit: true, damaged: false, killed: false};
+                if(killed) config.killed = true;
+                if(damaged) config.damaged = true;
+                cam.startFollow(target);
+                let lm = new LossesAnimationManager(target.scene, 200, 200);
+                lm.playAt(target.x,target.y,target,this,config);
+            }
+            else
+            {
+                if(killed) target.die();
+                this.next();
+            }
         }
     }
 
@@ -419,12 +480,19 @@ class AtackPlaceSpell extends Spell
                 this.step++;
                 break;
             case 1:
-                pointerBlocked = true;
-                placeSelector.hide();
-                let pos = map.tileToWorldXY(this.placeX, this.placeY);
-                let animation = new LightningAnimation(this.wizard.scene);
-                animation.playAt(this.wizard.x, this.wizard.y, pos.x+8, pos.y+8,this);
                 this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    pointerBlocked = true;
+                    placeSelector.hide();
+                    let pos = map.tileToWorldXY(this.placeX, this.placeY);
+                    let animation = new LightningAnimation(this.wizard.scene);
+                    animation.playAt(this.wizard.x, this.wizard.y, pos.x+8, pos.y+8,this);
+                }
+                else
+                {
+                    this.next();
+                }
                 break;
             case 2:
                 if(this.targets == null)

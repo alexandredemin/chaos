@@ -12,21 +12,21 @@ var GameScene = new Phaser.Class({
     preload: function()
     {
         //this.load.image('tiles', 'img/dungeon-16-16.png');
-        this.load.tilemapTiledJSON(selectedMap, 'maps/'+selectedMap+'.json');
+        this.load.tilemapTiledJSON(gameSettings.selectedMap, 'maps/'+gameSettings.selectedMap+'.json');
     },
   
     create: function ()
     {
-        map = this.make.tilemap({ key: selectedMap, tileWidth: 16, tileHeight: 16 });
+        map = this.make.tilemap({ key: gameSettings.selectedMap, tileWidth: 16, tileHeight: 16 });
         this.tileset = map.addTilesetImage('dungeon-tiles','tiles');
         groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
-        wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);
+        wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);          
         objectLayer = map.getObjectLayer('Objects');
         wallsLayer.setCollisionByProperty({ collides: true });
         this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
 
-        cam = this.cameras.main;
-        resize();
+        //cam = this.cameras.main;
+        //resize();
 
         //to take from JSON
         //let startPos = this.cache.tilemap.get('dungeon').data.startpos;
@@ -57,6 +57,7 @@ var GameScene = new Phaser.Class({
             units.push(wiz);
             player.control = playersSettings[i].control;
             if(playersSettings[i].control == PlayerControl.computer) player.aiControl = new AIControl(player);
+            this.initSpells(wiz);
         }
 
         fireballAnimation = new FireballAnimation(this,200,200);
@@ -87,6 +88,9 @@ var GameScene = new Phaser.Class({
 
         playerInd = 0;
       
+        cam = this.cameras.main;
+        resize();
+          
         startScene.scene.launch('UIScene');
     },
 
@@ -138,6 +142,30 @@ var GameScene = new Phaser.Class({
             this.origDragPointY = null;
         }
 
-    }
+    },
+  
+    initSpells: function(unit){
+        if(gameSettings.spellDistrib == SpellDistribution.random)
+        {
+            let limit = gameSettings.magicPoints;
+            while(limit>0)
+            {
+                let availableSpells = [];
+                let spellNames = Object.keys(unit.abilities.conjure.config.spells);
+                for(let i=0;i<spellNames.length;i++) if(spellConfigs[spellNames[i]].cost <= limit) availableSpells.push(spellNames[i]);
+                if(availableSpells.length > 0)
+                {
+                    let selSpl = availableSpells[randomInt(0, availableSpells.length - 1)];
+                    unit.abilities.conjure.config.spells[selSpl]++;
+                    limit = limit - spellConfigs[selSpl].cost;
+                }
+                else break;
+            }
+        }
+        else
+        {
+            for(let spl of Object.keys(unit.abilities.conjure.config.spells)) unit.abilities.conjure.config.spells[spl] = -1;
+        }
+    },  
 
 });

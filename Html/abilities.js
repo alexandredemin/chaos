@@ -52,6 +52,7 @@ class ConjureAbility extends UnitAbility
         {
             this.unit.features.abilityPoints--;
             this.unit.features.mana = this.unit.features.mana - this.spell.cost;
+            if(this.unit.abilities.conjure.config.spells[this.spell.id] > 0) this.unit.abilities.conjure.config.spells[this.spell.id]--;
         }
         if(this.unit.player.control === PlayerControl.computer)
         {
@@ -84,7 +85,7 @@ class ConjureAbility extends UnitAbility
                     if (book == null) {
                         book = new MagicBook(UIScene);
                     }
-                    book.show(this, this.unit.features.mana);
+                    book.show(this, this.unit);
                     this.step++;
                 }
                 else
@@ -174,12 +175,20 @@ class FireAbility extends UnitAbility
                 this.target.features.health--;
                 if(this.target.features.health <= 0) killed = true;
             }
-            let config = {hit: true, damaged: false, killed: false};
-            if(killed) config.killed = true;
-            if(damaged) config.damaged = true;
-            cam.startFollow(this.target);
-            let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
-            lm.playAt(this.target.x,this.target.y,this.target,this,config);
+            if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+            {
+                let config = {hit: true, damaged: false, killed: false};
+                if(killed) config.killed = true;
+                if(damaged) config.damaged = true;
+                cam.startFollow(this.target);
+                let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
+                lm.playAt(this.target.x,this.target.y,this.target,this,config);
+            }
+            else
+            {
+                if(killed) this.target.die();
+                this.next();
+            }
         }
     }
 
@@ -219,16 +228,23 @@ class FireAbility extends UnitAbility
                 }
                 break;
             case 1:
-                pointerBlocked = true;
-                if(rangeRenderer.visible === true)rangeRenderer.hide();
                 deselectUnits();
-                let fireballAnimation = new FireballAnimation(this.unit.scene, this.unit.x, this.unit.y);
-                fireballAnimation.playAt(this.unit,this.target,this);
                 this.step++;
+                if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+                {
+                    pointerBlocked = true;
+                    if(rangeRenderer.visible === true)rangeRenderer.hide();
+                    let fireballAnimation = new FireballAnimation(this.unit.scene, this.unit.x, this.unit.y);
+                    fireballAnimation.playAt(this.unit,this.target,this);                                  
+                }
+                else
+                {
+                    this.next();
+                }  
                 break;
             case 2:
-                this.atack();
                 this.step++;
+                this.atack();              
                 break;
             case 3:
                 this.stop(this.unit);
@@ -292,12 +308,20 @@ class GasAbility  extends UnitAbility
                 target.features.health--;
                 if(target.features.health <= 0) killed = true;
             }
-            let config = {hit: true, damaged: false, killed: false};
-            if(killed) config.killed = true;
-            if(damaged) config.damaged = true;
-            cam.startFollow(target);
-            let lm = new LossesAnimationManager(target.scene, 200, 200);
-            lm.playAt(target.x,target.y,target,this,config);
+            if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+            {
+                let config = {hit: true, damaged: false, killed: false};
+                if(killed) config.killed = true;
+                if(damaged) config.damaged = true;
+                cam.startFollow(target);
+                let lm = new LossesAnimationManager(target.scene, 200, 200);
+                lm.playAt(target.x,target.y,target,this,config);
+            }
+            else
+            {
+                if(killed) target.die();
+                this.next();
+            }
         }
     }
 
@@ -305,13 +329,20 @@ class GasAbility  extends UnitAbility
     {
         switch (this.step) {
             case 0:
-                hideArrows();
-                cam.startFollow(selectedUnit);
-                cam.stopFollow(selectedUnit);
-                pointerBlocked = true;
-                gasAnimation.playAt(this.unit,this);
                 this.unit.features.abilityPoints--;
                 this.step++;
+                if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+                {
+                    hideArrows();
+                    cam.startFollow(selectedUnit);
+                    cam.stopFollow(selectedUnit);
+                    pointerBlocked = true;
+                    gasAnimation.playAt(this.unit,this);
+                }
+                else
+                {
+                    this.next();
+                }
                 break;
             case 1:
                 if(this.targets == null)
@@ -359,7 +390,7 @@ class WebAbility extends UnitAbility
     next()
     {
         this.unit.features.abilityPoints--;
-        let web = new WebEntity(this.unit.scene,0,0);
+        let web = new WebEntity(this.unit.scene,0,0,(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human));
         web.setPositionFromMap(this.unit.mapX, this.unit.mapY);
         web.start();
         entities.push(web);

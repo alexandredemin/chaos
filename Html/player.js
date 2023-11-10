@@ -1,6 +1,4 @@
 //---------------------------- Player class ----------------------------
-const PlayerControl = { human: 'human', computer: 'computer' };
-
 class Player
 {
     name = '';
@@ -65,7 +63,10 @@ class Player
 
     startTurn()
     {
-        this.units.forEach(item => {item.visible=true; checkUnitVisibility(item);});
+        if(gameSettings.showEnemyMoves == true || this.control === PlayerControl.human)
+        {
+            this.units.forEach(item => {item.visible=true; checkUnitVisibility(item);});
+        }
         this.units.forEach(item => item.recovered = false);
         this.processRecover();
     }

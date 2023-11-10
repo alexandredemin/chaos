@@ -13,7 +13,7 @@ const entityConfigs = {
             tfStrength: 0.75,
             tfDefense: 0.75
         },
-        createFunction: (scene,x,y) => FireEntity.create(scene,x,y)
+        createFunction: (scene,x,y,visible=true) => FireEntity.create(scene,x,y,visible)
     },
 
     'web': {
@@ -26,7 +26,7 @@ const entityConfigs = {
             tfStrength: 0.5,
             tfDefense: 0.5
         },
-        createFunction: (scene,x,y) => WebEntity.create(scene,x,y)
+        createFunction: (scene,x,y,visible=true) => WebEntity.create(scene,x,y,visible)
     },
 
     'glue_blob1': {
@@ -42,7 +42,7 @@ const entityConfigs = {
             tfStrength: 0.25,
             tfDefense: 0.25
         },
-        createFunction: (scene,x,y) => GlueBlobEntity.create(scene,x,y)
+        createFunction: (scene,x,y,visible=true) => GlueBlobEntity.create(scene,x,y,visible)
     },
 
     'glue_blob2': {
@@ -58,7 +58,7 @@ const entityConfigs = {
             tfStrength: 0.25,
             tfDefense: 0.25
         },
-        createFunction: (scene,x,y) => GlueBlobEntity.create(scene,x,y)
+        createFunction: (scene,x,y,visible=true) => GlueBlobEntity.create(scene,x,y,visible)
     },
 
     'pentagram': {
@@ -70,7 +70,18 @@ const entityConfigs = {
             rewardFrequency: 2,
             mana: 1,
         },
-        createFunction: (scene,x,y) => PentagramEntity.create(scene,x,y)
+        createFunction: (scene,x,y,visible=true) => PentagramEntity.create(scene,x,y,visible)
+    },
+  
+    'mushroom': {
+        name: 'mushroom',
+        sprite: 'mushroom',
+        scale: 0.75,
+        features: {
+            health: 1,
+            state: 0,
+        },
+        createFunction: (scene,x,y,visible=true) => MushroomEntity.create(scene,x,y,visible)
     },
 };
 
@@ -92,6 +103,19 @@ const unitConfigs = {
             conjure: {
                 type: 'conjure',
                 config: {
+                    spells: {'goblin':0,
+                             'troll':0,
+                             'imp':0,
+                             'chort':0,
+                             'demon':0,
+                             'muddy':0,
+                             'rat':0,
+                             'spider':0,
+                             'fire':0,
+                             'glue_blob':0,
+                             'fireball':0,
+                             'lightning':0,
+                             'pentagram':0}, 
                 }
             }
         }
@@ -236,6 +260,7 @@ const unitConfigs = {
 //---------------------------- Spell configs ----------------------------
 const spellConfigs = {
     'goblin': {
+        id: 'goblin',
         name: 'goblin',
         type: 'summon',
         icon: 'goblin',
@@ -244,6 +269,7 @@ const spellConfigs = {
         cost: 1,
     },
     'troll': {
+        id: 'troll',
         name: 'troll',
         type: 'summon',
         icon: 'troll',
@@ -252,6 +278,7 @@ const spellConfigs = {
         cost: 6,
     },
     'imp': {
+        id: 'imp',
         name: 'imp',
         type: 'summon',
         icon: 'imp',
@@ -260,6 +287,7 @@ const spellConfigs = {
         cost: 2,
     },
     'chort': {
+        id: 'chort',
         name: 'chort',
         type: 'summon',
         icon: 'chort',
@@ -268,22 +296,25 @@ const spellConfigs = {
         cost: 4,
     },
     'demon': {
+        id: 'demon',
         name: 'demon',
         type: 'summon',
         icon: 'demon',
         scale: 1.5,
-        description: 'Summon demon.\nCost 8',
-        cost: 8,
+        description: 'Summon demon.\nCost 10',
+        cost: 10,
     },
     'muddy': {
+        id: 'muddy',
         name: 'muddy',
         type: 'summon',
         icon: 'muddy',
         scale: 2.0,
-        description: 'Summon muddy.\nCost 6',
-        cost: 6,
+        description: 'Summon muddy.\nCost 8',
+        cost: 8,
     },
     'rat': {
+        id: 'rat',
         name: 'rat',
         type: 'summon',
         icon: 'rat',
@@ -292,6 +323,7 @@ const spellConfigs = {
         cost: 2,
     },
     'spider': {
+        id: 'spider',
         name: 'spider',
         type: 'summon',
         icon: 'spider',
@@ -300,6 +332,7 @@ const spellConfigs = {
         cost: 5,
     },
     'fire': {
+        id: 'fire',
         name: 'fire',
         type: 'entity',
         entity: 'fire',
@@ -310,6 +343,7 @@ const spellConfigs = {
         range: 10,
     },
     'glue_blob': {
+        id: 'glue_blob',
         name: 'glue blob',
         type: 'entity',
         entity: 'glue_blob1',
@@ -320,6 +354,7 @@ const spellConfigs = {
         range: 10,
     },
     'fireball': {
+        id: 'fireball',
         name: 'fire ball',
         type: 'atack',
         icon: 'fireball',
@@ -330,6 +365,7 @@ const spellConfigs = {
         damage: 5,
     },
     'lightning': {
+        id: 'lightning',
         name: 'lightning',
         type: 'atack_place',
         icon: 'lightning',
@@ -341,6 +377,7 @@ const spellConfigs = {
         damageRange: 2,
     },
     'pentagram': {
+        id: 'pentagram',
         name: 'pentagram',
         type: 'self',
         entity: 'pentagram',

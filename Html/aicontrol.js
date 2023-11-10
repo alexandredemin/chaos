@@ -32,8 +32,15 @@ class AIControl
         if(this.availableUnits.length > 0)
         {
             let unit = this.availableUnits.pop();
-            selectUnit(unit);
-            this.step(unit);
+            if(unit.died)
+            {
+                this.pass();
+            }
+            else
+            {
+                selectUnit(unit);
+                this.step(unit);
+            }  
         }
         else
         {
@@ -649,31 +656,38 @@ class AIControl
             if(enemies.length > 0)
             {
                 let availableSpells = [];
-                for (let spl in spellConfigs) if (spellConfigs[spl].type === 'summon' && spellConfigs[spl].cost <= unit.features.mana) availableSpells.push(spl);
+                for(let spl of Object.keys(unit.abilities.conjure.config.spells)) if (spellConfigs[spl].type === 'summon' && spellConfigs[spl].cost <= unit.features.mana && unit.abilities.conjure.config.spells[spl] != 0) availableSpells.push(spl);
                 if(availableSpells.length > 0) unit.aiControl.plannedSpell = spellConfigs[availableSpells[randomInt(0, availableSpells.length - 1)]];
             }
             if(unit.aiControl.plannedSpell == null) {
-                if (!unit.aiControl.pentagramCreated && randomInt(0,1) === 1) {
+                if (!unit.aiControl.pentagramCreated && unit.abilities.conjure.config.spells['pentagram']!=0 && randomInt(0,1) === 1) {
                     unit.aiControl.plannedSpell = spellConfigs['pentagram'];
                 }
                 else {
                     let summonSpells = [];
-                    for (let spl in spellConfigs) if (spellConfigs[spl].type === 'summon') summonSpells.push(spl);
+                    for (let spl of Object.keys(unit.abilities.conjure.config.spells)) if (spellConfigs[spl].type === 'summon' && unit.abilities.conjure.config.spells[spl] != 0) summonSpells.push(spl);
                     //if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['spider'];
-                    if(unit.player.name === "Player2") unit.aiControl.plannedSpell = spellConfigs['muddy'];
+                    //if(unit.player.name === "Player2") unit.aiControl.plannedSpell = spellConfigs['muddy'];
                     //else if(unit.player.name === "Player3") unit.aiControl.plannedSpell = spellConfigs['goblin'];
-                    else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
-                    //unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    //else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    if(summonSpells.length > 0) unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                 }
             }
-            if(unit.features.mana >= unit.aiControl.plannedSpell.cost)
+            if(unit.aiControl.plannedSpell != null)
             {
-                unit.aiControl.spell = unit.aiControl.plannedSpell;
-                unit.startAbility();
+                if(unit.features.mana >= unit.aiControl.plannedSpell.cost)
+                {
+                    unit.aiControl.spell = unit.aiControl.plannedSpell;
+                    unit.startAbility();
+                }
+                else
+                {
+                    this.pass();
+                }
             }
             else
             {
-                this.pass();
+                if(!this.stepCommonUnit(unit)) this.pass();  
             }
         }
         else

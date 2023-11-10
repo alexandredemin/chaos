@@ -10,9 +10,9 @@ class Unit extends BaseUnit
     states = [];
     recovered = true;
 
-    constructor(config, scene, x, y)
+    constructor(config, scene, x, y, visible=true)
     {
-        super(config, scene, x, y);
+        super(config, scene, x, y, visible);
         this.zOffset = 1;
         this.initAnimations();
     }
@@ -69,24 +69,21 @@ class Unit extends BaseUnit
             this.flipX = false;
             this.body.setOffset(0, 12);
         }
-        //if(this.visible)
-        //{
-        this.anims.play(this.config.sprite+'run', true);
         this.target = new Phaser.Math.Vector2();
         this.target.x = x;
         this.target.y = y;
-        this.scene.physics.moveToObject(this, this.target, 25);
-        //}
-        //else
-        //{
-        //    this.target = new Phaser.Math.Vector2();
-        //    this.target.x = x;
-        //    this.target.y = y;
-        //    this.setPosition(x, y);
-        //}
+        if(gameSettings.showEnemyMoves == true || this.player.control === PlayerControl.human)
+        {
+            this.anims.play(this.config.sprite+'run', true);           
+            this.scene.physics.moveToObject(this, this.target, 25);
+            cam.startFollow(this);
+        }
+        else
+        {
+            this.setPosition(x, y);
+        }
         pointerBlocked = true;
         hideArrows();
-        cam.startFollow(this);
     }
 
     checkEntityStepOut()
@@ -109,6 +106,7 @@ class Unit extends BaseUnit
             this.setDepth(mapY);
             this.moveTo(targetXY.x + 8, targetXY.y + 8);
         }
+        else this.onCallback();
     }
 
     endStep()
@@ -116,19 +114,38 @@ class Unit extends BaseUnit
         this.body.reset(this.target.x, this.target.y);
         this.isMoving = false;
         this.anims.play(this.config.sprite+'stop', true);
+        if(gameSettings.showEnemyMoves == false && this.player.control === PlayerControl.human) checkUnitVisibility(this);
         this.states.forEach(item => item.onStep());
         let ent = Entity.getEntityAtMap(this.mapX,this.mapY);
         if(ent != null)
         {
-            ent.onStepIn(this);
+            let result = ent.onStepIn(this);
+            if(result != null)
+            {
+                let config = {hit: false, damaged: false, killed: false};
+                if(result.hit == true) config.hit = true;
+                if(result.damaged == true) config.damaged = true;
+                if(result.killed == true) config.killed = true;
+                if(config.hit == true || config.damaged == true || config.killed == true)
+                {
+                    if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
+                    {
+                        cam.startFollow(this);
+                        let lm = new LossesAnimationManager(this.scene, 200, 200);
+                        lm.playAt(this.x,this.y,this,this,config);
+                    }
+                    else
+                    {
+                        if(cofig.killed) this.die();
+                        this.player.aiControl.step(this);
+                    }
+                    return;
+                }
+            }
         }
-        else
-        {
-            showArrows(this);
-            cam.stopFollow(this);
-            if(this.player.control === PlayerControl.computer) this.player.aiControl.step(this);
-        }
-        checkUnitVisibility(this);
+        showArrows(this);
+        cam.stopFollow(this);
+        if(this.player.control === PlayerControl.computer) this.player.aiControl.step(this);
     }
 
     getCurrentFeatures()
@@ -145,7 +162,11 @@ class Unit extends BaseUnit
 
     atackTo(mapX, mapY)
     {
-        if(! this.checkEntityStepOut())return;
+        if(! this.checkEntityStepOut())
+        {
+            this.onCallback();
+            return;
+        }
         this.features.move = 0;
         let enemyUnit = getUnitAtMap(mapX, mapY);
         let damaged = false;
@@ -176,14 +197,22 @@ class Unit extends BaseUnit
                 if(enemyUnit.features.health <= 0) killed = true;
             }
         }
-        let config = {hit: true, damaged: false, killed: false};
-        if(killed) config.killed = true;
-        if(damaged) config.damaged = true;
-        pointerBlocked = true;
-        hideArrows();
-        cam.startFollow(enemyUnit);
-        let lm = new LossesAnimationManager(this.scene, 200, 200);
-        lm.playAt(enemyUnit.x,enemyUnit.y,enemyUnit,this,config);
+        if(gameSettings.showEnemyMoves == true || this.player.control === PlayerControl.human)
+        {
+            let config = {hit: true, damaged: false, killed: false};
+            if(killed) config.killed = true;
+            if(damaged) config.damaged = true;
+            pointerBlocked = true;
+            hideArrows();
+            cam.startFollow(enemyUnit);
+            let lm = new LossesAnimationManager(this.scene, 200, 200);
+            lm.playAt(enemyUnit.x,enemyUnit.y,enemyUnit,this,config);
+        }
+        else
+        {
+            if(killed) enemyUnit.die();
+            this.player.aiControl.step(this);
+        }
     }
 
     canAtackTo(offsetX, offsetY)

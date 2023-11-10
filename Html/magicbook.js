@@ -2,17 +2,20 @@
 class spellDescription extends Phaser.GameObjects.Image
 {
     spell = null;
+    available = -1;
     textObj = null;
+    textState = null;
     indent = 45;
     baseScale = 1.0;
     textWidth = 0;
 
-    constructor(scene, x, y, spell, scale, textWidth)
+    constructor(scene, x, y, spell, available, scale, textWidth)
     {
         super(scene, x, y, spell.icon);
         this.baseScale = scale;
         this.textWidth = textWidth;
         this.spell = spell;
+        this.available = available;
         this.displayOriginX = 0;
         this.displayOriginY = 0;
         this.scale = spell.scale * scale;
@@ -21,8 +24,17 @@ class spellDescription extends Phaser.GameObjects.Image
         this.textObj.maxWidth = textWidth * scale;
         this.textObj.setTint(0x333333);
         this.textObj.setTint(0x333366);
+        if(this.available >= 0)
+        {
+            this.textState = this.scene.add.bitmapText(x + this.indent * scale, y + this.textObj.height, 'atari', '('+this.available+')').setFontSize(14);
+            this.textState.scale = scale;
+            this.textState.maxWidth = textWidth * scale;
+            this.textState.setTint(0x333333);
+            this.textState.setTint(0x333366);
+        }
         scene.add.existing(this);
         scene.add.existing(this.textObj);
+        if(this.textState != null)scene.add.existing(this.textState);
         this.hide();
     }
 
@@ -30,12 +42,14 @@ class spellDescription extends Phaser.GameObjects.Image
     {
         this.setActive(true).setVisible(true);
         this.textObj.setActive(true).setVisible(true);
+        if(this.textState != null)this.textState.setActive(true).setVisible(true);
     }
 
     hide()
     {
         this.setActive(false).setVisible(false);
         this.textObj.setActive(false).setVisible(false);
+        if(this.textState != null)this.textState.setActive(false).setVisible(false);
     }
 
     setScale(x)
@@ -45,19 +59,40 @@ class spellDescription extends Phaser.GameObjects.Image
         this.textObj.scale = x;
         this.textObj.x = this.x + this.indent * x;
         this.textObj.maxWidth = this.textWidth * x;
+        if(this.textState != null)
+        {
+            this.textState.scale = x;
+            this.textState.x = this.x + this.indent * x;
+            this.textState.maxWidth = this.textWidth * x;
+        }
     }
 
     setPosition(x,y)
     {
         super.setPosition(x,y);
         if(this.textObj != null)this.textObj.setPosition(x + this.indent * this.baseScale, y);
+        if(this.textState != null)this.textState.setPosition(x + this.indent * this.baseScale, y + this.textObj.height + this.textState.height);
+    }
+  
+    setAvailable(scale, onClick)
+    {
+        let shape = new Phaser.Geom.Rectangle(0, 0, (this.textObj.width+this.indent*scale)*this.width/this.displayWidth , Math.max(this.height,this.textObj.height*this.height/this.displayHeight) );
+        this.setInteractive({hitArea: shape, hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true});
+        this.on('pointerdown', onClick);
+    }
+  
+    setUnavailable()
+    {
+        this.setPipeline('Gray');
+        if(this.textObj != null)this.textObj.setTint(0x555555);
+        if(this.textState != null)this.textState.setTint(0x555555);
     }
 }
 
 class MagicBook extends Phaser.GameObjects.Image
 {
     ball = null;
-    mana = 0;
+    unit = 0;
     manaLabel = null;
     cancelB = null;
     leftB = null;
@@ -196,22 +231,22 @@ class MagicBook extends Phaser.GameObjects.Image
 
     showSpells()
     {
-        for(let i=0;i<this.spells.length;i++)
+        let spellMap = this.unit.abilities.conjure.config.spells;
+        let spellNames = Object.keys(this.unit.abilities.conjure.config.spells);
+        for(let i=0;i<spellNames.length;i++)
         {
+            if(spellMap[spellNames[i]] == 0)continue;
             let page = Math.floor(i/6);
-            let spellD = new spellDescription(this.scene, this.x, this.y , spellConfigs[this.spells[i]], this.scale, this.width/2 - 0.15 * this.width);
+            let spellD = new spellDescription(this.scene, this.x, this.y , spellConfigs[spellNames[i]], spellMap[spellNames[i]], this.scale, this.width/2 - 0.15 * this.width);
             this.spellDescriptions.push( spellD );
             this.scene.add.existing(spellD);
-            if(spellD.spell.cost <= this.mana)
+            if(spellD.spell.cost <= this.unit.features.mana && spellMap[spellNames[i]] != 0)
             {
-                let shape = new Phaser.Geom.Rectangle(0, 0, (spellD.textObj.width+spellD.indent*this.scale)*spellD.width/spellD.displayWidth , Math.max(spellD.height,spellD.textObj.height*spellD.height/spellD.displayHeight) );
-                spellD.setInteractive({hitArea: shape, hitAreaCallback: Phaser.Geom.Rectangle.Contains, useHandCursor: true});
-                spellD.on('pointerdown', this.onSpellDown.bind(this,spellD) );
+                spellD.setAvailable(this.scale,this.onSpellDown.bind(this,spellD));
             }
             else
             {
-                spellD.setPipeline('Gray');
-                spellD.textObj.setTint(0x555555);
+                spellD.setUnavailable();
             }
         }
         this.adjastSpellPositions();
@@ -233,18 +268,16 @@ class MagicBook extends Phaser.GameObjects.Image
         }
     }
 
-    show(callbackObject, mana)
+    show(callbackObject, unit)
     {
         this.callbackObject = callbackObject;
-        this.mana = mana;
+        this.unit = unit;
         this.resize();
         this.setActive(true).setVisible(true);
         this.ball.setActive(true).setVisible(true);
         this.manaLabel.setActive(true).setVisible(true);
         this.cancelB.setActive(true).setVisible(true);
-        this.manaLabel.setText(this.mana);
-
-        this.spells = ['goblin', 'troll', 'imp', 'chort', 'demon', 'muddy', 'rat', 'spider','fire','glue_blob','fireball','lightning','pentagram'];
+        this.manaLabel.setText(this.unit.features.mana);
         this.showSpells();
     }
 

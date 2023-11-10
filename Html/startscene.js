@@ -5,6 +5,7 @@ const StartScene = new Phaser.Class({
     startMenu: null,
     playersMenu: null,
     mapMenu: null,
+    settingsMenu: null,
   
     initialize:
 
@@ -38,8 +39,9 @@ const StartScene = new Phaser.Class({
         {
             menuItems = [];
             mapOptions = [];
-            for(let m of maps)mapOptions.push({text:"scenarion: " + m,value:m});
+            for(let m of maps)mapOptions.push({text:"scenario: " + m,value:m});
             menuItems.push({label: "scenario: dungeon",action: null,options:mapOptions});
+            menuItems.push({label: "settins",action:()=>startScene.showSettingsMenu()});
             menuItems.push({label: "",action:null});
             menuItems.push({label: "start game",action:()=>startScene.selectPlayers()});
             menuItems.push({label: "return",action:()=>startScene.showStartMenu()});
@@ -49,6 +51,34 @@ const StartScene = new Phaser.Class({
         }
         this.resize();
         this.mapMenu.show();
+    },
+  
+    showSettingsMenu: function()
+    {
+        //this.deleteAllMenu();
+        this.hideAllMenu();
+        if(this.settingsMenu==null)
+        {
+            menuItems = [];
+            spellOptions = [{text:"spells: random",value:SpellDistribution.random},{text:"spells: unlimited",value:SpellDistribution.unlimited}];
+            magicPoints = [{text:"magic points: 25",value: 25},{text:"magic points: 50",value: 50},{text:"magic points: 75",value: 75},{text:"magic points: 100",value: 100}];
+            menuItems.push({label: "spells: unlimited",action: ()=>startScene.showMagicPoints(),options:spellOptions});
+            menuItems.push({label: "magic points: 100",action: null,options:magicPoints});
+            menuItems.push({label: "show enemy moves off",action: null,options:[{text:"show enemy moves on",value:true},{text:"show enemy moves off",value:false},]});
+            menuItems.push({label: "",action:null});
+            menuItems.push({label: "return",action:()=>startScene.selectMap()});
+            this.settingsMenu = new Menu(this, menuItems); 
+            this.settingsMenu.items[0].optionInd = 0;
+            this.settingsMenu.items[0].text = this.settingsMenu.items[0].options[this.settingsMenu.items[0].optionInd].text;
+            this.settingsMenu.items[1].optionInd = 0;
+            this.settingsMenu.items[1].text = this.settingsMenu.items[1].options[this.settingsMenu.items[1].optionInd].text;
+            this.settingsMenu.items[2].optionInd = 0;
+            this.settingsMenu.items[2].text = this.settingsMenu.items[2].options[this.settingsMenu.items[2].optionInd].text;
+            this.showMagicPoints();
+        }
+        this.resize();
+        this.settingsMenu.show();
+        this.showMagicPoints();
     },
   
     selectPlayers: function()
@@ -81,7 +111,13 @@ const StartScene = new Phaser.Class({
         for(let i=0;i<playersSettings.length;i++)
             if(playersSettings[i].control != null) playersCount++;
         if(playersCount < 2) return;
-        selectedMap = this.mapMenu.items[0].options[this.mapMenu.items[0].optionInd].value;
+        gameSettings.selectedMap = this.mapMenu.items[0].options[this.mapMenu.items[0].optionInd].value;
+        if(this.settingsMenu != null)
+        {
+            gameSettings.spellDistrib = this.settingsMenu.items[0].options[this.settingsMenu.items[0].optionInd].value;
+            gameSettings.magicPoints = this.settingsMenu.items[1].options[this.settingsMenu.items[1].optionInd].value;
+            gameSettings.showEnemyMoves = this.settingsMenu.items[2].options[this.settingsMenu.items[2].optionInd].value;
+        }
         this.deleteAllMenu();
         startScene.scene.start('GameScene');
     },
@@ -109,6 +145,11 @@ const StartScene = new Phaser.Class({
             this.mapMenu.delete();
             this.mapMenu = null;
         }
+        if(this.settingsMenu!=null)
+        {
+            this.settingsMenu.delete();
+            this.settingsMenu = null;
+        }
     },
   
     hideAllMenu: function()
@@ -121,6 +162,10 @@ const StartScene = new Phaser.Class({
         {
             this.mapMenu.hide();
         }
+        if(this.settingsMenu!=null)
+        {
+            this.settingsMenu.hide();
+        }
     },
   
     resize: function()
@@ -129,6 +174,22 @@ const StartScene = new Phaser.Class({
         if(this.startMenu!=null)this.startMenu.resize();
         if(this.playersMenu!=null)this.playersMenu.resize();
         if(this.mapMenu!=null)this.mapMenu.resize();
+        if(this.settingsMenu!=null)this.settingsMenu.resize();
     },
+  
+    showMagicPoints: function()
+    {
+        if(this.settingsMenu != null)
+        {
+            if(this.settingsMenu.items[0].options[this.settingsMenu.items[0].optionInd].value == SpellDistribution.random)
+            {
+                this.settingsMenu.items[1].visible = true;
+            }
+            else
+            {
+                this.settingsMenu.items[1].visible = false;
+            }
+        }
+    }
 
 });

@@ -64,11 +64,19 @@ class InfectedState extends UnitState
                 let killed = false;
                 this.unit.features.health--;
                 if(this.unit.features.health <= 0) killed = true;
-                let config = {hit: false, damaged: true, killed: false};
-                if(killed) config.killed = true;
-                cam.startFollow(this.unit);
-                let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
-                lm.playAt(this.unit.x,this.unit.y,this.unit,this,config);
+                if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+                {
+                    let config = {hit: false, damaged: true, killed: false};
+                    if(killed) config.killed = true;
+                    cam.startFollow(this.unit);
+                    let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
+                    lm.playAt(this.unit.x,this.unit.y,this.unit,this,config);
+                }
+                else
+                {
+                    if(killed) this.unit.die();
+                    this.onCallback();
+                }
             }
             else
             {

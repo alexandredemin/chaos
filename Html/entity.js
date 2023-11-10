@@ -4,9 +4,9 @@ class Entity extends BaseUnit
     moved = false;
     tween = null;
 
-    constructor(config, scene, x, y)
+    constructor(config, scene, x, y, visible=true)
     {
-        super(config, scene, x, y);
+        super(config, scene, x, y, visible);
         this.zOffset = 0;
         this.scale = 0;
         this.initAnimations();
@@ -33,18 +33,26 @@ class Entity extends BaseUnit
 
     start()
     {
-        this.anims.play(this.config.sprite+'idle', true);
-        this.tween = this.scene.tweens.add({
-            targets: this,
-            scale: {start: 0, to: this.config.scale},
-            ease: 'Linear',
-            duration: 400,
-            yoyo: false,
-            repeat: 0,
-            paused: true,
-            onComplete: function(){ this.targets[0].onStartComplete(this.targets[0]); },
-        });
-        this.tween.play();
+        if(gameSettings.showEnemyMoves == true)
+        {
+            this.anims.play(this.config.sprite+'idle', true);
+            this.tween = this.scene.tweens.add({
+                targets: this,
+                scale: {start: 0, to: this.config.scale},
+                ease: 'Linear',
+                duration: 400,
+                yoyo: false,
+                repeat: 0,
+                paused: true,
+                onComplete: function(){ this.targets[0].onStartComplete(this.targets[0]); },
+            });
+            this.tween.play();
+        }
+        else
+        {
+            this.scale = this.config.scale
+            this.onStartComplete(this);
+        }
     }
 
     onStartComplete(obj)
@@ -79,6 +87,7 @@ class Entity extends BaseUnit
 
     onStepIn(unit)
     {
+        return null;
     }
 
     onStepOut(unit)
@@ -100,14 +109,14 @@ class Entity extends BaseUnit
 
 class WebEntity extends Entity
 {
-    constructor(scene, x, y)
+    constructor(scene, x, y, visible=true)
     {
-        super(entityConfigs['web'], scene, x, y);
+        super(entityConfigs['web'], scene, x, y, visible);
     }
 
-    static create(scene, x, y)
+    static create(scene, x, y, visible=true)
     {
-        return new WebEntity(scene, x, y);
+        return new WebEntity(scene, x, y, visible);
     }
 
     onCallback()
@@ -151,7 +160,7 @@ class WebEntity extends Entity
             this.zOffset = 0;
         }
         this.setDepth(this.mapY);
-        unit.onCallback();
+        return null;
     }
 
     onStepOut(unit)
@@ -168,10 +177,17 @@ class WebEntity extends Entity
             {
                 config = {hit: true, damaged: false, killed: false};
             }
-            hideArrows();
-            cam.startFollow(this);
-            var lm = new LossesAnimationManager(this.scene, 200, 200);
-            lm.playAt(this.x,this.y,this,unit,config);
+            if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
+            {
+                hideArrows();
+                cam.startFollow(this);
+                var lm = new LossesAnimationManager(this.scene, 200, 200);
+                lm.playAt(this.x,this.y,this,null,config);
+            }
+            else
+            {  
+                if(config.killed) this.die();
+            }
             return false;
         }
         else
@@ -194,14 +210,14 @@ class FireEntity extends Entity
 {
     atackQueue = [];
 
-    constructor(scene, x, y)
+    constructor(scene, x, y, visible=true)
     {
-        super(entityConfigs['fire'], scene, x, y);
+        super(entityConfigs['fire'], scene, x, y, visible);
     }
 
-    static create(scene, x, y)
+    static create(scene, x, y, visible=true)
     {
-        return new FireEntity(scene, x, y);
+        return new FireEntity(scene, x, y, visible);
     }
 
     onCallback()
@@ -220,11 +236,9 @@ class FireEntity extends Entity
         unit.features.health--;
         let killed = false;
         if(unit.features.health <= 0) killed = true;
-        let config = {hit: false, damaged: true, killed: false};
-        if(killed) config.killed = true;
-        cam.startFollow(unit);
-        let lm = new LossesAnimationManager(this.scene, 200, 200);
-        lm.playAt(unit.x,unit.y,unit,unit,config);
+        let resultState = {hit: false, damaged: true, killed: false};
+        if(killed) resultState.killed = true;
+        return resultState;
     }
 
     atack()
@@ -235,11 +249,19 @@ class FireEntity extends Entity
             unit.features.health--;
             let killed = false;
             if(unit.features.health <= 0) killed = true;
-            let config = {hit: false, damaged: true, killed: false};
-            if(killed) config.killed = true;
-            cam.startFollow(unit);
-            let lm = new LossesAnimationManager(this.scene, 200, 200);
-            lm.playAt(unit.x,unit.y,unit,this,config);
+            if(gameSettings.showEnemyMoves == true)
+            {
+                let config = {hit: false, damaged: true, killed: false};
+                if(killed) config.killed = true;
+                cam.startFollow(unit);
+                let lm = new LossesAnimationManager(this.scene, 200, 200);
+                lm.playAt(unit.x,unit.y,unit,this,config);
+            }
+            else
+            {
+                if(killed)unit.die(); 
+                this.atack();  
+            }
         }
         else
         {
@@ -277,7 +299,7 @@ class FireEntity extends Entity
                             console.log('die '+entity.config.name);
                         }
                     }
-                    let fire = new FireEntity(this.scene,0,0);
+                    let fire = new FireEntity(this.scene,0,0,(gameSettings.showEnemyMoves == true));
                     fire.moved = true;
                     fire.setPositionFromMap(x, y);
                     fire.features.propagation=this.features.propagation*this.features.slowdown;
@@ -315,17 +337,17 @@ class FireEntity extends Entity
 
 class GlueBlobEntity extends Entity
 {
-    constructor(scene, x, y)
+    constructor(scene, x, y, visible=true)
     {
         let configs = [entityConfigs['glue_blob1'],entityConfigs['glue_blob2']];
-        super(configs[randomInt(0,configs.length-1)], scene, x, y);
+        super(configs[randomInt(0,configs.length-1)], scene, x, y, visible);
         this.angle = randomInt(-180,180);
         this.id = randomInt(1,1000000);
     }
 
-    static create(scene, x, y)
+    static create(scene, x, y, visible=true)
     {
-        return new GlueBlobEntity(scene, x, y);
+        return new GlueBlobEntity(scene, x, y, visible);
     }
 
     onCallback()
@@ -361,7 +383,7 @@ class GlueBlobEntity extends Entity
     onStepIn(unit)
     {
         unit.features.move = 0;
-        unit.onCallback();
+        return null;
     }
 
     onStepOut(unit)
@@ -376,10 +398,17 @@ class GlueBlobEntity extends Entity
         {
             config = {hit: true, damaged: false, killed: false};
         }
-        hideArrows();
-        cam.startFollow(this);
-        let lm = new LossesAnimationManager(this.scene, 200, 200);
-        lm.playAt(this.x,this.y,this,unit,config);
+        if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
+        {
+            hideArrows();
+            cam.startFollow(this);
+            let lm = new LossesAnimationManager(this.scene, 200, 200);
+            lm.playAt(this.x,this.y,this,null,config);
+        }
+        else
+        {  
+            if(config.killed) this.die();
+        }
         return false;
     }
 
@@ -400,7 +429,7 @@ class GlueBlobEntity extends Entity
                     }
                     var entity = Entity.getEntityAtMap(x,y);
                     if(entity != null) continue;
-                    let blob = new GlueBlobEntity(this.scene,0,0);
+                    let blob = new GlueBlobEntity(this.scene,0,0,(gameSettings.showEnemyMoves == true));
                     blob.moved = true;
                     blob.setPositionFromMap(x, y);
                     blob.features.propagation=this.features.propagation*this.features.slowdown;
@@ -433,15 +462,15 @@ class PentagramEntity extends Entity
     wizard = null;
     time = 0;
 
-    constructor(scene, x, y)
+    constructor(scene, x, y, visible=true)
     {
-        super(entityConfigs['pentagram'], scene, x, y);
+        super(entityConfigs['pentagram'], scene, x, y, visible);
         this.setOrigin(0.5,0.5);
     }
 
-    static create(scene, x, y)
+    static create(scene, x, y, visible=true)
     {
-        return new PentagramEntity(scene, x, y);
+        return new PentagramEntity(scene, x, y, visible);
     }
 
     start()
@@ -464,7 +493,7 @@ class PentagramEntity extends Entity
     onStepIn(unit)
     {
         if(unit.config.name === 'wizard') this.wizard = unit;
-        unit.onCallback();
+        return null;
     }
 
     onStepOut(unit)
@@ -484,6 +513,67 @@ class PentagramEntity extends Entity
                 this.time = 0;
                 this.wizard.features.mana = this.wizard.features.mana + this.features.mana;
             }
+        }
+        super.makeMove();
+        super.endMove();
+    }
+
+}
+
+
+class MushroomEntity extends Entity
+{
+
+    constructor(scene, x, y, visible=true)
+    {
+        super(entityConfigs['mushroom'], scene, x, y, visible);
+        this.setOrigin(0.5,0.5);
+    }
+
+    static create(scene, x, y, visible=true)
+    {
+        return new MushroomEntity(scene, x, y, visible);
+    }
+  
+    start()
+    {
+        this.setFrame(3);  
+        this.scale = this.config.scale / 4;
+    }
+
+    onCallback()
+    {
+        cam.stopFollow();
+    }
+
+    transformFeatures(unit, features)
+    {
+        return features;
+    }
+
+    onStepIn(unit)
+    {
+        if(unit.config.name === 'wizard')
+        {
+            //this.wizard = unit;
+        }
+        return null;
+    }
+
+    onStepOut(unit)
+    {
+        return true;
+    }
+
+    makeMove()
+    {
+        //let frameInd = this.frame.name+1;
+        //if(frameInd>this.texture.frameTotal)frameInd=0;
+        //this.setFrame(frameInd); 
+        if(this.scale < this.config.scale)
+        {
+            let scl = this.scale + this.config.scale / 4;
+            this.scale = scl;
         }
         super.makeMove();
         super.endMove();

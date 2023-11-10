@@ -41,17 +41,20 @@
     };
 
     function setInteractionScenario(scenario) {
-        if (scenario === userInteractionScenario.movement) {
-            if (selectedUnit != null) {
-                cam.startFollow(selectedUnit);
-                showArrows(selectedUnit);
-                cam.stopFollow(selectedUnit);
-            }
-        } else if ((scenario === userInteractionScenario.targetSelection) || (scenario === userInteractionScenario.placeSelection)) {
-            hideArrows();
-            if (selectedUnit != null) {
-                cam.startFollow(selectedUnit);
-                cam.stopFollow(selectedUnit);
+        if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
+        {
+            if (scenario === userInteractionScenario.movement) {
+                if (selectedUnit != null) {
+                    cam.startFollow(selectedUnit);
+                    showArrows(selectedUnit);
+                    cam.stopFollow(selectedUnit);
+                }
+            } else if ((scenario === userInteractionScenario.targetSelection) || (scenario === userInteractionScenario.placeSelection)) {
+                hideArrows();
+                if (selectedUnit != null) {
+                    cam.startFollow(selectedUnit);
+                    cam.stopFollow(selectedUnit);
+                }
             }
         }
         activeInteractionScenario = scenario;
@@ -116,15 +119,19 @@
     }
 
     function selectUnit(unit) {
-        console.log('select unit ' + unit.name);
-        if (selectedUnit != null) {
-            selectedUnit.resetPipeline();
+        console.log('select unit ' + unit.config.name);
+        if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
+        {
+            if (selectedUnit != null) {
+                selectedUnit.resetPipeline();
+            }
+            selectedUnit = unit;
+            selectedUnit.setPipeline('Custom');//,{ gray: 1 });
+            cam.startFollow(unit);
+            showArrows(unit);
+            cam.stopFollow();
         }
-        selectedUnit = unit;
-        selectedUnit.setPipeline('Custom');//,{ gray: 1 });
-        cam.startFollow(unit);
-        showArrows(unit);
-        cam.stopFollow();
+        else selectedUnit = unit;
     }
 
     function selectAdjacentPlaces(centerMapX, centerMapY) {
@@ -144,6 +151,18 @@
             if (wallTile == null) {
                 let unitAtPos = getUnitAtMap(x[0], x[1]);
                 if (unitAtPos == null) res.push(x);
+            }
+        });
+        return res;
+    }
+  
+    function selectEntities(centerMapX, centerMapY, radius) {
+        let res = [];
+        entities.forEach(ent => {
+            let dX = Math.abs(ent.mapX - centerMapX);
+            let dY = Math.abs(ent.mapY - centerMapY);
+            if (dX * dX + dY * dY <= radius * radius) {
+                res.push(ent);
             }
         });
         return res;
@@ -183,7 +202,7 @@
         units.forEach(unit => {
             if (unit.filtered === true) {
                 unit.filtered = false;
-                unit.resetPipeline();
+                if(unit.visible) unit.resetPipeline();
             }
         });
     }
@@ -281,6 +300,17 @@
         targets.forEach(unt => {
             unt.visible = true;
         });
+        //entites
+        targets = [];
+        selectEntities(unit.mapX, unit.mapY, 20).forEach(ent => {
+            if (!ent.visible) targets.push(ent);
+        });
+        targets = selectOnLineOfSight(unit.mapX, unit.mapY, targets, null, null, () => {
+            return true
+        });
+        targets.forEach(ent => {
+            ent.visible = true;
+        });
     }
 
     function startTurn() {
@@ -314,7 +344,8 @@
         });
         */
         //-
-        units.forEach(unt => unt.visible = false);
+        if(!gameSettings.showEnemyMoves) units.forEach(unt => unt.visible = false);
+        if(!gameSettings.showEnemyMoves) entities.forEach(ent => ent.visible = false);
         pointerBlocked = true;
         hideArrows();
         if (players[playerInd].control === PlayerControl.human) {
@@ -325,6 +356,26 @@
         } else {
             players[playerInd].startTurn();
         }
+        
+        //+ mushrooms
+        /*  
+        for(let i=0; i<10; i++)
+        {
+            let x=randomInt(0, map.width-1);
+            let y=randomInt(0, map.height-1);          
+            let wallTile = wallsLayer.getTileAt(x,y);
+            let entity = Entity.getEntityAtMap(x,y);
+            let unt = getUnitAtMap(x,y);
+            if (wallTile == null && entity == null && unt == null) {
+                let mushroom = new MushroomEntity(players[playerInd].wizard.scene,0,0);
+                mushroom.setPositionFromMap(x, y);
+                mushroom.start();
+                entities.push(mushroom);
+                break;
+            }
+        }
+        */
+        //-        
     }
 
     function moveEntites() {
@@ -508,9 +559,6 @@
     var customPipeline;
     var rangeRenderer = null;
     var placeSelector = null;
-    
-    var playersSettings = [];
-    var selectedMap = '';
 
     var baseShader;
     var cam;
@@ -521,6 +569,16 @@
     var startScene = null;
     var uiElements = [];
     var game = new Phaser.Game(config);
+  
+    const PlayerControl = { human: 'human', computer: 'computer' };
+    const SpellDistribution = { random: 'random', unlimited: 'unlimited'};
+    var playersSettings = [];
+    var gameSettings = {
+        spellDistrib:  SpellDistribution.random,
+        magicPoints: 25,
+        selectedMap: '',
+        showEnemyMoves: true,
+    };
 
 </script>
 </body>
