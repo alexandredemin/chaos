@@ -796,7 +796,6 @@ class AIControl
                     for(let xx=cell[0]-1; xx<=cell[0]+1; xx++)
                     {
                         if((xx<0)||(xx>=map.width)||(yy<0)||(yy>=map.height)||( (xx===cell[0])&&(yy===cell[1])))continue;
-                        if(distMap[yy][xx] > -1) continue;
                         let d = 1;
                         let wallTile = wallsLayer.getTileAt(xx,yy);
                         if(wallTile != null) continue;
@@ -806,7 +805,7 @@ class AIControl
                                 if(onUnit(unt) === false) continue;
                             }
                             else{
-                                if(unt.player === unit.player) d = unit.features.move;
+                                if(unt.player === unit.player) d = unit.config.features.move;
                             }
                         }
                         let entity = Entity.getEntityAtMap(xx, yy);
@@ -815,12 +814,13 @@ class AIControl
                                 if(onEntity(entity) === false) continue;
                             }
                             else{
-                                d = Math.floor(entity.evaluateStep(unit)+0.5) * unit.features.move;
+                                d = Math.floor(entity.evaluateStep(unit)+0.5) * unit.config.features.move;
                             }
                         }
                         if(onCell){
                             if(onCell([xx,yy]) === false) continue;
                         }
+                        if(distMap[yy][xx] > -1 && cell[2]+d >= distMap[yy][xx]) continue;
                         border2.push([xx,yy,cell[2]+d]);
                         distMap[yy][xx] = cell[2]+d;
                     }
@@ -829,6 +829,7 @@ class AIControl
         }
         return distMap;
     }
+
 
     getOptimalStep(dMap,targetCell)
     {
