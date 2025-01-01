@@ -415,6 +415,7 @@ const abilities = {
 
 //---------------------------- Maps ---------------------------------------
 const maps = [
-  'arena',
-  'dungeon'
+    'arena',
+    'cellar',
+    'dungeon'
 ];
