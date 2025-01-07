@@ -73,6 +73,18 @@
                 }, 
                 {
                  "height":0,
+                 "id":6,
+                 "name":"",
+                 "point":true,
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":0,
+                 "x":167.7531999155,
+                 "y":152.89958539174
+                }, 
+                {
+                 "height":0,
                  "id":5,
                  "name":"",
                  "point":true,
@@ -99,13 +111,13 @@
         {
          "columns":32,
          "firstgid":1,
-         "image":"dungeon-16-16.png",
+         "image":"..\/img\/dungeon-16-16.png",
          "imageheight":512,
          "imagewidth":512,
          "margin":0,
          "name":"dungeon-tiles",
          "spacing":0,
-         "tilecount":992,
+         "tilecount":1024,
          "tileheight":16,
          "tiles":[
                 {
