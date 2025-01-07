@@ -61,7 +61,7 @@ const StartScene = new Phaser.Class({
         {
             menuItems = [];
             spellOptions = [{text:"spells: random",value:SpellDistribution.random},{text:"spells: unlimited",value:SpellDistribution.unlimited}];
-            magicPoints = [{text:"magic points: 25",value: 25},{text:"magic points: 50",value: 50},{text:"magic points: 75",value: 75},{text:"magic points: 100",value: 100}];
+            magicPoints = [{text:"magic points: 25",value: 25},{text:"magic points: 50",value: 50},{text:"magic points: 75",value: 75},{text:"magic points: 100",value: 100},{text:"magic points: 150",value: 150},{text:"magic points: 200",value: 200}];
             menuItems.push({label: "spells: unlimited",action: ()=>startScene.showMagicPoints(),options:spellOptions});
             menuItems.push({label: "magic points: 100",action: null,options:magicPoints});
             menuItems.push({label: "show enemy moves off",action: null,options:[{text:"show enemy moves on",value:true},{text:"show enemy moves off",value:false},]});

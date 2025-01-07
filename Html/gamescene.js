@@ -60,6 +60,28 @@ var GameScene = new Phaser.Class({
             this.initSpells(wiz);
         }
 
+        //+ mushrooms
+        /**/
+        for(let j=0; j<5; j++)
+        {
+            for(let i=0; i<10; i++) {
+                let x = randomInt(0, map.width - 1);
+                let y = randomInt(0, map.height - 1);
+                let wallTile = wallsLayer.getTileAt(x, y);
+                let entity = Entity.getEntityAtMap(x, y);
+                let unt = getUnitAtMap(x, y);
+                if (wallTile == null && entity == null && unt == null) {
+                    let mushroom = new MushroomEntity(players[playerInd].wizard.scene, 0, 0);
+                    mushroom.setPositionFromMap(x, y);
+                    mushroom.start();
+                    entities.push(mushroom);
+                    break;
+                }
+            }
+        }
+        /**/
+        //-
+
         fireballAnimation = new FireballAnimation(this,200,200);
         gasAnimation = new GasAnimation(this,200,200);
 

@@ -538,7 +538,7 @@ class MushroomEntity extends Entity
     start()
     {
         this.setFrame(3);  
-        this.scale = this.config.scale / 4;
+        this.scale = this.config.scale / 2;
     }
 
     onCallback()
@@ -555,7 +555,8 @@ class MushroomEntity extends Entity
     {
         if(unit.config.name === 'wizard')
         {
-            //this.wizard = unit;
+            unit.features.mana = unit.features.mana + 5;
+            this.die();
         }
         return null;
     }
@@ -569,12 +570,14 @@ class MushroomEntity extends Entity
     {
         //let frameInd = this.frame.name+1;
         //if(frameInd>this.texture.frameTotal)frameInd=0;
-        //this.setFrame(frameInd); 
+        //this.setFrame(frameInd);
+        /*
         if(this.scale < this.config.scale)
         {
             let scl = this.scale + this.config.scale / 4;
             this.scale = scl;
         }
+        */
         super.makeMove();
         super.endMove();
     }
