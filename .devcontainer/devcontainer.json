@@ -1,0 +1,13 @@
+{
+  "name": "phaser-chaos-dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node",
+  "forwardPorts": [5500],
+  "postCreateCommand": "",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "liveServer.settings.port": 5500
+      }
+    }
+  }
+}
