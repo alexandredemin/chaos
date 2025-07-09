@@ -5,6 +5,9 @@
   "postCreateCommand": "",
   "customizations": {
     "vscode": {
+      "extensions": [
+        "ritwickdey.LiveServer"
+      ],
       "settings": {
         "liveServer.settings.port": 5500
       }
