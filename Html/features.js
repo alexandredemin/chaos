@@ -19,7 +19,7 @@ class InfectiousAtack extends AtackFeature
 
     onAtack(attackUnit, defendUnit)
     {
-        if(InfectedState.canInfect(defendUnit))defendUnit.addState(new InfectedState(defendUnit));
+        if(InfectedState.canInfect(defendUnit)) InfectedState.apply(defendUnit);
         return true;
     }
 

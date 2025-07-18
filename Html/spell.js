@@ -71,6 +71,7 @@ class SummonSpell extends Spell
 
     animateAppearance(unit)
     {
+        /**/
         let tween = this.wizard.scene.tweens.add({
             callbackScope: this,
             targets: unit,
@@ -83,6 +84,61 @@ class SummonSpell extends Spell
             onComplete: function(){ this.onCallback(); },
         });
         tween.play();
+        /**/
+        
+        /*
+        const g = this.wizard.scene.make.graphics({ x: 0, y: 0, add: false });
+        g.fillStyle(0x8B5A2B, 1);
+        for (let i = 4; i > 0; i--) {
+            g.fillCircle(8, 8, i * 2, 1 - i * 0.15);
+        }
+        g.generateTexture('dust', 16, 16);
+        g.destroy();
+        
+        const tex = this.wizard.scene.textures.get(unit.config.sprite).getSourceImage();
+        const fullW = tex.width;
+        const fullH = tex.height;
+        const groundX = unit.x;
+        const groundY = unit.y;
+      
+        const particles = this.wizard.scene.add.particles('dust');
+        const emitter = particles.createEmitter({
+            frame: null,
+            x: groundX,
+            y: groundY + fullH / 2,
+            lifespan: { min: 400, max: 800 },
+            speed: { min: 10, max: 50 },
+            angle: { min: -130, max: -50 },
+            scale: { start: 0.1, end: 0 },
+            alpha: { start: 1, end: 0 },
+            blendMode: 'NORMAL',
+            quantity: 4,
+            frequency: 10,
+            on: true
+        });
+      
+        unit.setCrop(0, fullH, fullW, 0);
+        const depth = 16; 
+        unit.y = unit.y + depth;
+        const props = { y: groundY + depth, h: 0 };
+        this.wizard.scene.tweens.add({
+            callbackScope: this,
+            targets: props,
+            y: groundY,
+            h: fullH,
+            ease: 'Sine.easeOut',
+            duration: 5000,
+            onUpdate: () => {
+                unit.y = props.y;
+                unit.setCrop(0, 0, fullW, props.h);
+            },
+            onComplete: () => {
+                unit.setCrop();
+                emitter.stop();
+                this.onCallback();
+            }
+        });
+        */
     }
 
     next()
@@ -127,7 +183,7 @@ class SummonSpell extends Spell
                 break;
             case 2:
                 let unit = new Unit(unitConfigs[this.spellConfig.name], this.wizard.scene, 0, 0, false);
-                unit.scale = 0;
+                //unit.scale = 0;
                 unit.setPositionFromMap(this.placeX, this.placeY);
                 this.wizard.player.addUnit(unit);
                 units.push(unit);
@@ -199,6 +255,104 @@ class SelfSpell extends Spell
                     entity.start();
                     entities.push(entity);
                 }
+                this.stop(true);
+                return true;
+                break;
+        }
+        return false;
+    }
+
+}
+
+class UnitSpell extends Spell
+{
+    step = 0;
+    target = null;
+
+    constructor()
+    {
+        super();
+    }
+
+    start(wizard, spellConfig, callbackObject)
+    {
+        super.start(wizard, spellConfig, callbackObject);
+        this.step = 0;
+    }
+
+    stop(res)
+    {
+        if(rangeRenderer.visible === true)rangeRenderer.hide();
+        deselectUnits();
+        super.stop(res);
+    }
+
+    onCallback()
+    {
+        cam.stopFollow();
+        this.next();
+    }
+
+    setTarget(target)
+    {
+        this.target = target;
+    }
+
+    cast()
+    {
+        if(this.target != null)
+        {
+            GiganticState.apply(this.target);
+        }
+    }
+
+    next()
+    {
+        switch (this.step) {
+            case 0:
+                setInteractionScenario(userInteractionScenario.targetSelection);
+                rangeRenderer.showAtUnit(this.wizard, this.spellConfig.range*16+8);
+                pointerBlocked = false;
+                let targets = selectUnits(this.wizard.mapX, this.wizard.mapY, null, null, this.spellConfig.range);
+                targets = selectOnLineOfSight(this.wizard.mapX, this.wizard.mapY,targets);
+                targets.forEach(unit => {
+                    unit.setPipeline('Custom');//,{ gray: 1 });
+                    unit.filtered = true;
+                });
+                this.step++;
+                break;
+            case 1:
+                deselectUnits();
+                this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    pointerBlocked = true;
+                    if(rangeRenderer.visible === true)rangeRenderer.hide();
+                    let throwAnimation = new ThrowSpellAnimation(this.wizard.scene, this.wizard.x, this.wizard.y);
+                    throwAnimation.playAt(this.wizard.x, this.wizard.y, this.target.x, this.target.y,this);
+                }
+                else
+                {
+                    this.next();
+                }
+                break;
+            case 2:
+                this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    let portalAnimation = new PortalAnimation(this.wizard.scene, this.target.x, this.target.y);
+                    portalAnimation.playAt(this.target.x, this.target.y, this);
+                }
+                else
+                {
+                    this.next();
+                }
+                break;
+            case 3:
+                this.cast();
+                this.step++;
+                this.next();
+            case 4:
                 this.stop(true);
                 return true;
                 break;

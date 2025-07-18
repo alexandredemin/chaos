@@ -9,7 +9,25 @@ class Entity extends BaseUnit
         super(config, scene, x, y, visible);
         this.zOffset = 0;
         this.scale = 0;
-        this.initAnimations();
+    }
+  
+    serialize() {
+        return {
+            configName: this.config.name,
+            mapX: this.mapX,
+            mapY: this.mapY,
+            features: this.features,
+        };
+    }
+  
+    static deserialize(storedData, scene) {
+        const cfg = entityConfigs[storedData.configName];
+        let entity = entityConfigs[storedData.configName].createFunction(scene, 0, 0, false);
+        entity.setPositionFromMap(storedData.mapX, storedData.mapY);
+        for (let key in storedData.features) {entity.features[key] = storedData.features[key];}
+        entity.start(false);
+        entities.push(entity);
+        return entity;
     }
 
     static getEntityAtMap(mapX, mapY)
@@ -21,21 +39,9 @@ class Entity extends BaseUnit
         return null;
     }
 
-    initAnimations()
+    start(showStart=true)
     {
-        this.scene.anims.create({
-            key: this.config.sprite+'idle',
-            frames: this.scene.anims.generateFrameNumbers(this.config.sprite),
-            frameRate: 14,
-            repeat: -1
-        });
-    }
-
-    start()
-    {
-        if(gameSettings.showEnemyMoves == true)
-        {
-            this.anims.play(this.config.sprite+'idle', true);
+        if(showStart){
             this.tween = this.scene.tweens.add({
                 targets: this,
                 scale: {start: 0, to: this.config.scale},
@@ -48,9 +54,8 @@ class Entity extends BaseUnit
             });
             this.tween.play();
         }
-        else
-        {
-            this.scale = this.config.scale
+        else{
+            this.scale = this.config.scale;
             this.onStartComplete(this);
         }
     }
@@ -117,6 +122,15 @@ class WebEntity extends Entity
     static create(scene, x, y, visible=true)
     {
         return new WebEntity(scene, x, y, visible);
+    }
+  
+    start(showStart=true)
+    {
+        super.start(showStart);
+        let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
+        if(unitAtPos && unitAtPos.config.name !== 'spider') this.zOffset = 2;
+        else this.zOffset = 0;
+        this.setDepth(this.mapY);
     }
 
     onCallback()
@@ -213,11 +227,28 @@ class FireEntity extends Entity
     constructor(scene, x, y, visible=true)
     {
         super(entityConfigs['fire'], scene, x, y, visible);
+        this.initAnimations();
     }
 
     static create(scene, x, y, visible=true)
     {
         return new FireEntity(scene, x, y, visible);
+    }
+  
+    initAnimations()
+    {
+        this.scene.anims.create({
+            key: this.config.sprite+'idle',
+            frames: this.scene.anims.generateFrameNumbers(this.config.sprite),
+            frameRate: 14,
+            repeat: -1
+        });
+    }
+  
+    start(showStart=true)
+    {
+        this.anims.play(this.config.sprite+'idle', true);
+        super.start(showStart);
     }
 
     onCallback()
@@ -339,10 +370,9 @@ class GlueBlobEntity extends Entity
 {
     constructor(scene, x, y, visible=true)
     {
-        let configs = [entityConfigs['glue_blob1'],entityConfigs['glue_blob2']];
-        super(configs[randomInt(0,configs.length-1)], scene, x, y, visible);
+        super(entityConfigs['glue_blob'], scene, x, y, visible);
         this.angle = randomInt(-180,180);
-        this.id = randomInt(1,1000000);
+        this.setFrame(randomInt(1,2));
     }
 
     static create(scene, x, y, visible=true)
@@ -460,7 +490,6 @@ class GlueBlobEntity extends Entity
 class PentagramEntity extends Entity
 {
     wizard = null;
-    time = 0;
 
     constructor(scene, x, y, visible=true)
     {
@@ -473,11 +502,11 @@ class PentagramEntity extends Entity
         return new PentagramEntity(scene, x, y, visible);
     }
 
-    start()
+    start(showStart=true)
     {
         this.scale = this.config.scale;
         let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
-        if(unitAtPos.config.name === 'wizard') this.wizard = unitAtPos;
+        if(unitAtPos && unitAtPos.config.name === 'wizard') this.wizard = unitAtPos;
     }
 
     onCallback()
@@ -499,7 +528,7 @@ class PentagramEntity extends Entity
     onStepOut(unit)
     {
         this.wizard = null;
-        this.time = 0;
+        this.features.time = 0;
         return true;
     }
 
@@ -507,14 +536,137 @@ class PentagramEntity extends Entity
     {
         if(this.wizard != null)
         {
-            this.time++;
-            if(this.time >= this.features.rewardFrequency)
+            this.features.time++;
+            if(this.features.time >= this.features.rewardFrequency)
             {
-                this.time = 0;
+                this.features.time = 0;
                 this.wizard.features.mana = this.wizard.features.mana + this.features.mana;
             }
         }
         super.makeMove();
+        super.endMove();
+    }
+
+}
+
+
+class FrogEntity extends Entity
+{ 
+    constructor(scene, x, y, visible=true, central=true, showtween=false)
+    {
+        super(entityConfigs['frog'], scene, x, y, visible);
+        this.angle = randomInt(-180,180);
+        this.alpha = this.features.alpha;
+        this.setOrigin(0.5,0.5);
+        if(!showtween){
+            this.active = false;
+            this.visible = false;
+        }
+        this.features.central = central;
+        this.features.showtween = showtween;
+    }
+
+    static create(scene, x, y, visible=true, central=true, showtween=false)
+    {
+        return new FrogEntity(scene, x, y, visible, central, showtween);
+    }
+  
+    start(showStart=true)
+    {
+        if(this.features.central) this.features.showtween = true;
+        if(!this.features.showtween){
+            this.active = false;
+            this.visible = false;
+            super.start(false);
+        }
+        else{
+            this.active = true;
+            this.visible = (gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human);
+            super.start(showStart);
+        }
+    }
+
+    onCallback()
+    {
+        cam.stopFollow();
+    }
+    
+    onStartComplete(obj)
+    {
+        if(obj.features.central)
+        {
+            for(let y=obj.mapY-2;y<=obj.mapY+2;y++)
+                for(let x=obj.mapX-2;x<=obj.mapX+2;x++)
+                {
+                    if((x<0)||(x>=map.width)||(y<0)||(y>=map.height)||( (x===this.mapX)&&(y===this.mapY) ))continue;
+                    let dx = obj.mapX - x;
+                    let dy = obj.mapY - y
+                    if(dx*dx+dy*dy > 4)continue;
+                    let frogtween = true;
+                    if(Math.abs(dx) >=2 || Math.abs(dy) >= 2)frogtween = false;
+                    let entity = Entity.getEntityAtMap(x,y);
+                    if(entity != null)if(entity.config.name === 'frog')continue;
+                    let frog = new FrogEntity(this.scene,0,0,(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human),false,frogtween);
+                    let d2 = dx*dx+dy*dy;
+                    if(d2>2) frog.features.health = frog.features.health - 2;
+                    else if(d2>0) frog.features.health = frog.features.health - 1;
+                    frog.setPositionFromMap(x, y);
+                    frog.start();
+                    entities.push(frog);
+            }
+            obj.features.central = false;
+        }
+        if(obj.features.showtween)
+        { 
+            obj.tween = obj.scene.tweens.add({
+                targets: obj,
+                depth: 9000,
+                angle: {start: obj.angle, to: obj.angle + 360},
+                ease: 'Linear',
+                duration: randomInt(20000,30000),
+                yoyo: false,
+                repeat: -1,
+                paused: true,
+            });
+           obj.tween.play();
+        }
+    }
+
+    stop()
+    {
+        if(this.tween!=null)this.tween.stop();
+    }
+
+    transformFeatures(unit, features)
+    {
+        return features;
+    }
+
+    onStepIn(unit)
+    {
+        return null;
+    }
+
+    onStepOut(unit)
+    {
+        return true;
+    }
+
+    makeMove()
+    {
+        super.makeMove();
+        this.features.health--;
+        if(this.features.health <= 0)
+        {
+            this.die();
+        }
+        else
+        {
+            if(this.features.health < 3 && this.features.showtween){
+                this.features.alpha = 0.75 * this.features.alpha
+                this.alpha = this.features.alpha;
+            }
+        }
         super.endMove();
     }
 
@@ -535,10 +687,10 @@ class MushroomEntity extends Entity
         return new MushroomEntity(scene, x, y, visible);
     }
   
-    start()
+    start(showStart=true)
     {
         this.setFrame(3);  
-        this.scale = this.config.scale / 2;
+        this.scale = this.config.scale / 4;
     }
 
     onCallback()
@@ -555,8 +707,7 @@ class MushroomEntity extends Entity
     {
         if(unit.config.name === 'wizard')
         {
-            unit.features.mana = unit.features.mana + 5;
-            this.die();
+            //this.wizard = unit;
         }
         return null;
     }
@@ -570,14 +721,12 @@ class MushroomEntity extends Entity
     {
         //let frameInd = this.frame.name+1;
         //if(frameInd>this.texture.frameTotal)frameInd=0;
-        //this.setFrame(frameInd);
-        /*
+        //this.setFrame(frameInd); 
         if(this.scale < this.config.scale)
         {
             let scl = this.scale + this.config.scale / 4;
             this.scale = scl;
         }
-        */
         super.makeMove();
         super.endMove();
     }

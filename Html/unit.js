@@ -16,6 +16,34 @@ class Unit extends BaseUnit
         this.zOffset = 1;
         this.initAnimations();
     }
+  
+    serialize() {
+        return {
+            configName: this.config.name,
+            mapX: this.mapX,
+            mapY: this.mapY,
+            features: this.features,
+            abilities: this.abilities,
+            playerName: this.player.name,
+            states: this.states.map(s => s.serialize())
+        };
+    }
+  
+    static deserialize(data, scene, playersMap) {
+        const cfg = unitConfigs[data.configName];
+        const u = new Unit(cfg, scene, data.mapX, data.mapY);
+        u.setPositionFromMap(data.mapX, data.mapY);
+        for (let key in data.features) {u.features[key] = data.features[key];}
+        u.abilities = clone(data.abilities);
+        u.player = playersMap[data.playerName];
+        units.push(u);
+        if(u.player){
+            if(u.config.name === "wizard") u.player.addWizard(u);
+            else u.player.addUnit(u);
+        }
+        for (let sd of data.states) UnitState.deserialize(sd, u);
+        return u;
+    }
 
     initAnimations()
     {

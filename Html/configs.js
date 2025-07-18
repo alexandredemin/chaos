@@ -29,25 +29,9 @@ const entityConfigs = {
         createFunction: (scene,x,y,visible=true) => WebEntity.create(scene,x,y,visible)
     },
 
-    'glue_blob1': {
-        name: 'glue blob',
-        sprite: 'glue_blob1',
-        scale: 0.15,
-        features: {
-            health: 2,
-            strength: 3,
-            survival: 1.0,
-            propagation: 0.125,
-            slowdown: 0.25,
-            tfStrength: 0.25,
-            tfDefense: 0.25
-        },
-        createFunction: (scene,x,y,visible=true) => GlueBlobEntity.create(scene,x,y,visible)
-    },
-
-    'glue_blob2': {
-        name: 'glue blob',
-        sprite: 'glue_blob2',
+    'glue_blob': {
+        name: 'glue_blob',
+        sprite: 'glue_blob',
         scale: 0.15,
         features: {
             health: 2,
@@ -67,10 +51,24 @@ const entityConfigs = {
         scale: 0.15,
         features: {
             health: 1,
+            time: 0,
             rewardFrequency: 2,
             mana: 1,
         },
         createFunction: (scene,x,y,visible=true) => PentagramEntity.create(scene,x,y,visible)
+    },
+  
+    'frog': {
+        name: 'frog',
+        sprite: 'frog',
+        scale: 1.0,
+        features: {
+            health: 5,
+            alpha: 0.5,
+            central: false,
+            showtween: false,
+        },
+        createFunction: (scene,x,y,visible=true) => FrogEntity.create(scene,x,y,visible)
     },
   
     'mushroom': {
@@ -113,6 +111,8 @@ const unitConfigs = {
                              'spider':0,
                              'fire':0,
                              'glue_blob':0,
+                             'frog':0,
+                             'gigantic':0,
                              'fireball':0,
                              'lightning':0,
                              'pentagram':0}, 
@@ -301,8 +301,8 @@ const spellConfigs = {
         type: 'summon',
         icon: 'demon',
         scale: 1.5,
-        description: 'Summon demon.\nCost 13',
-        cost: 13,
+        description: 'Summon demon.\nCost 10',
+        cost: 10,
     },
     'muddy': {
         id: 'muddy',
@@ -338,19 +338,40 @@ const spellConfigs = {
         entity: 'fire',
         icon: 'fire',
         scale: 0.64,
-        description: 'Magic fire.\nCost 5',
-        cost: 5,
+        description: 'Magic fire.\nCost 6',
+        cost: 6,
         range: 10,
     },
     'glue_blob': {
         id: 'glue_blob',
         name: 'glue blob',
         type: 'entity',
-        entity: 'glue_blob1',
-        icon: 'glue_blob1',
+        entity: 'glue_blob',
+        icon: 'glue_blob',
         scale: 0.3,
-        description: 'Glue blob.\nCost 4',
-        cost: 4,
+        description: 'Glue blob.\nCost 5',
+        cost: 5,
+        range: 10,
+    },
+    'frog': {
+        id: 'frog',
+        name: 'frog',
+        type: 'entity',
+        entity: 'frog',
+        icon: 'frog',
+        scale: 0.3,
+        description: 'Frog.\nCost 5',
+        cost: 5,
+        range: 10,
+    },
+    'gigantic': {
+        id: 'gigantic',
+        name: 'gigantic',
+        type: 'unit',
+        icon: 'fireball',
+        scale: 0.3,
+        description: 'Gigantic.\nCost 5',
+        cost: 5,
         range: 10,
     },
     'fireball': {
@@ -359,8 +380,8 @@ const spellConfigs = {
         type: 'atack',
         icon: 'fireball',
         scale: 0.3,
-        description: 'Fireball.\nCost 2',
-        cost: 2,
+        description: 'Fireball.\nCost 4',
+        cost: 4,
         range: 10,
         damage: 5,
     },
@@ -370,8 +391,8 @@ const spellConfigs = {
         type: 'atack_place',
         icon: 'lightning',
         scale: 0.45,
-        description: 'Lightning.\nCost 6',
-        cost: 6,
+        description: 'Lightning.\nCost 7',
+        cost: 7,
         range: 10,
         damage: 10,
         damageRange: 2,
@@ -393,6 +414,7 @@ const spellConfigs = {
 const spellTypes = {
     'summon': null,
     'self': null,
+    'unit': null,
     'entity': null,
     'atack': null,
     'atack_place': null,
@@ -413,9 +435,19 @@ const abilities = {
     'web': null
 };
 
+//---------------------------- Unit states ----------------------------------
+const unitStates = {
+    'infected': {
+        applyFunction: (unit, stateData) => InfectedState.apply(unit, stateData)
+    },
+    'gigantic': {
+        applyFunction: (unit, stateData) => GiganticState.apply(unit, stateData)
+    }
+};
+
 //---------------------------- Maps ---------------------------------------
 const maps = [
-    'arena',
-    'cellar',
-    'dungeon'
+  'arena',
+  'cellar',
+  'dungeon'
 ];

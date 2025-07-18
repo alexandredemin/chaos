@@ -28,8 +28,8 @@ var BootScene = new Phaser.Class({
         this.load.spritesheet('pentagram', 'img/pentagram.png', { frameWidth: 128, frameHeight: 128 } );
         this.load.spritesheet('fire', 'img/fire.png', { frameWidth: 64, frameHeight: 64 } );
         this.load.spritesheet('web', 'img/web.png', { frameWidth: 128, frameHeight: 128 } );
-        this.load.spritesheet('glue_blob1', 'img/glue_blob2.png', { frameWidth: 128, frameHeight: 128 } );
-        this.load.spritesheet('glue_blob2', 'img/glue_blob3.png', { frameWidth: 128, frameHeight: 128 } );
+        this.load.spritesheet('glue_blob', 'img/glue_blob.png', { frameWidth: 128, frameHeight: 128 } );
+        this.load.spritesheet('frog', 'img/gas1.png', { frameWidth: 128, frameHeight: 128 } );
         this.load.spritesheet('mushroom', 'img/mushroom2.png', { frameWidth: 16, frameHeight: 16 } );
 
         this.load.spritesheet('wizard', 'img/wizard.png', { frameWidth: 16, frameHeight: 21 } );

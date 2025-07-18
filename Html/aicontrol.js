@@ -5,6 +5,8 @@ class AIControl
     player = null;
     availableUnits = null;
     passStage = 1;
+    threats = null;
+    distantTnreats = null;
 
     constructor(player)
     {
@@ -23,6 +25,8 @@ class AIControl
         {
             this.availableUnits.push(this.player.units[i]);
         }
+        this.computeEnemyAttackMaps();
+        this.planning();
         this.passStage = 1;
         this.pass();
     }
@@ -71,30 +75,13 @@ class AIControl
             this.stepWizard(unit);
             return;
         }
-        if(unit.config.name === "muddy")
-        {
-            //this.stepMuddy(unit);
-            this.stepUnit(unit);
-            return;
-        }
-        if(unit.config.name === "demon")
-        {
-            //this.stepDemon(unit);
-            this.stepUnit(unit);
-            return;
-        }
-        if(unit.config.name === "spider")
-        {
-            this.stepSpider(unit);
-            return;
-        }
-        if(!this.stepCommonUnit(unit)) this.pass();
+        this.stepUnit(unit);
     }
 
     stepToTarget(unit,target,dmap)
     {
         if(!dmap) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-        let cell = this.getOptimalStep(dmap,target);
+        let cell = this.getOptimalStep(dmap,target,[unit.mapX, unit.mapY]);
         if(cell != null)
         {
             if(unit.canStepTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) unit.stepTo(cell[0],cell[1]);
@@ -121,113 +108,6 @@ class AIControl
         return true;
     }
 
-    /*
-    stepMuddy2(unit)
-    {
-        if(!unit.aiControl)
-        {
-            unit.aiControl = {target: null};
-        }
-        if(unit.aiControl.target == null)
-        {
-            let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-            let stepPlaces = this.getAvailableCells(dmap,unit,null,true);
-            for(let i=0;i<stepPlaces.length;i++)
-            {
-                let place = stepPlaces[i];
-                place.gasWeight = 0;
-                place.atackWeight = 0;
-                let range = unit.config.abilities.gas.config.range;
-                if(unit.features.abilityPoints === 0) range = 0;
-                let targets = selectUnits(place.cell[0], place.cell[1], null, [unit], range);
-                let gasAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
-                let canAttack = false;
-                for(let j=0;j<targets.length;j++)
-                {
-                    let trgt = targets[j];
-                    if(!canAttack && trgt.player !== unit.player && place.dist < unit.features.move && Math.abs(trgt.mapX-place.cell[0]) <= 1 && Math.abs(trgt.mapY-place.cell[1]) <=1)
-                    {
-                        place.atackWeight = place.atackWeight + unit.config.features.strength;
-                        canAttack = true;
-                    }
-                    if(gasAbility.canAtack(unit,trgt))
-                    {
-                        if (trgt.player !== unit.player) place.gasWeight = place.gasWeight + unit.config.abilities.gas.config.damage;
-                        else if(trgt === unit.player.wizard)
-                        {
-                            place.gasWeight = -100;
-                        }
-                        else
-                        {
-                            place.gasWeight = place.gasWeight - unit.config.abilities.gas.config.damage;
-                        }
-                    }
-                }
-                place.bestWeight = place.atackWeight;
-                if(place.gasWeight > 0) place.bestWeight = place.bestWeight + place.gasWeight;
-            }
-            let bestPlace = stepPlaces[0];
-            for(let i=1;i<stepPlaces.length;i++)
-            {
-                if (stepPlaces[i].bestWeight > bestPlace.bestWeight) bestPlace = stepPlaces[i];
-            }
-            if(bestPlace.bestWeight > 0)
-            {
-                unit.aiControl.target = bestPlace.cell;
-                if (bestPlace.gasWeight <= 0) unit.features.abilityPoints = 0;
-            }
-            else
-            {
-                let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
-                if(trgtWiz) unit.aiControl.target = [trgtWiz.mapX,trgtWiz.mapY];
-            }
-        }
-        if(unit.aiControl.target == null)
-        {
-            this.pass();
-            return;
-        }
-        else
-        {
-            if(unit.mapX === unit.aiControl.target[0] && unit.mapY === unit.aiControl.target[1])
-            {
-                if(unit.features.abilityPoints > 0)
-                {
-                    unit.startAbility();
-                }
-                else if(unit.features.move > 0)
-                {
-                    let trg = null;
-                    for(let dy=-1;dy<=1;dy++)
-                        for(let dx=-1;dx<=1;dx++)
-                            if(unit.canAtackTo(dx,dy)===true)
-                                if(trg == null || randomInt(0,1) === 1) trg = [unit.mapX+dx,unit.mapY+dy];
-                    if(trg) unit.atackTo(trg[0], trg[1]);
-                    else
-                    {
-                        unit.aiControl.target = null;
-                        this.stepMuddy(unit);
-                    }
-                }
-                else
-                {
-                    unit.aiControl.target = null;
-                    this.pass();
-                    return;
-                }
-            }
-            else
-            {
-                if(!this.stepToTarget(unit,unit.aiControl.target))
-                {
-                    unit.aiControl.target = null;
-                    this.pass();
-                }
-            }
-        }
-    }
-    */
-
     stepUnit(unit)
     {
         if(!unit.aiControl)
@@ -236,259 +116,154 @@ class AIControl
         }
         if(unit.aiControl.target == null)
         {
+            let mainGoal = null;
+            if(unit.aiControl.mainTarget){
+                if(unit.aiControl.mainTarget.died){
+                    this.setMainTarget(unit,null,null,null,null);
+                }
+                else{
+                    mainGoal = [unit.aiControl.mainTarget.mapX,unit.aiControl.mainTarget.mapY];              
+                }
+            }
+            else if(unit.aiControl.mainTargetPos){
+                mainGoal = [unit.aiControl.mainTargetPos[0],unit.aiControl.mainTargetPos[1]];                
+            } 
+            if(mainGoal == null){
+                if(unit.player.wizard && !unit.player.wizard.died){
+                    if(this.threats.length > 0){
+                        this.chooseTargetThreat(unit,this.threats);
+                    }
+                    if(unit.aiControl.mainTarget){
+                        mainGoal = [unit.aiControl.mainTarget.mapX,unit.aiControl.mainTarget.mapY];
+                    }
+                    else{
+                        this.choosePatrolTarget(unit);
+                        if(unit.aiControl.mainTargetPos){
+                            mainGoal = [unit.aiControl.mainTargetPos[0],unit.aiControl.mainTargetPos[1]];
+                        } 
+                    }
+                }
+                else{
+                    let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+                    let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
+                    if(trgtWiz){
+                        this.setMainTarget(unit,trgtWiz,[trgtWiz.mapX,trgtWiz.mapY],"attack",10);
+                        mainGoal = [trgtWiz.mapX,trgtWiz.mapY];
+                    }
+                }
+            }
+            if(mainGoal == null) mainGoal = [unit.mapX,unit.mapY];
+            let aggressionFactor = 2;
+            if(unit.aiControl.agression) aggressionFactor = unit.aiControl.agression;
             let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
             let stepPlaces = this.getAvailableCells(dmap,unit,null,true);
-            this.computeAtackMatrix(unit,stepPlaces,dmap,null);
+            this.computeAtackMatrix(unit,stepPlaces,dmap);
             this.computeGasMatrix(unit,stepPlaces);
             this.computeFireMatrix(unit,stepPlaces);
             this.computeWebMatrix(unit,stepPlaces);
+            this.computeDangerMatrix(unit,stepPlaces);
+            let gDMap = this.getDistanceMap(unit,mainGoal[0],mainGoal[1],null,null,null,0,this.getPenaltyMap(unit,aggressionFactor));
+            this.computeDistMatrix(unit,stepPlaces,mainGoal,gDMap);
+            //+log
+            if(unit.aiControl.mainTarget) console.log(unit.config.name + " " + unit.aiControl.order + ":" + aggressionFactor + " " + unit.aiControl.mainTarget.config.name + "[" + unit.aiControl.mainTarget.mapX + "," + unit.aiControl.mainTarget.mapY +"]");
+            else if(unit.aiControl.mainTargetPos) console.log(unit.config.name + " " + unit.aiControl.order + ":" + aggressionFactor + " [" + unit.aiControl.mainTargetPos[0] + "," + unit.aiControl.mainTargetPos[1] +"]");
+            //-
+            //+debug
+            if(this.player.control === PlayerControl.human)
+            {
+                //let penaltyMap = this.getPenaltyMap();
+                this.player.icons = [];
+                for(let i=0;i<map.height;i++)
+                    for(let j=0;j<map.width;j++)
+                    {
+                        let pos = map.tileToWorldXY(j, i);
+                        let txt = unit.scene.add.text(pos.x + 1, pos.y + 1, gDMap[i][j], {font: "6px Arial",color: "#ffffff", resolution: 10});
+                        this.player.icons.push(txt);
+                        //txt.setDepth(10000);
+                        //let txt2 = unit.scene.add.text(pos.x + 7, pos.y + 7, scoreMap[i][j], {font: "6px Arial",color: "#aaaaaa", resolution: 10});
+                        //this.player.icons.push(txt2);
+                        //txt2.setDepth(10000);
+                    }
+            }
+            //-
             for(let i=0;i<stepPlaces.length;i++)
             {
                 let place = stepPlaces[i];
                 place.bestWeight = place.atackWeight;
-                if(place.gasWeight && place.gasWeight > 0) place.bestWeight = place.bestWeight + place.gasWeight;
-                if(place.fireWeight) place.bestWeight = place.bestWeight + place.fireWeight;
-                if(place.webWeight && place.webWeight > 0) place.bestWeight = place.bestWeight + place.webWeight;
-            }
-            let bestPlace = stepPlaces[0];
-            for(let i=1;i<stepPlaces.length;i++)
-            {
-                if (stepPlaces[i].bestWeight > bestPlace.bestWeight) bestPlace = stepPlaces[i];
-            }
-            if(bestPlace.bestWeight > 0)
-            {
-                unit.aiControl.target = bestPlace.cell;
-                if(bestPlace.gasWeight && bestPlace.gasWeight <= 0) unit.features.abilityPoints = 0;
-                if (bestPlace.fireWeight && bestPlace.fireWeight <= 0) unit.features.abilityPoints = 0;
-            }
-            else
-            {
-                let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
-                if(trgtWiz) unit.aiControl.target = [trgtWiz.mapX,trgtWiz.mapY];
+                if(place.gasWeight != null && place.gasWeight > 0) place.bestWeight = place.bestWeight + place.gasWeight;
+                if(place.fireWeight != null) place.bestWeight = place.bestWeight + place.fireWeight;
+                if(place.webWeight != null && place.webWeight > 0) place.bestWeight = place.bestWeight + place.webWeight;
+                place.score = place.bestWeight;
+                if(place.dangerWeight != null && place.dangerWeight > 0) place.score = aggressionFactor * place.bestWeight - Math.floor(place.dangerWeight / unit.features.health);
+                place.score = place.score + place.distWeight;
+                //+debug
                 /*
-                let bestWebCell = null;
-                for(let w of webPlan)
+                if(this.player.control === PlayerControl.human)
                 {
-                    if(Entity.getEntityAtMap(w.cell[0], w.cell[1]) != null) continue;
-                    if(this.checkWebCell(wiz,w.cell)) if(bestWebCell == null || bestWebCell.dist > w.dist) bestWebCell = w;
+                    let pos = map.tileToWorldXY(place.cell[0], place.cell[1]);
+                    let txt = unit.scene.add.text(pos.x + 1, pos.y + 8, place.score, {font: "6px Arial",color: "blue", resolution: 10});
+                    this.player.icons.push(txt);
+                    txt.setDepth(10000);
                 }
-                if(bestWebCell) unit.aiControl.target = [bestWebCell.cell[0],bestWebCell.cell[1]];
                 */
-            }
-        }
-        if(unit.aiControl.target == null)
-        {
-            this.pass();
-            return;
-        }
-        else
-        {
-            if(unit.mapX === unit.aiControl.target[0] && unit.mapY === unit.aiControl.target[1])
+                //-
+            }    
+            let bestPlaces = [];
+            let bestScore = -999999999;
+            for(let place of stepPlaces)
             {
-                if(unit.features.abilityPoints > 0)
+                //+debug
+                if(this.player.control === PlayerControl.human)
                 {
-                    unit.startAbility();
+                    let pos = map.tileToWorldXY(place.cell[0], place.cell[1]);
+                    let txt = unit.scene.add.text(pos.x + 1, pos.y + 8, place.score, {font: "6px Arial",color: "blue", resolution: 10});
+                    this.player.icons.push(txt);
+                    txt.setDepth(10000);
+                    let txt2 = unit.scene.add.text(pos.x + 8, pos.y + 8, place.bestWeight, {font: "6px Arial",color: "green", resolution: 10});
+                    this.player.icons.push(txt2);
+                    txt2.setDepth(10000);
                 }
-                else if(unit.features.move > 0)
+                //-
+                if(place.score == bestScore) bestPlaces.push(place);
+                else if(place.score > bestScore)
                 {
-                    let trg = null;
-                    for(let dy=-1;dy<=1;dy++)
-                        for(let dx=-1;dx<=1;dx++)
-                            if(unit.canAtackTo(dx,dy)===true)
-                                if(trg == null || randomInt(0,1) === 1) trg = [unit.mapX+dx,unit.mapY+dy];
-                    if(trg) unit.atackTo(trg[0], trg[1]);
-                    else
-                    {
-                        unit.aiControl.target = null;
-                        this.stepUnit(unit);
-                    }
+                    bestPlaces = [place];
+                    bestScore = place.score;
                 }
-                else
+            }
+            let bestPlace = bestPlaces[randomInt(0, bestPlaces.length - 1)];
+            if(bestPlace != null)
+            {
+                //+debug
+                if(this.player.control === PlayerControl.human)
                 {
-                    unit.aiControl.target = null;
-                    this.pass();
-                    return;
+                    let pos = map.tileToWorldXY(bestPlace.cell[0], bestPlace.cell[1]);
+                    let txt = unit.scene.add.text(pos.x + 1, pos.y + 8, bestPlace.score, {font: "6px Arial",color: "red", resolution: 10});
+                    this.player.icons.push(txt);
+                    txt.setDepth(10000);
                 }
+                //-
+                unit.aiControl.target = bestPlace.cell;
+                if(bestPlace.gasWeight != null && bestPlace.gasWeight <= 0) unit.features.abilityPoints = 0;
+                if(bestPlace.fireWeight != null && bestPlace.fireWeight <= 0) unit.features.abilityPoints = 0;
+                if(bestPlace.webWeight != null && bestPlace.webWeight <= 0) unit.features.abilityPoints = 0;
             }
             else
             {
-                if(!this.stepToTarget(unit,unit.aiControl.target))
-                {
-                    unit.aiControl.target = null;
-                    this.pass();
-                }
-            }
-        }
-    }
-
-    /*
-    stepDemon(unit)
-      {
-          if(!unit.aiControl)
-          {
-              unit.aiControl = {target: null};
-          }
-          if(unit.aiControl.target == null)
-          {
-              let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-              let stepPlaces = this.getAvailableCells(dmap,unit,null,true);
-              for(let i=0;i<stepPlaces.length;i++)
-              {
-                  let place = stepPlaces[i];
-                  place.fireWeight = 0;
-                  place.atackWeight = 0;
-                  let range = unit.config.abilities.fire.config.range;
-                  if(unit.features.abilityPoints === 0) range = 0;
-                  let targets = selectUnits(place.cell[0], place.cell[1], null, [unit], range);
-                  let fireAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
-                  let canFire = false;
-                  let canAttack = false;
-                  for(let j=0;j<targets.length;j++)
-                  {
-                      let trgt = targets[j];
-                      if(trgt.player !== unit.player)
-                      {
-                          if(!canFire && fireAbility.canAtack(unit,trgt))
-                          {
-                              place.fireWeight = place.fireWeight + unit.config.abilities.fire.config.damage;
-                              canFire = true;
-                          }
-                          if(!canAttack && place.dist < unit.features.move && Math.abs(trgt.mapX-place.cell[0]) <= 1 && Math.abs(trgt.mapY-place.cell[1]) <=1)
-                          {
-                              place.atackWeight = place.atackWeight + unit.config.features.strength;
-                              canAttack = true;
-                          }
-                      }
-                      if(canFire && canAttack) break;
-                  }
-                  place.bestWeight = place.atackWeight + place.fireWeight;
-              }
-              let bestPlace = stepPlaces[0];
-              for(let i=1;i<stepPlaces.length;i++)
-              {
-                  if (stepPlaces[i].bestWeight > bestPlace.bestWeight) bestPlace = stepPlaces[i];
-              }
-              if(bestPlace.bestWeight > 0)
-              {
-                  unit.aiControl.target = bestPlace.cell;
-                  if (bestPlace.fireWeight <= 0) unit.features.abilityPoints = 0;
-              }
-              else
-              {
-                  let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
-                  if(trgtWiz) unit.aiControl.target = [trgtWiz.mapX,trgtWiz.mapY];
-              }
-          }
-          if(unit.aiControl.target == null)
-          {
-              this.pass();
-              return;
-          }
-          else
-          {
-              if(unit.mapX === unit.aiControl.target[0] && unit.mapY === unit.aiControl.target[1])
-              {
-                  if(unit.features.abilityPoints > 0)
-                  {
-                      unit.startAbility();
-                  }
-                  else if(unit.features.move > 0)
-                  {
-                      let trg = null;
-                      for(let dy=-1;dy<=1;dy++)
-                          for(let dx=-1;dx<=1;dx++)
-                              if(unit.canAtackTo(dx,dy)===true)
-                                  if(trg == null || randomInt(0,1) === 1) trg = [unit.mapX+dx,unit.mapY+dy];
-                      if(trg) unit.atackTo(trg[0], trg[1]);
-                      else
-                      {
-                          unit.aiControl.target = null;
-                          this.stepDemon(unit);
-                      }
-                  }
-                  else
-                  {
-                      unit.aiControl.target = null;
-                      this.pass();
-                      return;
-                  }
-              }
-              else
-              {
-                  if(!this.stepToTarget(unit,unit.aiControl.target))
-                  {
-                      unit.aiControl.target = null;
-                      this.pass();
-                  }
-              }
-          }
-      }
-      */
-
-    stepSpider(unit)
-    {
-        if(!unit.aiControl)
-        {
-            unit.aiControl = {target: null};
-        }
-        if(unit.aiControl.target == null)
-        {
-            let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-            let stepPlaces = this.getAvailableCells(dmap,unit,null,true);
-            let wiz = unit.player.wizard;
-            if(wiz != null) {
-                if(!wiz.webPlan) wiz.webPlan = this.getWebPlanMap(wiz);
-                let webPlan = wiz.webPlan;
-                //let dmapWiz = this.getDistanceMap(wiz, wiz.mapX, wiz.mapY);
-                //let enemies = this.getAvailableEnemies(dmapWiz, wiz, 3);
-                //if (enemies.length === 0) enemies = this.getAvailableEnemies(dmap, unit, unit.features.move);
-                let enemies = this.getAvailableEnemies(dmap, unit, unit.features.move);
-                for (let i = 0; i < stepPlaces.length; i++) {
-                    let place = stepPlaces[i];
-                    place.webWeight = 0;
-                    place.atackWeight = 0;
-                    for(let w of webPlan)if(place.cell[0] === w.cell[0] && place.cell[1] === w.cell[1]){
-                        if(Entity.getEntityAtMap(w.cell[0], w.cell[1]) != null) continue;
-                        if(this.checkWebCell(wiz,place.cell)) place.webWeight = 1.0/w.dist;
-                        break;
-                    }
-                    for (let j = 0; j < enemies.length; j++) {
-                        let enemy = enemies[j];
-                        if (enemy.player !== unit.player) {
-                            if (place.dist < unit.features.move && Math.abs(enemy.mapX - place.cell[0]) <= 1 && Math.abs(enemy.mapY - place.cell[1]) <= 1) {
-                                place.atackWeight = place.atackWeight + unit.config.features.strength;
-                                break;
-                            }
-                        }
-                    }
-                    place.bestWeight = place.atackWeight + place.webWeight;
-                }
-                let bestPlace = stepPlaces[0];
-                for(let i=1;i<stepPlaces.length;i++)
-                {
-                    if (stepPlaces[i].bestWeight > bestPlace.bestWeight) bestPlace = stepPlaces[i];
-                }
-                if(bestPlace.bestWeight > 0)
-                {
-                    unit.aiControl.target = bestPlace.cell;
-                    if (bestPlace.webWeight <= 0) unit.features.abilityPoints = 0;
-                    if(bestPlace.cell[0] === unit.mapX && bestPlace.cell[1] === unit.mapY && unit.features.abilityPoints === 0) unit.aiControl.target = null;
-                }
-                else
+                if(unit.config.abilities != null && unit.config.abilities.web != null && unit.player.wizard != null)
                 {
                     let bestWebCell = null;
-                    for(let w of webPlan)
+                    for(let w of unit.player.wizard.webPlan)
                     {
                         if(Entity.getEntityAtMap(w.cell[0], w.cell[1]) != null) continue;
-                        if(this.checkWebCell(wiz,w.cell)) if(bestWebCell == null || bestWebCell.dist > w.dist) bestWebCell = w;
+                        if(this.checkWebCell(unit.player.wizard,w.cell)) if(bestWebCell == null || bestWebCell.dist > w.dist) bestWebCell = w;
                     }
                     if(bestWebCell) unit.aiControl.target = [bestWebCell.cell[0],bestWebCell.cell[1]];
                 }
-            }
-            else
-            {
-                let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
-                if(trgtWiz) unit.aiControl.target = [trgtWiz.mapX,trgtWiz.mapY];
+                else
+                {
+                    if(mainGoal) unit.aiControl.target = [mainGoal[0],mainGoal[1]];
+                }
             }
         }
         if(unit.aiControl.target == null)
@@ -500,7 +275,7 @@ class AIControl
         {
             if(unit.mapX === unit.aiControl.target[0] && unit.mapY === unit.aiControl.target[1])
             {
-                if(unit.features.abilityPoints > 0)
+                if(unit.config.abilities && unit.features.abilityPoints > 0)
                 {
                     unit.startAbility();
                 }
@@ -515,13 +290,21 @@ class AIControl
                     else
                     {
                         unit.aiControl.target = null;
-                        this.stepSpider(unit);
+                        //this.stepUnit(unit);
+                        //this.pass();
+                        //+debug
+                        if(this.player.control === PlayerControl.computer)this.pass();
+                        else return;
+                        //-
                     }
                 }
                 else
                 {
                     unit.aiControl.target = null;
-                    this.pass();
+                    //this.pass();
+                    //+debug
+                    if(this.player.control === PlayerControl.computer)this.pass();
+                    //-
                     return;
                 }
             }
@@ -530,25 +313,79 @@ class AIControl
                 if(!this.stepToTarget(unit,unit.aiControl.target))
                 {
                     unit.aiControl.target = null;
-                    this.pass();
+                    //this.pass();
+                    //+debug
+                    if(this.player.control === PlayerControl.computer)this.pass();
+                    else return;
+                    //-
                 }
             }
         }
     }
-
-    computeAtackMatrix(unit,stepPlaces,dmap,enemies)
+  
+    computeDistMatrix(unit,stepPlaces,goal,gDMap)
     {
-        if(dmap == null) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-        if(enemies == null) enemies = this.getAvailableEnemies(dmap, unit, unit.features.move);
-        for (let i = 0; i < stepPlaces.length; i++) {
-            let place = stepPlaces[i];
-            place.atackWeight = 0;
-            for (let j = 0; j < enemies.length; j++) {
-                let enemy = enemies[j];
-                if (enemy.player !== unit.player) {
-                    if (place.dist < unit.features.move && Math.abs(enemy.mapX - place.cell[0]) <= 1 && Math.abs(enemy.mapY - place.cell[1]) <= 1) {
-                        place.atackWeight = place.atackWeight + unit.config.features.strength;
-                        break;
+        for(let place of stepPlaces) place.distWeight = 0;
+        if(goal == null)return;
+        if(gDMap == null) gDMap = this.getDistanceMap(unit,goal[0],goal[1]);
+        let b = gDMap[unit.mapY][unit.mapX];
+        for(let place of stepPlaces)
+        {
+            place.distWeight = b - gDMap[place.cell[1]][place.cell[0]];
+        }
+    }
+
+    computeAtackMatrix(unit,stepPlaces,dmap)
+    {
+        if(unit.hasState("infected")){
+            let targets = selectUnits(unit.mapX, unit.mapY, null, [unit], unit.features.move);
+            for (let i = 0; i < stepPlaces.length; i++) {
+                let place = stepPlaces[i];
+                place.atackWeight = 0;
+                let infectVal = 0;
+                for (let j = 0; j < targets.length; j++) {
+                    let trgt = targets[j];
+                    if(place.dist < unit.features.move && Math.abs(trgt.mapX - place.cell[0]) <= 1 && Math.abs(trgt.mapY - place.cell[1]) <= 1) {
+                        if(trgt.player !== unit.player){
+                            let atackVal = unit.features.strength;
+                            if(trgt === trgt.player.wizard) atackVal = atackVal + 10;
+                            if(atackVal > place.atackWeight) place.atackWeight = atackVal;
+                            if(InfectedState.canInfect(trgt)){
+                                infectVal = infectVal + Math.floor(0.5*(trgt.features.strength + trgt.features.defense)*trgt.features.health);
+                                if(trgt === trgt.player.wizard) infectVal = infectVal + 10;
+                            }
+                        }
+                        else{
+                            if(InfectedState.canInfect(trgt)){
+                                if(trgt === unit.player.wizard){
+                                    infectVal = infectVal - 100;
+                                }
+                                else{
+                                    infectVal = infectVal - Math.floor(0.5*(trgt.features.strength + trgt.features.defense)*trgt.features.health);
+                            
+                                }
+                            }
+                        }
+                    }  
+                }
+                place.atackWeight = place.atackWeight + infectVal;
+            }
+        }
+        else{
+            if(dmap == null) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+            let enemies = this.getAvailableEnemies(dmap, unit, unit.features.move);
+            let startCost = dmap[unit.mapY][unit.mapX];
+            for (let i = 0; i < stepPlaces.length; i++) {
+                let place = stepPlaces[i];
+                place.atackWeight = 0;
+                for (let j = 0; j < enemies.length; j++) {
+                    let enemy = enemies[j];
+                    if (enemy.player !== unit.player) {
+                        if (place.dist < unit.features.move && Math.abs(enemy.mapX - place.cell[0]) <= 1 && Math.abs(enemy.mapY - place.cell[1]) <= 1) {
+                            let atackVal = unit.features.strength;
+                            if(enemy === enemy.player.wizard) atackVal = atackVal + 10;
+                            if(atackVal > place.atackWeight) place.atackWeight = atackVal;                          
+                        }
                     }
                 }
             }
@@ -557,7 +394,7 @@ class AIControl
 
     computeGasMatrix(unit,stepPlaces)
     {
-        if(!unit.config.abilities.gas)return;
+        if(!unit.config.abilities || !unit.config.abilities.gas)return;
         let range = unit.config.abilities.gas.config.range;
         let gasAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
         for(let i=0;i<stepPlaces.length;i++)
@@ -571,7 +408,11 @@ class AIControl
                 let trgt = targets[j];
                 if(gasAbility.canAtack(unit,trgt))
                 {
-                    if(trgt.player !== unit.player) place.gasWeight = place.gasWeight + unit.config.abilities.gas.config.damage;
+                    if(trgt.player !== unit.player) 
+                    {
+                        place.gasWeight = place.gasWeight + unit.config.abilities.gas.config.damage;
+                        if(trgt === trgt.player.wizard) place.gasWeight = place.gasWeight + 10;
+                    }
                     else if(trgt === unit.player.wizard)
                     {
                         place.gasWeight = -100;
@@ -587,7 +428,7 @@ class AIControl
 
     computeFireMatrix(unit,stepPlaces)
     {
-        if(!unit.config.abilities.fire)return;
+        if(!unit.config.abilities || !unit.config.abilities.fire)return;
         let range = unit.config.abilities.fire.config.range;
         let fireAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
         for(let i=0;i<stepPlaces.length;i++)
@@ -604,6 +445,7 @@ class AIControl
                     if(fireAbility.canAtack(unit,trgt))
                     {
                         place.fireWeight = place.fireWeight + unit.config.abilities.fire.config.damage;
+                        if(trgt === trgt.player.wizard) place.fireWeight = place.fireWeight + 10;
                         break;
                     }
                 }
@@ -613,7 +455,7 @@ class AIControl
 
     computeWebMatrix(unit,stepPlaces)
     {
-        if(!unit.config.abilities.web)return;
+        if(!unit.config.abilities || !unit.config.abilities.web)return;
         let wiz = unit.player.wizard;
         if(wiz != null) {
             if(!wiz.webPlan) wiz.webPlan = this.getWebPlanMap(wiz);
@@ -632,7 +474,48 @@ class AIControl
         }
         else
         {
-            for(let place in stepPlaces) place.webWeight = 0;
+            for(let place of stepPlaces) place.webWeight = 0;
+        }
+    }
+  
+    computeDangerMatrix(unit,stepPlaces)
+    {
+        let enemies = this.gePossibleEnemies(unit,stepPlaces);
+        for(let place of stepPlaces) place.dangerWeight = 0;
+        for(let enemy of enemies)
+        {
+            let dmap = this.getDistanceMap(enemy,enemy.mapX,enemy.mapY,null,null,null,enemy.config.features.move);
+            let startCost = dmap[enemy.mapY][enemy.mapX];
+            for(let place of stepPlaces)
+            {
+                if(dmap[place.cell[1]][place.cell[0]] > -1 && dmap[place.cell[1]][place.cell[0]] - startCost <= enemy.config.features.move) place.dangerWeight = place.dangerWeight + enemy.config.features.strength;
+            }
+        }
+    }
+  
+    getAttackMap(unit, dmap=null)
+    {
+        if(dmap == null)dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY,null,null,null,unit.config.features.move); 
+        let startCost = dmap[unit.mapY][unit.mapX];
+        let attackMap = [];
+        for(let i=0;i<map.height;i++) attackMap[i]=[];
+        for(let i=0;i<map.height;i++)
+            for(let j=0;j<map.width;j++)
+                if(dmap[i][j] >=0 && dmap[i][j] <= startCost + unit.config.features.move) attackMap[i][j]=unit.features.strength;
+                else attackMap[i][j]=0;
+        return attackMap;
+    }
+  
+    computeEnemyAttackMaps()
+    {
+        for(let pl of players)
+        {
+            if (pl == this.player)continue;
+            for(let unt of pl.units)
+            {
+                if(!unt.cache) unt.cache = {attackMap: null};
+                unt.cache.attackMap = this.getAttackMap(unt);
+            }
         }
     }
 
@@ -754,7 +637,8 @@ class AIControl
             {
                 if(dMap[pl.wizard.mapY][pl.wizard.mapX] > 0 && dMap[pl.wizard.mapY][pl.wizard.mapX] <= dist)
                 {
-                    if(dMap[pl.wizard.mapY][pl.wizard.mapX] < dist || randomInt(0,1) === 1)
+                    //if(dMap[pl.wizard.mapY][pl.wizard.mapX] < dist || randomInt(0,1) === 1)
+                    if(dMap[pl.wizard.mapY][pl.wizard.mapX] < dist)
                     {
                         dist = dMap[pl.wizard.mapY][pl.wizard.mapX];
                         wiz = pl.wizard;
@@ -767,28 +651,84 @@ class AIControl
 
     getAvailableEnemies(dMap,unit,dist)
     {
+        let startCost = dMap[unit.mapY][unit.mapX];
         let enemies = [];
         players.forEach(pl => {
             if (pl !== unit.player) {
                 pl.units.forEach(unt => {
-                    if(dMap[unt.mapY][unt.mapX] > 0 && dMap[unt.mapY][unt.mapX] <= dist) enemies.push(unt);
+                    if(dMap[unt.mapY][unt.mapX] > 0 && dMap[unt.mapY][unt.mapX] <= startCost + dist) enemies.push(unt);
                 });
             }
         });
         return enemies;
     }
+  
+    gePossibleEnemies(unit,stepPlaces)
+    {
+        let enemies = [];
+        players.forEach(pl => {
+            if (pl !== unit.player) {
+                for(let enemy of pl.units)
+                {
+                    for(let place of stepPlaces)
+                    {
+                        let dX = Math.abs(place.cell[0] - enemy.mapX);
+                        let dY = Math.abs(place.cell[1] - enemy.mapY);
+                        if (dX * dX + dY * dY <= enemy.config.features.move * enemy.config.features.move)
+                        {
+                            enemies.push(enemy);
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        return enemies;
+    }
+  
+    getPenaltyMap(unit,aggressionFactor)
+    {
+        let penaltyMap = [];
+        for(let i=0;i<map.height;i++) penaltyMap[i]=[];
+        for(let i=0;i<map.height;i++)
+            for(let j=0;j<map.width;j++) 
+            {
+                let x = 0;
+                for(let unt of units)
+                {
+                    if(unt.died || unt.player == this.player)continue;
+                    if(unt.cache && unt.cache.attackMap) x = x + unt.cache.attackMap[i][j];
+                }
+                //unit.features.health
+                let unitStr = 0.5*(unit.features.strength + unit.features.defense);
+                x = x - aggressionFactor*unitStr;
+                if(x<0)x = 0;
+                penaltyMap[i][j]=x;
+            }
+        return penaltyMap;
+    }
 
-    getDistanceMap(unit,x,y,onEntity,onUnit,onCell)
+    getDistanceMap(unit,x,y,onEntity,onUnit,onCell,maxDist=0,penaltyMap=null)
     {
         let distMap = [];
         for(let i=0;i<map.height;i++) distMap[i]=[];
         for(let i=0;i<map.height;i++)
             for(let j=0;j<map.width;j++) distMap[i][j]=-1;
-        let border = [[x,y,0]];
-        distMap[y][x] = 0;
+        let startCost = 0;
+        let border = [[x,y,startCost]];
+        distMap[y][x] = startCost;
+        let cellInd = [];
+        for(let i=0;i<map.height;i++) cellInd[i]=[];
         while(border.length > 0)
         {
             let border2 = [];
+            for(let i=0;i<map.height;i++)
+                for(let j=0;j<map.width;j++)if(cellInd[i][j] >= 0)cellInd[i][j]=-1;
+            for(let k=0;k<border.length;k++)
+            {
+                let cell = border[k];
+                cellInd[cell[1]][cell[0]] = -10;
+            }
             while(border.length > 0)
             {
                 let cell = border.pop();
@@ -796,16 +736,18 @@ class AIControl
                     for(let xx=cell[0]-1; xx<=cell[0]+1; xx++)
                     {
                         if((xx<0)||(xx>=map.width)||(yy<0)||(yy>=map.height)||( (xx===cell[0])&&(yy===cell[1])))continue;
+                        if(cellInd[yy][xx] < -1)continue;
                         let d = 1;
                         let wallTile = wallsLayer.getTileAt(xx,yy);
                         if(wallTile != null) continue;
                         let unt = getUnitAtMap(xx, yy, unit.player);
-                        if(unt != null) {
+                        if(unt != null && unt.died == false) {
                             if(onUnit) {
                                 if(onUnit(unt) === false) continue;
                             }
                             else{
-                                if(unt.player === unit.player) d = unit.config.features.move;
+                                if(unt.player === unit.player) d = d + unit.config.features.move;
+                                else d = d + unt.config.features.health * unit.config.features.move;
                             }
                         }
                         let entity = Entity.getEntityAtMap(xx, yy);
@@ -814,14 +756,22 @@ class AIControl
                                 if(onEntity(entity) === false) continue;
                             }
                             else{
-                                d = Math.floor(entity.evaluateStep(unit)+0.5) * unit.config.features.move;
+                                d = d + Math.floor(entity.evaluateStep(unit)+0.5) * unit.config.features.move;
                             }
                         }
                         if(onCell){
                             if(onCell([xx,yy]) === false) continue;
                         }
+                        if(penaltyMap){
+                            d = d + penaltyMap[yy][xx];
+                        }
                         if(distMap[yy][xx] > -1 && cell[2]+d >= distMap[yy][xx]) continue;
-                        border2.push([xx,yy,cell[2]+d]);
+                        if(maxDist > 0 && cell[2]+d > startCost + maxDist) continue;
+                        if(cellInd[yy][xx] >= 0) border2[cellInd[yy][xx]][2] = cell[2]+d;
+                        else{
+                            border2.push([xx,yy,cell[2]+d]);
+                            cellInd[yy][xx] = border2.length-1;
+                        }
                         distMap[yy][xx] = cell[2]+d;
                     }
             }
@@ -829,11 +779,23 @@ class AIControl
         }
         return distMap;
     }
-
-
-    getOptimalStep(dMap,targetCell)
+  
+    getBaseCost(dMap,x,y)
     {
-        if(dMap[targetCell[1]][targetCell[0]] === 1) return [targetCell[0],targetCell[1]];
+        let baseCost = dMap[y][x];
+        for(let yy=y-1; yy<=y+1; yy++)
+            for(let xx=x-1; xx<=x+1; xx++)
+            {
+                if((xx<0)||(xx>=map.width)||(yy<0)||(yy>=map.height)||((xx===x)&&(yy===y)))continue;
+                if(dMap[yy][xx] < 0) continue;
+                let c = dMap[yy][xx]+1;
+                if(c < baseCost) baseCost = c;
+            }
+        return baseCost;
+    }
+
+    getOptimalStep(dMap,targetCell, startCell)
+    {
         let dist = 999999999;
         let cell = [targetCell[0],targetCell[1]];
         while(true)
@@ -850,7 +812,7 @@ class AIControl
                         {
                             dist2 = dMap[yy][xx];
                             cell2 = [xx, yy];
-                            if(dist2 === 0) return cell;
+                            if(cell2[0] == startCell[0] && cell2[1] == startCell[1]) return cell;
                         }
                     }
                 }
@@ -858,7 +820,6 @@ class AIControl
             {
                 cell = [cell2[0],cell2[1]];
                 dist = dist2;
-                //if(dist <= 1) return cell;
             }
             else return null;
         }
@@ -866,6 +827,7 @@ class AIControl
 
     getAvailableCells(dMap,unit,bypassEntities,bypassUnits)
     {
+        let startCost = dMap[unit.mapY][unit.mapX];
         let cells = [{cell:[unit.mapX,unit.mapY],dist:0}];
         let range = unit.features.move;
         for(let yy=unit.mapY-range; yy<=unit.mapY+range; yy++)
@@ -880,7 +842,8 @@ class AIControl
                 {
                     if(getUnitAtMap(xx,yy) != null)continue;
                 }
-                if(dMap[yy][xx] > -1 && dMap[yy][xx] <= range) cells.push({cell:[xx,yy],dist:dMap[yy][xx]});
+                //if(dMap[yy][xx] > -1 && dMap[yy][xx] <= startCost + range) cells.push({cell:[xx,yy],dist:(dMap[yy][xx]-startCost)});
+              if(dMap[yy][xx] > -1) cells.push({cell:[xx,yy],dist:(dMap[yy][xx]-startCost)});
             }
         return cells;
     }
@@ -891,7 +854,6 @@ class AIControl
         const minR = 3;
         const maxR = 10;
         let r = maxR;
-        //for (let r = minR; r <= maxR; r++) {
         for (let y = wizard.mapY - r; y <= wizard.mapY + r; y++) {
             for (let x = wizard.mapX - r; x <= wizard.mapX + r; x++) {
                 if((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === wizard.mapX) && (y === wizard.mapY))) continue;
@@ -906,7 +868,6 @@ class AIControl
                 if (checkLineOfSight(wizard.mapX, wizard.mapY, x, y, null, null, function(){return true;}) === true) res.push({cell: [x, y], dist: dr});
             }
         }
-        //}
         return res;
     }
 
@@ -927,5 +888,359 @@ class AIControl
             }
         return true;
     }
-
+  
+    getPatrolArea(wizard)
+    {
+        let res = [];
+        const minR = 2;
+        const maxR = 5;
+        let r = maxR;
+        for (let y = wizard.mapY - r; y <= wizard.mapY + r; y++) {
+            for (let x = wizard.mapX - r; x <= wizard.mapX + r; x++) {
+                if((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === wizard.mapX) && (y === wizard.mapY))) continue;
+                if(Entity.getEntityAtMap(x, y) != null) continue;
+                let wallTile = wallsLayer.getTileAt(x, y);
+                if (wallTile != null) continue;
+                let dX = Math.abs(x - wizard.mapX);
+                let dY = Math.abs(y - wizard.mapY);
+                let dr = dX*dX + dY*dY;
+                if(dr > maxR * maxR) continue;
+                if(dr <= minR * minR) continue;
+                if (checkLineOfSight(wizard.mapX, wizard.mapY, x, y, null, null, function(){return true;}) === true) res.push({cell: [x, y], dist: dr});
+            }
+        }
+        return res;
+    }
+  
+    choosePatrolTarget(unit)
+    {
+        if(unit.player && unit.player.wizard && !unit.player.wizard.died && unit.player.wizard.patrolArea){
+            let possibleCells = unit.player.wizard.patrolArea.filter(p => (Entity.getEntityAtMap(p.cell[0], p.cell[1]) == null) && (getUnitAtMap(p.cell[0], p.cell[1]) == null));
+            let trgt = null;
+            if(possibleCells.length > 0)trgt = possibleCells[randomInt(0, possibleCells.length - 1)];
+            if(trgt) this.setMainTarget(unit,null,[trgt.cell[0],trgt.cell[1]],"patrol",2);
+        }
+    }
+  
+    computeEnemiesInfo()
+    {
+        if(this.player.wizard){
+            let maxDist = 10;
+            let maxTurns = 3;
+            for(let pl of players){
+                if (pl == this.player)continue;
+                if(pl.wizard == null || pl.wizard.died)continue;
+                let closeUnits = [];
+                let distantUnits = [];
+                for(let unt of pl.units){
+                    if(Math.abs(unt.mapX - pl.wizard.mapX) <= maxDist && Math.abs(unt.mapY - pl.wizard.mapY) <= maxDist){                 
+                        let dMap = this.getDistanceMap(unt,unt.mapX,unt.mapY);
+                        let startCost = dMap[unt.mapY][unt.mapX];
+                        let distToWiz = this.getBaseCost(dMap,pl.wizard.mapX,pl.wizard.mapY);
+                        if(dMap[pl.wizard.mapY][pl.wizard.mapX] > 0 && distToWiz <= startCost + maxDist){
+                            let turns = Math.ceil((distToWiz - startCost) / unt.config.features.move);
+                            if(turns <= maxTurns){
+                                closeUnits.push(unt);
+                                continue;
+                            }
+                        }
+                    }
+                    distantUnits.push(unt);
+                }
+                if(!pl.Info) pl.Info = {sumStr: 0, closeStr: 0};
+                let sumCloseStrength = 0;
+                for(const unt of closeUnits) sumCloseStrength += 0.5*(unt.features.strength + unt.features.defense) * unt.features.health;
+                let sumDistantStrength = 0;
+                for(const unt of distantUnits) sumDistantStrength += 0.5*(unt.features.strength + unt.features.defense) * unt.features.health;
+                pl.Info.sumStr = sumCloseStrength + sumDistantStrength;
+                pl.Info.closeStr = sumCloseStrength;
+            }
+        }
+    }
+  
+    planning()
+    {
+        console.log("planning");  
+        let wizard = this.player.wizard;
+        this.computeEnemiesInfo();
+        console.log("Players stats:");
+        for(let pl of players)if(pl.Info)console.log(pl.name + ": " + pl.Info.closeStr + "(" + pl.Info.sumStr + ")");
+        for(const unit of this.player.units){
+            if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "attack" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died)continue;
+            this.setMainTarget(unit,null,null,null,null);
+        }
+        if(wizard && !wizard.died){
+            //Note: можно проверить текущее и прошлое положение волшебника и если оно не имзменилось, то не пересчитывать webPlan и patrolArea
+            wizard.webPlan = this.getWebPlanMap(wizard);
+            wizard.patrolArea = this.getPatrolArea(wizard);
+            //Compute enemies
+            let maxDist = 10;
+            let maxTurns = 3;
+            let enemies = [];
+            for(let i=0;i<maxTurns;i++)enemies[i] = [];
+            //+ simple way
+            /*
+            let dMap = this.getDistanceMap(wizard,wizard.mapX,wizard.mapY,function(ent){return true;},function(unt){return true;},null);
+            let startCost = dMap[wizard.mapY][wizard.mapX];
+            for(let pl of players){
+                if (pl == wizard.player)continue;
+                for(let unt of pl.units){
+                    if(dMap[unt.mapY][unt.mapX] > 0 && dMap[unt.mapY][unt.mapX] <= startCost + maxDist){
+                        let turns = Math.ceil((dMap[unt.mapY][unt.mapX] - startCost) / unt.config.features.move);
+                        if(turns <= maxTurns)enemies[turns-1].push(unt);
+                    }
+                }
+            }
+            */
+            //-
+            for(let pl of players){
+                if (pl == wizard.player)continue;
+                for(let unt of pl.units){
+                    if(Math.abs(unt.mapX - wizard.mapX) > maxDist || Math.abs(unt.mapY - wizard.mapY) > maxDist) continue;
+                    let dMap = this.getDistanceMap(unt,unt.mapX,unt.mapY);
+                    let startCost = dMap[unt.mapY][unt.mapX];
+                    let distToWiz = this.getBaseCost(dMap,wizard.mapX,wizard.mapY);
+                    if(dMap[wizard.mapY][wizard.mapX] > 0 && distToWiz <= startCost + maxDist){
+                        let turns = Math.ceil((distToWiz - startCost) / unt.config.features.move);
+                        if(turns <= maxTurns)enemies[turns-1].push(unt);
+                    }
+                }
+            }
+            let threats = [];
+            let distantThreats = [];
+            if(!this.distantThreats) this.distantThreats = [];
+            this.distantThreats = this.distantThreats.filter(unt => !unt.died);
+            //Threats estimation for defense
+            for (let turns = 0; turns < enemies.length; turns++) {
+                enemies[turns].forEach(enemy => {
+                    if(distantThreats.includes(enemy))distantThreats.splice(distantThreats.indexOf(enemy),1);
+                    threats.push({
+                        enemy,
+                        turns: turns+1,
+                        threatLevel: 0.5*(enemy.features.strength + enemy.features.defense) * enemy.features.health * (enemies.length - turns)
+                    });
+                });
+            }
+            distantThreats = this.distantThreats.map(u => {
+                let x = {enemy:u, turns: 2, threatLevel: 1};
+                return x;
+            });
+            //Sort enemies by threat level (from highest)
+            threats.sort((a, b) => b.threatLevel - a.threatLevel);
+            distantThreats.sort((a, b) => b.threatLevel - a.threatLevel);
+            this.threats = threats;
+            //assign targets
+            this.assignTargets(threats); 
+            this.assignTargets(distantThreats); 
+            //choose targets for units which doesn't have main target
+            let freeunits = this.player.units.filter(unt => unt.aiControl.mainTarget == null && unt!=this.player.wizard);
+            let sumStrength = 0;
+            for(const unit of freeunits) sumStrength += 0.5*(unit.features.strength + unit.features.defense) * unit.features.health;
+            console.log("Attack strength: " + sumStrength);
+            //Check for attack opportunity
+            if(sumStrength >= 10){
+                let victims = players.filter(pl => pl != this.player && pl.wizard && !pl.wizard.died && pl.Info && pl.Info.closeStr < sumStrength);
+                if(victims.length > 0){
+                    let distToVictim = [];
+                    let capableUnits = [];
+                    for(let i = 0; i < victims.length; i++){
+                        distToVictim[i] = 0;
+                        capableUnits[i] = 0;
+                    }
+                    for(const unit of freeunits){
+                        let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+                        for(let i = 0; i < victims.length; i++){
+                            let pl = victims[i];
+                            let dist = dmap[pl.wizard.mapY][pl.wizard.mapX];
+                            if(dist > 0){
+                                distToVictim[i] += dist;
+                                capableUnits[i] += 1;
+                            }
+                        }
+                    }    
+                    let bestDist = 999999999;
+                    let targetVictim = null;
+                    console.log("Possible victims:")
+                    for(let i = 0; i < victims.length; i++){
+                        if(capableUnits[i] > 0){
+                            let meanDist = distToVictim[i]/capableUnits[i];
+                            if(meanDist < bestDist || (meanDist == bestDist) && (randomInt(0,1) == 1)){
+                                bestDist = meanDist;
+                                targetVictim = victims[i];
+                            }
+                            console.log("- " + victims[i].name + " dist: " + meanDist);
+                        }
+                    }
+                    if(targetVictim){
+                        for(const unit of freeunits) this.setMainTarget(unit,targetVictim.wizard,[targetVictim.wizard.mapX,targetVictim.wizard.mapY],"attack",10);
+                    }
+                    //update list of units which don't have main target
+                    freeunits = this.player.units.filter(unt => unt.aiControl.mainTarget == null && unt!=this.player.wizard);
+                }
+            }
+            //If there are units left that do not have a main goal, then we assign them patrol or defense
+            if(freeunits.lenght > 0){
+                for(const unit of freeunits){
+                    if(this.threats.length > 0) this.chooseTargetThreat(unit,this.threats);
+                    if(unit.aiControl.mainTarget == null) this.choosePatrolTarget(unit);
+                }
+            }
+        }
+        else{
+        //If no wizard or wizard died
+            for(const unit of this.player.units){
+                let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+                let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
+                if(trgtWiz)this.setMainTarget(unit,trgtWiz,[trgtWiz.mapX,trgtWiz.mapY],"attack",10);
+            }
+        }
+    }
+  
+    /*
+    assignTargets(threats)
+    {
+        //Prepare list of available units
+        let activeUnits = [];
+        for(const unit of this.player.units){
+            if(unit != this.player.wizard){
+                activeUnits.push({
+                    unit,
+                    assigned: false,
+                    dmap: this.getDistanceMap(unit,unit.mapX,unit.mapY,null,function(unt){return true;})  
+                });
+            }
+        }
+        //Distribute units for defense
+        for(const threat of threats){
+            //Available units sorted by optimal distribution between attack and defense
+            console.log("threat: " + threat.enemy.config.name + " turns: " + threat.turns);
+            let logStr = "";
+            for(let u of activeUnits) logStr = logStr + u.unit.config.name + " ";
+            console.log(" - activeUnits: " + logStr);
+            const nearestUnits = activeUnits
+            .filter(unt => !unt.assigned)
+            .map(unt => {
+                let target = null;
+                if(unt.unit.aiControl && unt.unit.aiControl.order && unt.unit.aiControl.order == "attack" && unt.unit.aiControl.mainTarget != null && !unt.unit.aiControl.mainTarget.died) target = unt.unit.mainTarget;
+                let x = {
+                attacker: unt,  
+                distanceToEnemy: this.getBaseCost(unt.dmap,threat.enemy.mapX,threat.enemy.mapY) - unt.dmap[unt.unit.mapY][unt.unit.mapX],
+                distanceToTarget: (target != null) ? this.getBaseCost(unt.dmap,target.mapX,target.mapY) - unt.dmap[unt.unit.mapY][unt.unit.mapX] : 9999999,
+                distanceToOwnWizard: (unt.unit.player.wizard != null) ? this.getBaseCost(unt.dmap,unt.unit.player.wizard.mapX,unt.unit.player.wizard.mapY) - unt.dmap[unt.unit.mapY][unt.unit.mapX] : 9999999
+                };
+                return x;
+            })
+            .filter(unt => unt.distanceToOwnWizard <= (threat.turns + 2) * unt.attacker.unit.config.features.move )
+            .sort((a, b) => {
+                const aAttackPriority = a.distanceToTarget < a.distanceToOwnWizard;
+                const bAttackPriority = b.distanceToTarget < b.distanceToOwnWizard;
+                if(aAttackPriority && !bAttackPriority) return 1;
+                if(!aAttackPriority && bAttackPriority) return -1;
+                return a.distanceToEnemy - b.distanceToEnemy;
+            });          
+            logStr = "";
+            for(let u of nearestUnits) logStr = logStr + u.attacker.unit.config.name + "(" + u.distanceToEnemy + "," + u.distanceToTarget + "," + u.distanceToOwnWizard + ") ";
+            console.log(" - nearestUnits: " + logStr);
+            //Assign units to the enemy
+            let totalStrength = 0;
+            let enemyStr = 0.5*(threat.enemy.features.strength + threat.enemy.features.defense) * threat.enemy.features.health; 
+            for(const { attacker } of nearestUnits) {
+                totalStrength += 0.5*(attacker.unit.features.strength + attacker.unit.features.defense) * attacker.unit.features.health;
+                attacker.assigned = true;
+                this.setMainTarget(attacker.unit,threat.enemy,[threat.enemy.mapX,threat.enemy.mapY],"intercept",10);
+                console.log("    - " + attacker.unit.config.name + " target: " + threat.enemy.config.name);
+                if (totalStrength >= enemyStr) break;
+            }          
+        }       
+    }
+    */
+  
+    assignTargets(threats)
+    {
+        //Prepare list of available units
+        let activeUnits = [];
+        for(const unit of this.player.units){
+            if(unit != this.player.wizard){
+                activeUnits.push({
+                    unit,
+                    assigned: false,
+                    dmap: this.getDistanceMap(unit,unit.mapX,unit.mapY,null,function(unt){return true;})  
+                });
+            }
+        }
+        //Distribute units for defense
+        for(const threat of threats){
+            //Available units sorted by optimal distribution between attack and defense
+            console.log("threat: " + threat.enemy.config.name + " turns: " + threat.turns);
+            let logStr = "";
+            for(let u of activeUnits) logStr = logStr + u.unit.config.name + " ";
+            console.log(" - activeUnits: " + logStr);
+            const nearestUnits = activeUnits
+            .filter(unt => !unt.assigned)
+            .map(unt => {
+                let target = null;
+                if(unt.unit.aiControl && unt.unit.aiControl.order && unt.unit.aiControl.order == "attack" && unt.unit.aiControl.mainTarget != null && !unt.unit.aiControl.mainTarget.died) target = unt.unit.mainTarget;
+                let x = {
+                attacker: unt,  
+                distanceToEnemy: this.getBaseCost(unt.dmap,threat.enemy.mapX,threat.enemy.mapY) - unt.dmap[unt.unit.mapY][unt.unit.mapX],
+                distanceToTarget: (target != null) ? this.getBaseCost(unt.dmap,target.mapX,target.mapY) - unt.dmap[unt.unit.mapY][unt.unit.mapX] : 9999999,
+                };
+                return x;
+            })
+            .filter(unt => unt.distanceToEnemy <= (threat.turns + 2) * unt.attacker.unit.config.features.move )
+            .sort((a, b) => {
+                const aAttackPriority = a.distanceToTarget < a.distanceToEnemy;
+                const bAttackPriority = b.distanceToTarget < b.distanceToEnemy;
+                if(aAttackPriority && !bAttackPriority) return 1;
+                if(!aAttackPriority && bAttackPriority) return -1;
+                return a.distanceToEnemy - b.distanceToEnemy;
+            });          
+            logStr = "";
+            for(let u of nearestUnits) logStr = logStr + u.attacker.unit.config.name + "(" + u.distanceToEnemy + "," + u.distanceToTarget + ") ";
+            console.log(" - nearestUnits: " + logStr);
+            //Assign units to the enemy
+            let totalStrength = 0;
+            let enemyStr = 0.5*(threat.enemy.features.strength + threat.enemy.features.defense) * threat.enemy.features.health; 
+            for(const { attacker } of nearestUnits) {
+                totalStrength += 0.5*(attacker.unit.features.strength + attacker.unit.features.defense) * attacker.unit.features.health;
+                attacker.assigned = true;
+                this.setMainTarget(attacker.unit,threat.enemy,[threat.enemy.mapX,threat.enemy.mapY],"intercept",10);
+                console.log("    - " + attacker.unit.config.name + " target: " + threat.enemy.config.name);
+                if (totalStrength >= enemyStr) break;
+            }          
+        }       
+    }
+  
+    chooseTargetThreat(unit,threats)
+    {
+        if(threats != null && threats.length > 0){
+            let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY,null,function(unt){return true;}) 
+            let bestThreat = null;
+            let bestScore = 999999999;
+            for(const threat of threats){
+                if(threat.enemy.died)continue;
+                //Choose nearest threat
+                let score = dmap[threat.enemy.mapY][threat.enemy.mapX];
+                if(score < bestScore){
+                    bestScore = score;
+                    bestThreat = threat;
+                }
+            }
+            if(bestThreat != null)this.setMainTarget(unit,bestThreat.enemy,[bestThreat.enemy.mapX,bestThreat.enemy.mapY],"intercept",10);
+            else this.setMainTarget(unit,null,null,null,null);
+        }
+    }
+  
+    setMainTarget(unit,target,targetPos,order,agression)
+    {
+        if(!unit.aiControl)
+        {
+            unit.aiControl = {mainTarget: null, order: null, agression: 2};
+        }
+        unit.aiControl.mainTarget = target;
+        unit.aiControl.mainTargetPos = targetPos;
+        unit.aiControl.order = order;
+        unit.aiControl.agression = agression;
+    }
+  
 }

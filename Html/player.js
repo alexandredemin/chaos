@@ -63,7 +63,8 @@ class Player
 
     startTurn()
     {
-        if(gameSettings.showEnemyMoves == true || this.control === PlayerControl.human)
+        //if(gameSettings.showEnemyMoves == true || this.control === PlayerControl.human)
+        if(gameSettings.showEnemyMoves == false && this.control === PlayerControl.human)
         {
             this.units.forEach(item => {item.visible=true; checkUnitVisibility(item);});
         }

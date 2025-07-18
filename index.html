@@ -129,6 +129,14 @@
             selectedUnit.setPipeline('Custom');//,{ gray: 1 });
             cam.startFollow(unit);
             showArrows(unit);
+            //+debug
+            if(players[playerInd].control === PlayerControl.human)
+                if(players[playerInd].icons != null)
+                {
+                    players[playerInd].icons.forEach( x => { x.destroy(); });
+                    players[playerInd].icons = null;
+                }
+            //-
             cam.stopFollow();
         }
         else selectedUnit = unit;
@@ -303,17 +311,18 @@
         //entites
         targets = [];
         selectEntities(unit.mapX, unit.mapY, 20).forEach(ent => {
-            if (!ent.visible) targets.push(ent);
+            if (!ent.visible && ent.active) targets.push(ent);
         });
         targets = selectOnLineOfSight(unit.mapX, unit.mapY, targets, null, null, () => {
             return true
         });
         targets.forEach(ent => {
             ent.visible = true;
-        });
+        }); 
     }
 
     function startTurn() {
+        saveGame();
         if (players[playerInd].units.length === 0) {
             setTimeout(endTurn, 1);
             return;
@@ -358,7 +367,7 @@
         }
         
         //+ mushrooms
-        /*
+        /*  
         for(let i=0; i<10; i++)
         {
             let x=randomInt(0, map.width-1);
@@ -433,6 +442,24 @@
         }, ScrollType.yesno);
         scrollMsg.show();
     }
+  
+    function saveGame() {
+        const data = {
+            selectedMap: gameSettings.selectedMap,
+            spellDistrib: gameSettings.spellDistrib,
+            magicPoints: gameSettings.magicPoints,
+            showEnemyMoves: gameSettings.showEnemyMoves,
+            playerInd,
+            players: players.map(p => ({
+                name: p.name,
+                control: p.control,
+            })),
+            units: units.map(u => u.serialize()),
+            entities: entities.map(e => e.serialize()),
+        };
+
+        localStorage.setItem("savedGame", JSON.stringify(data));
+    }
 
     function resize() // (gameSize, baseSize, displaySize, resolution)
     {
@@ -484,6 +511,9 @@
         let leftBorder = 0;
         if (map.widthInPixels * zoomFactor < window.innerWidth) leftBorder = groundLayer.x * zoomFactor;
         if (buttonEndTurn != null) buttonEndTurn.setPosition(leftBorder + buttonEndTurn.width / 2 + 10, window.innerHeight - buttonEndTurn.height / 2 - 10);
+        //+debug
+        if (buttonAIStep != null) buttonAIStep.setPosition(leftBorder + buttonAIStep.width / 2 + 120, window.innerHeight - buttonAIStep.height / 2 - 10);
+        //-
 
         if ((book != null) && (book.visible === true)) book.resize();
         uiElements.forEach(elm => {
@@ -564,6 +594,9 @@
     var cam;
 
     var buttonEndTurn = null;
+    //+debug
+    var buttonAIStep = null;  
+    //-
     var book = null;
     var uiScene = null;
     var startScene = null;
@@ -578,6 +611,7 @@
         magicPoints: 25,
         selectedMap: '',
         showEnemyMoves: true,
+        randomMapConfig: { width: 40, height: 30 },
     };
 
 </script>

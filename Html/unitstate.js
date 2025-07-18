@@ -10,6 +10,21 @@ class UnitState
     {
         this.unit = unit;
     }
+  
+    serialize() {
+        return {
+            name: this.name,
+            data: this.data
+        };
+    }
+  
+    static deserialize(storedData, unit) {
+        unitStates[storedData.name].applyFunction(unit, storedData.data);
+    }
+  
+    start()
+    {
+    }
 
     onRecover()
     {
@@ -22,20 +37,31 @@ class UnitState
 
 class InfectedState extends UnitState
 {
-    time = 0;
+    data = {
+        time: 0,
+    }
 
     constructor(unit)
     {
         super(unit);
         this.name = 'infected';
-        unit.setTint(0x00ff00);
+    }
+  
+    static apply(unit, stateData=null)
+    {
+        if(unit.hasState('infected') === false){
+            let state = new InfectedState(unit);
+            if(stateData != null)state.data = clone(stateData);
+            unit.addState(state);
+            state.start(); 
+        }
     }
 
     static canInfect(unit)
     {
         let type=unit.config.name;
         if(type==='rat' || type==='muddy') return false;
-        if((unit.hasState('infected') === false) && (unit.immunized == null || unit.immunized === false)) return true;
+        if((unit.hasState('infected') === false) && (unit.features.immunized == null || unit.features.immunized === false)) return true;
         return false;
     }
 
@@ -49,15 +75,15 @@ class InfectedState extends UnitState
     infect()
     {
         let targets = selectUnits(this.unit.mapX, this.unit.mapY, null, [this.unit], 0);
-        targets.forEach( unit => {if(InfectedState.canInfect(unit))unit.addState(new InfectedState(unit))});
+        targets.forEach( unit => {if(InfectedState.canInfect(unit)) InfectedState.apply(unit)});
     }
 
     onRecover()
     {
         this.processed = true;
-        if(this.time>0)
+        if(this.data.time>0)
         {
-            this.time++;
+            this.data.time++;
             this.infect();
             if(Math.random() > 0.5)
             {
@@ -80,7 +106,7 @@ class InfectedState extends UnitState
             }
             else
             {
-                if(this.time>4)
+                if(this.data.time>4)
                 {
                     this.stop();
                 }
@@ -89,7 +115,7 @@ class InfectedState extends UnitState
         }
         else
         {
-            this.time++;
+            this.data.time++;
             this.unit.processStates();
         }
     }
@@ -98,12 +124,131 @@ class InfectedState extends UnitState
     {
         this.infect();
     }
+  
+    start()
+    {
+        this.unit.setTint(0x00ff00);
+    }
 
     stop()
     {
         this.unit.clearTint();
         this.unit.removeState(this);
-        this.unit.immunized = true;
+        this.unit.features.immunized = true;
+    }
+
+}
+
+class GiganticState extends UnitState
+{
+    tween = null;
+    
+    data = {
+        init_originY: 0,
+        init_scale: 0,
+        factor: 1.0,
+        timeleft: 0
+    }
+    
+    static duration = 4;
+
+    constructor(unit)
+    {
+        super(unit);
+        this.name = 'gigantic';
+    }
+  
+    static apply(unit, stateData=null)
+    {
+        if(unit.hasState('gigantic') === false){
+            let state = new GiganticState(unit);
+            if(stateData != null)state.data = clone(stateData);
+            unit.addState(state);
+            state.start(); 
+        }
+        else{
+            for(let i=0; i<unit.states.length; i++){
+                if(unit.states[i].name === 'gigantic'){
+                    unit.states[i].data.timeleft += GiganticState.duration;
+                    break;
+                }
+            }
+        }
+    }
+  
+    start()
+    {
+        this.data.init_originY = this.unit.originY;
+        this.data.init_scale = this.unit.scale;
+        let init_y = this.unit.y;
+        const bounds = this.unit.getBounds();
+        const bottomCenterY = bounds.bottom;
+        this.unit.setOrigin(this.unit.originX, 1);
+        this.unit.y = bottomCenterY;
+        this.tween = this.unit.scene.tweens.add({
+            targets: this.unit,
+            scale: {start: this.unit.scale, to: this.unit.config.scale * 1.5},
+            ease: 'Linear',
+            duration: 400,
+            yoyo: false,
+            repeat: 0,
+            paused: true,
+            onComplete: function(){ this.targets[0].setOrigin(0.5, 1 - (0.5 * 16 / (this.targets[0].height*this.targets[0].scale))); this.targets[0].setPosition(this.targets[0].x, init_y);},
+        });
+        this.tween.play();
+        let str = (this.unit.config.features.strength + this.unit.config.features.defense) * this.unit.config.features.health * 0.5;
+        let max_factor = 3;
+        let min_factor = 1;
+        let max_str = 20;
+        this.data.factor = max_factor - (str - min_factor) * (max_factor - min_factor)/(max_str - 1);
+        if(this.data.factor < min_factor) this.data.factor = min_factor;
+        this.unit.features.strength = Math.floor(this.unit.features.strength * this.data.factor + 0.5);
+        this.unit.features.defense = Math.floor(this.unit.features.defense * this.data.factor + 0.5);
+        this.unit.features.health = Math.floor(this.unit.features.health * this.data.factor + 0.5);
+        this.data.timeleft = GiganticState.duration;
+    }
+
+    onCallback()
+    {
+        cam.stopFollow();
+        this.unit.processStates();
+    }
+
+    onRecover()
+    {
+        this.processed = true;
+        this.data.timeleft--;
+        if(this.data.timeleft<=0) this.stop();
+        this.unit.processStates();
+    }
+
+    onStep()
+    {
+    }
+
+    stop()
+    {
+        let init_y = this.unit.y;
+        const bounds = this.unit.getBounds();
+        const bottomCenterY = bounds.bottom;
+        this.unit.setOrigin(this.unit.originX, 1);
+        this.unit.y = bottomCenterY;
+        this.tween = this.unit.scene.tweens.add({
+            targets: this.unit,
+            scale: {start: this.unit.scale, to: this.data.init_scale},
+            ease: 'Linear',
+            duration: 400,
+            yoyo: false,
+            repeat: 0,
+            paused: true,
+            onComplete: function(){ this.targets[0].setOrigin(this.targets[0].originX, this.data.init_originY); this.targets[0].setPosition(this.targets[0].x, init_y); },
+        });
+        this.tween.play();
+        this.unit.features.strength = this.unit.config.features.strength;
+        this.unit.features.defense = this.unit.config.features.defense;
+        this.unit.features.health = Math.floor(this.unit.features.health / this.data.factor + 0.5);
+        if(this.unit.features.health <= 0) this.unit.features.health = 1;
+        this.unit.removeState(this);
     }
 
 }

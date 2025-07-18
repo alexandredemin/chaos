@@ -15,8 +15,10 @@ var GameScene = new Phaser.Class({
         this.load.tilemapTiledJSON(gameSettings.selectedMap, 'maps/'+gameSettings.selectedMap+'.json');
     },
   
-    create: function ()
+    create: function (data)
     {
+        const savedGame = data?.savedState;
+        
         map = this.make.tilemap({ key: gameSettings.selectedMap, tileWidth: 16, tileHeight: 16 });
         this.tileset = map.addTilesetImage('dungeon-tiles','tiles');
         groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
@@ -25,68 +27,18 @@ var GameScene = new Phaser.Class({
         wallsLayer.setCollisionByProperty({ collides: true });
         this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
 
-        //cam = this.cameras.main;
-        //resize();
-
-        //to take from JSON
-        //let startPos = this.cache.tilemap.get('dungeon').data.startpos;
-        let startPos = [];
-        for(let i=0; i < objectLayer.objects.length; i++){
-            let obj = objectLayer.objects[i];
-            let objPos = map.worldToTileXY(obj.x,obj.y);
-            startPos.push({x:objPos.x,y:objPos.y});
+        if (savedGame) {
+            this.loadFromSave(savedGame);
+        } else {
+            this.initNewGame();
         }
-        let playerCount = playersSettings.length;
-        if(playerCount > startPos.length)playerCount = startPos.length;
-        for(let i=0;i<playerCount;i++)
-        {
-            if(i === startPos.length-1)break;
-            let j = randomInt(i,startPos.length-1);
-            let x = startPos[i];
-            startPos[i] = startPos[j];
-            startPos[j] = x;
-        }
-        for(let i=0;i<playerCount;i++)
-        {
-            if(playersSettings[i].control == null)continue;
-            let player = new Player(playersSettings[i].name);
-            players.push(player);
-            let wiz = new Unit(unitConfigs['wizard'], this, 0, 0);
-            wiz.setPositionFromMap(startPos[i].x, startPos[i].y);
-            player.addWizard(wiz);
-            units.push(wiz);
-            player.control = playersSettings[i].control;
-            if(playersSettings[i].control == PlayerControl.computer) player.aiControl = new AIControl(player);
-            this.initSpells(wiz);
-        }
-
-        //+ mushrooms
-        /**/
-        for(let j=0; j<5; j++)
-        {
-            for(let i=0; i<10; i++) {
-                let x = randomInt(0, map.width - 1);
-                let y = randomInt(0, map.height - 1);
-                let wallTile = wallsLayer.getTileAt(x, y);
-                let entity = Entity.getEntityAtMap(x, y);
-                let unt = getUnitAtMap(x, y);
-                if (wallTile == null && entity == null && unt == null) {
-                    let mushroom = new MushroomEntity(players[playerInd].wizard.scene, 0, 0);
-                    mushroom.setPositionFromMap(x, y);
-                    mushroom.start();
-                    entities.push(mushroom);
-                    break;
-                }
-            }
-        }
-        /**/
-        //-
 
         fireballAnimation = new FireballAnimation(this,200,200);
         gasAnimation = new GasAnimation(this,200,200);
 
         spellTypes['summon'] = new SummonSpell();
         spellTypes['self'] = new SelfSpell();
+        spellTypes['unit'] = new UnitSpell();
         spellTypes['entity'] = new EntitySpell();
         spellTypes['atack'] = new AtackSpell();
         spellTypes['atack_place'] = new AtackPlaceSpell();
@@ -107,8 +59,6 @@ var GameScene = new Phaser.Class({
         placeSelector = new PlaceSelector(this);
 
         window.addEventListener('resize', resize);
-
-        playerInd = 0;
       
         cam = this.cameras.main;
         resize();
@@ -164,6 +114,64 @@ var GameScene = new Phaser.Class({
             this.origDragPointY = null;
         }
 
+    },
+  
+    loadFromSave(savedGame) {    
+        playerInd = savedGame.playerInd;
+        players = [];
+        entities = [];
+        units = [];
+        
+        const playersMap = {};
+        for (let p of savedGame.players) {
+            let player = new Player(p.name);
+            player.control = p.control;
+            //if (player.control === PlayerControl.computer) {
+                player.aiControl = new AIControl(player);
+            //}
+            players.push(player);
+            playersMap[player.name] = player;
+        }
+        for (let ud of savedGame.units) Unit.deserialize(ud, this, playersMap);
+        for (let ed of savedGame.entities) Entity.deserialize(ed, this);
+        if(gameSettings.showEnemyMoves) for(let ent of entities) if(ent.active)ent.visible = true;
+    },
+
+  
+    initNewGame: function(){
+        playerInd = 0;
+        let startPos = [];
+        for(let i=0; i < objectLayer.objects.length; i++){
+            let obj = objectLayer.objects[i];
+            let objPos = map.worldToTileXY(obj.x,obj.y);
+            startPos.push({x:objPos.x,y:objPos.y});
+        }
+        let playerCount = playersSettings.length;
+        if(playerCount > startPos.length)playerCount = startPos.length;
+        for(let i=0;i<playerCount;i++)
+        {
+            if(i === startPos.length-1)break;
+            let j = randomInt(i,startPos.length-1);
+            let x = startPos[i];
+            startPos[i] = startPos[j];
+            startPos[j] = x;
+        }
+        for(let i=0;i<playerCount;i++)
+        {
+            if(playersSettings[i].control == null)continue;
+            let player = new Player(playersSettings[i].name);
+            players.push(player);
+            let wiz = new Unit(unitConfigs['wizard'], this, 0, 0);
+            wiz.setPositionFromMap(startPos[i].x, startPos[i].y);
+            player.addWizard(wiz);
+            units.push(wiz);
+            player.control = playersSettings[i].control;
+            //if(playersSettings[i].control == PlayerControl.computer) player.aiControl = new AIControl(player);
+            //+debug
+            player.aiControl = new AIControl(player);
+            //-
+            this.initSpells(wiz);
+        }      
     },
   
     initSpells: function(unit){
