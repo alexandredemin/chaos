@@ -343,7 +343,7 @@ const spellConfigs = {
         icon: 'bat',
         scale: 2.0,
         description: 'Summon bat.\nCost 2',
-        cost: 2,
+        cost: 3,
     },
     'spider': {
         id: 'spider',
