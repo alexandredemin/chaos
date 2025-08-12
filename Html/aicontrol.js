@@ -6,7 +6,7 @@ class AIControl
     availableUnits = null;
     passStage = 1;
     threats = null;
-    distantTnreats = null;
+    distantThreats = null;
 
     constructor(player)
     {

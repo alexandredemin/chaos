@@ -108,6 +108,7 @@ const unitConfigs = {
                              'demon':0,
                              'muddy':0,
                              'rat':0,
+                             'bat':0,
                              'spider':0,
                              'fire':0,
                              'glue_blob':0,
@@ -235,6 +236,19 @@ const unitConfigs = {
         }
     },
 
+    'bat': {
+        name: 'bat',
+        sprite: 'bat',
+        scale: 0.9,
+        features: {
+            move: 6,
+            health: 1,
+            strength: 1,
+            defense: 1,
+            abilityPoints: 1,
+        }
+    },
+
     'spider': {
         name: 'spider',
         sprite: 'spider',
@@ -320,6 +334,15 @@ const spellConfigs = {
         icon: 'rat',
         scale: 2.0,
         description: 'Summon rat.\nCost 2',
+        cost: 2,
+    },
+    'bat': {
+        id: 'bat',
+        name: 'bat',
+        type: 'summon',
+        icon: 'bat',
+        scale: 2.0,
+        description: 'Summon bat.\nCost 2',
         cost: 2,
     },
     'spider': {
