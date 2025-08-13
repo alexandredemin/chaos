@@ -195,7 +195,10 @@ class Unit extends BaseUnit
             this.onCallback();
             return;
         }
-        this.features.move = 0;
+        this.features.move = this.features.move - this.features.attackCost;
+        if(this.features.move < 0)this.features.move = 0;
+        this.features.attackPoints--;
+        if(this.features.attackPoints < 0)this.features.attackPoints = 0;
         let enemyUnit = getUnitAtMap(mapX, mapY);
         let damaged = false;
         let killed = false;
@@ -245,7 +248,7 @@ class Unit extends BaseUnit
 
     canAtackTo(offsetX, offsetY)
     {
-        if(this.features.move <= 0)return false;
+        if(this.features.move <= 0 || this.features.attackPoints <= 0)return false;
         let x = this.mapX + offsetX;
         let y = this.mapY + offsetY;
         if((x<0)||(x>=map.width)||(y<0)||(y>=map.height))return false;
@@ -291,6 +294,7 @@ class Unit extends BaseUnit
     {
         this.features.move = this.config.features.move;
         this.features.abilityPoints = this.config.features.abilityPoints;
+        this.features.attackPoints = this.config.features.attackPoints;
         if(this.config.abilities != null)if(Object.keys(this.config.abilities).indexOf('conjure') >=0 )
         {
             this.features.mana = this.features.mana + 1;

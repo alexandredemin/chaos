@@ -95,6 +95,8 @@ const unitConfigs = {
             strength: 2,
             defense: 2,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 2,
             mana: 4,
         },
         abilities: {
@@ -132,6 +134,8 @@ const unitConfigs = {
             strength: 1,
             defense: 1,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 2,
         }
     },
 
@@ -145,6 +149,8 @@ const unitConfigs = {
             strength: 5,
             defense: 5,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 2,
         }
     },
 
@@ -158,6 +164,8 @@ const unitConfigs = {
             strength: 2,
             defense: 1,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 3,
         }
     },
 
@@ -171,6 +179,8 @@ const unitConfigs = {
             strength: 3,
             defense: 3,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 3,
         }
     },
 
@@ -184,6 +194,8 @@ const unitConfigs = {
             strength: 5,
             defense: 4,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 2,
         },
         abilities: {
             fire: {
@@ -206,6 +218,8 @@ const unitConfigs = {
             strength: 3,
             defense: 5,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 2,
         },
         abilities: {
             gas: {
@@ -228,6 +242,8 @@ const unitConfigs = {
             strength: 1,
             defense: 1,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 3,
         },
         atack_features: {
             infectious: {
@@ -246,6 +262,8 @@ const unitConfigs = {
             strength: 1,
             defense: 1,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 1,
         }
     },
 
@@ -259,6 +277,8 @@ const unitConfigs = {
             strength: 2,
             defense: 2,
             abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 3,
         },
         abilities: {
             web: {
