@@ -104,6 +104,7 @@ const unitConfigs = {
                 type: 'conjure',
                 config: {
                     spells: {'goblin':0,
+                             'skeleton':0,
                              'troll':0,
                              'imp':0,
                              'chort':0,
@@ -289,6 +290,21 @@ const unitConfigs = {
             }
         }
     },
+
+    'skeleton': {
+        name: 'skeleton',
+        sprite: 'skeleton',
+        scale: 0.6,
+        features: {
+            move: 2,
+            health: 3,
+            strength: 1,
+            defense: 1,
+            abilityPoints: 1,
+            attackPoints: 1,
+            attackCost: 2,
+        }
+    },
 };
 
 //---------------------------- Spell configs ----------------------------
@@ -300,6 +316,15 @@ const spellConfigs = {
         icon: 'goblin',
         scale: 2.0,
         description: 'Summon goblin.\nCost 1',
+        cost: 1,
+    },
+    'skeleton': {
+        id: 'skeleton',
+        name: 'skeleton',
+        type: 'summon',
+        icon: 'skeleton',
+        scale: 1.5,
+        description: 'Summon skeleton.\nCost 2',
         cost: 1,
     },
     'troll': {

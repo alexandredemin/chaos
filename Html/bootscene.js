@@ -40,6 +40,7 @@ var BootScene = new Phaser.Class({
         this.load.spritesheet('bat', 'img/bat.png', { frameWidth: 21, frameHeight: 16 } );
         this.load.spritesheet('spider', 'img/spider.png', { frameWidth: 36, frameHeight: 16 } );
         this.load.spritesheet('goblin', 'img/goblin.png', { frameWidth: 16, frameHeight: 20 } );
+        this.load.spritesheet('skeleton', 'img/skeleton.png', { frameWidth: 20, frameHeight: 32 } );
         this.load.spritesheet('troll', 'img/troll.png', { frameWidth: 22, frameHeight: 28 } );
         this.load.spritesheet('imp', 'img/imp.png', { frameWidth: 16, frameHeight: 16 } );
     },
