@@ -296,8 +296,7 @@ class GasAbility  extends UnitAbility
 
     canAtack(unit,target)
     {
-        var type=target.config.name;
-        if(type==='muddy')return false;
+        if(target.features.gasImmunity === true) return false;
         return true;
     }
 

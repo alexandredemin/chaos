@@ -128,7 +128,7 @@ class WebEntity extends Entity
     {
         super.start(showStart);
         let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
-        if(unitAtPos && unitAtPos.config.name !== 'spider') this.zOffset = 2;
+        if(unitAtPos && unitAtPos.features.webImmunity !== true) this.zOffset = 2;
         else this.zOffset = 0;
         this.setDepth(this.mapY);
     }
@@ -140,7 +140,7 @@ class WebEntity extends Entity
 
     transformFeatures(unit, features)
     {
-        if(unit.config.name === 'spider')
+        if(unit.features.webImmunity === true)
         {
             return features;
         }
@@ -152,7 +152,7 @@ class WebEntity extends Entity
 
     evaluateStep(unit)
     {
-        if(unit.config.name === 'spider')
+        if(unit.features.webImmunity === true)
         {
             return 1;
         }
@@ -164,7 +164,7 @@ class WebEntity extends Entity
 
     onStepIn(unit)
     {
-        if(unit.config.name !== 'spider')
+        if(unit.features.webImmunity !== true)
         {
             unit.features.move = 0;
             this.zOffset = 2;
@@ -179,7 +179,7 @@ class WebEntity extends Entity
 
     onStepOut(unit)
     {
-        if(unit.config.name !== 'spider')
+        if(unit.features.webImmunity !== true)
         {
             unit.features.move = 0;
             let config = null;

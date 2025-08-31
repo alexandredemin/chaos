@@ -59,8 +59,7 @@ class InfectedState extends UnitState
 
     static canInfect(unit)
     {
-        let type=unit.config.name;
-        if(type==='rat' || type==='muddy') return false;
+        if(unit.features.infectionImmunity === true) return false;
         if((unit.hasState('infected') === false) && (unit.features.immunized == null || unit.features.immunized === false)) return true;
         return false;
     }

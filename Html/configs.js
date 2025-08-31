@@ -221,6 +221,8 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 2,
+            gasImmunity: true,
+            infectionImmunity: true,
         },
         abilities: {
             gas: {
@@ -245,6 +247,7 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 3,
+            infectionImmunity: true,
         },
         atack_features: {
             infectious: {
@@ -280,6 +283,7 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 3,
+            webImmunity: true,
         },
         abilities: {
             web: {
@@ -303,6 +307,8 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 2,
+            gasImmunity: true,
+            infectionImmunity: true,
         }
     },
 };
@@ -324,8 +330,8 @@ const spellConfigs = {
         type: 'summon',
         icon: 'skeleton',
         scale: 1.5,
-        description: 'Summon skeleton.\nCost 2',
-        cost: 1,
+        description: 'Summon skeleton.\nCost 3',
+        cost: 3,
     },
     'troll': {
         id: 'troll',
