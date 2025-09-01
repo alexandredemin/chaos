@@ -407,3 +407,149 @@ class WebAbility extends UnitAbility
         return true;
     }
 }
+
+class JumpAbility extends UnitAbility
+{
+    step = 0;
+    unit = null;
+    placeX = -1;
+    placeY = -1;
+    target = null;
+
+    constructor()
+    {
+        super();
+    }
+
+    onCallback()
+    {
+        cam.stopFollow();
+        this.next();
+    }
+
+    start(unit)
+    {
+        this.step = 0;
+        this.unit = unit;
+    }
+
+    stop(unit)
+    {
+        placeSelector.hide();
+        setInteractionScenario(userInteractionScenario.movement);
+        this.step = 0;
+        this.unit = null;
+        this.placeX = -1;
+        this.placeY = -1;
+        this.target = null;
+        super.stop(unit);
+    }
+
+    setPlace(mapX,mapY)
+    {
+        this.placeX = mapX;
+        this.placeY = mapY;
+        this.next();
+    }
+
+    jump()
+    {
+        if(this.placeX < 0 || this.placeY < 0) return;
+        this.unit.features.abilityPoints--;
+        this.unit.setPositionFromMap(this.placeX,this.placeY);
+        if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+        {
+            this.unit.visible = true;
+            cam.startFollow(this.unit);
+        }
+        this.next();
+        /*
+        if(this.target != null)
+        {
+            if(this.target.player.control === PlayerControl.computer && this.target.player.aiControl)
+            {
+                if(this.target.player.aiControl.distantThreats == null) this.target.player.aiControl.distantThreats = [];
+                if(this.target.player.aiControl.distantThreats.includes(this.unit) == false)this.target.player.aiControl.distantThreats.push(this.unit);
+            }
+            let damaged = false;
+            let killed = false;
+            if(Math.random() <= this.unit.config.abilities.fire.config.damage/(this.unit.config.abilities.fire.config.damage + this.target.getCurrentFeatures().defense))
+            {
+                damaged = true;
+                this.target.features.health--;
+                if(this.target.features.health <= 0) killed = true;
+            }
+            if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+            {
+                let config = {hit: true, damaged: false, killed: false};
+                if(killed) config.killed = true;
+                if(damaged) config.damaged = true;
+                cam.startFollow(this.target);
+                let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
+                lm.playAt(this.target.x,this.target.y,this.target,this,config);
+            }
+            else
+            {
+                if(killed) this.target.die();
+                this.next();
+            }
+        }
+        */
+    }
+
+    next()
+    {
+        switch (this.step) {
+            case 0:
+                let places = selectPlacesOnLineOfSight(this.unit.mapX, this.unit.mapY, this.unit.config.abilities.jump.config.range, false);
+                if(this.unit.player.control === PlayerControl.human)
+                {
+                    setInteractionScenario(userInteractionScenario.placeSelection);
+                    placeSelector.show(places,this);
+                    this.step++;
+                }
+                else
+                {
+                    this.target = this.unit.player.aiControl.selectRocketJumpTarget(this.unit);
+                    if(this.target == null)
+                    {
+                        if(this.unit.player.control === PlayerControl.computer) this.unit.player.aiControl.onRocketJump(this.unit,false);
+                        this.stop(this.unit);
+                    }
+                    else
+                    {
+                        this.step++;
+                        this.next();
+                    }
+                }   
+                break;
+            case 1:
+                this.step++;
+                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                {
+                    pointerBlocked = true;
+                    placeSelector.hide();
+                    this.unit.visible = false;
+                    let pos = map.tileToWorldXY(this.placeX, this.placeY);
+                    let throwAnimation = new ThrowSpellAnimation(this.unit.scene, this.unit.x, this.unit.y);
+                    throwAnimation.playAt(this.unit.x, this.unit.y, pos.x+8, pos.y+8,this);
+                }
+                else
+                {
+                    this.next();
+                }
+                break;
+
+            case 2:
+                this.step++;
+                this.jump();          
+                //this.next();             
+                break;
+            case 3:
+                this.stop(this.unit);
+                return true;
+                break;
+        }
+        return false;
+    }
+}

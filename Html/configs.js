@@ -167,6 +167,15 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 3,
+        },
+        abilities: {
+            jump: {
+                type: 'jump',
+                config: {
+                    range: 5,
+                    damage: 3
+                }
+            }
         }
     },
 
@@ -348,8 +357,8 @@ const spellConfigs = {
         type: 'summon',
         icon: 'imp',
         scale: 2.0,
-        description: 'Summon imp.\nCost 2',
-        cost: 2,
+        description: 'Summon imp.\nCost 3',
+        cost: 3,
     },
     'chort': {
         id: 'chort',
@@ -506,7 +515,8 @@ const abilities = {
     'conjure': null,
     'fire': null,
     'gas': null,
-    'web': null
+    'web': null,
+    'jump': null,
 };
 
 //---------------------------- Unit states ----------------------------------

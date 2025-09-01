@@ -49,6 +49,7 @@ var GameScene = new Phaser.Class({
         abilities['fire'] = new FireAbility();
         abilities['gas'] = new GasAbility();
         abilities['web'] = new WebAbility();
+        abilities['jump'] = new JumpAbility();
 
         grayScalePipeline = this.renderer.pipelines.get('Gray');
         customPipeline = this.renderer.pipelines.get('Custom');
