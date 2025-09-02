@@ -164,7 +164,7 @@ class Unit extends BaseUnit
                     }
                     else
                     {
-                        if(cofig.killed) this.die();
+                        if(config.killed) this.die();
                         this.player.aiControl.step(this);
                     }
                     return;

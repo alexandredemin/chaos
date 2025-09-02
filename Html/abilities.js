@@ -414,7 +414,6 @@ class JumpAbility extends UnitAbility
     unit = null;
     placeX = -1;
     placeY = -1;
-    target = null;
 
     constructor()
     {
@@ -441,7 +440,6 @@ class JumpAbility extends UnitAbility
         this.unit = null;
         this.placeX = -1;
         this.placeY = -1;
-        this.target = null;
         super.stop(unit);
     }
 
@@ -456,52 +454,53 @@ class JumpAbility extends UnitAbility
     {
         if(this.placeX < 0 || this.placeY < 0) return;
         this.unit.features.abilityPoints--;
+        let target = getUnitAtMap(this.placeX, this.placeY);
         this.unit.setPositionFromMap(this.placeX,this.placeY);
-        if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+        if(target != null)
         {
             this.unit.visible = true;
-            cam.startFollow(this.unit);
-        }
-        this.next();
-        /*
-        if(this.target != null)
-        {
-            if(this.target.player.control === PlayerControl.computer && this.target.player.aiControl)
-            {
-                if(this.target.player.aiControl.distantThreats == null) this.target.player.aiControl.distantThreats = [];
-                if(this.target.player.aiControl.distantThreats.includes(this.unit) == false)this.target.player.aiControl.distantThreats.push(this.unit);
-            }
             let damaged = false;
             let killed = false;
-            if(Math.random() <= this.unit.config.abilities.fire.config.damage/(this.unit.config.abilities.fire.config.damage + this.target.getCurrentFeatures().defense))
+            if(Math.random() <= this.unit.config.abilities.jump.config.damage/(this.unit.config.abilities.jump.config.damage + target.getCurrentFeatures().defense))
             {
                 damaged = true;
-                this.target.features.health--;
-                if(this.target.features.health <= 0) killed = true;
+                target.features.health--;
+                if(target.features.health <= 0) killed = true;
             }
+            this.unit.die();
+            pointerBlocked = false;
             if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
             {
                 let config = {hit: true, damaged: false, killed: false};
                 if(killed) config.killed = true;
                 if(damaged) config.damaged = true;
-                cam.startFollow(this.target);
-                let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
-                lm.playAt(this.target.x,this.target.y,this.target,this,config);
+                cam.startFollow(target);
+                //let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
+                let lm = new LossesAnimationManager(target.scene, 200, 200);
+                lm.playAt(target.x,target.y,target,this,config);
             }
             else
             {
-                if(killed) this.target.die();
+                if(killed) target.die();
                 this.next();
             }
         }
-        */
+        else
+        {
+            if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+            {
+                this.unit.visible = true;
+                cam.startFollow(this.unit);
+            }
+            this.next();
+        }
     }
 
     next()
     {
         switch (this.step) {
             case 0:
-                let places = selectPlacesOnLineOfSight(this.unit.mapX, this.unit.mapY, this.unit.config.abilities.jump.config.range, false);
+                let places = selectPlacesOnLineOfSight(this.unit.mapX, this.unit.mapY, this.unit.config.abilities.jump.config.range, true);
                 if(this.unit.player.control === PlayerControl.human)
                 {
                     setInteractionScenario(userInteractionScenario.placeSelection);
@@ -510,6 +509,8 @@ class JumpAbility extends UnitAbility
                 }
                 else
                 {
+                    //TODO: ai control
+                    /*
                     this.target = this.unit.player.aiControl.selectRocketJumpTarget(this.unit);
                     if(this.target == null)
                     {
@@ -521,31 +522,42 @@ class JumpAbility extends UnitAbility
                         this.step++;
                         this.next();
                     }
+                    */
                 }   
                 break;
             case 1:
                 this.step++;
-                if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                placeSelector.hide();
+                if(this.unit.checkEntityStepOut())
                 {
-                    pointerBlocked = true;
-                    placeSelector.hide();
-                    this.unit.visible = false;
-                    let pos = map.tileToWorldXY(this.placeX, this.placeY);
-                    let throwAnimation = new ThrowSpellAnimation(this.unit.scene, this.unit.x, this.unit.y);
-                    throwAnimation.playAt(this.unit.x, this.unit.y, pos.x+8, pos.y+8,this);
+                    if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                    {
+                        pointerBlocked = true;
+                        this.unit.visible = false;
+                        let pos = map.tileToWorldXY(this.placeX, this.placeY);
+                        let throwAnimation = new ThrowSpellAnimation(this.unit.scene, this.unit.x, this.unit.y);
+                        throwAnimation.playAt(this.unit.x, this.unit.y, pos.x+8, pos.y+8,this);
+                    }
+                    else
+                    {
+                        this.next();
+                    }
                 }
                 else
                 {
-                    this.next();
+                    this.unit.features.abilityPoints--;
+                    this.stop(this.unit);
+                    return true;
                 }
                 break;
-
             case 2:
                 this.step++;
-                this.jump();          
-                //this.next();             
+                this.jump();                      
                 break;
             case 3:
+                //pointerBlocked = false;
+                //cam.stopFollow();
+                //this.unit.die();
                 this.stop(this.unit);
                 return true;
                 break;
