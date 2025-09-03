@@ -84,9 +84,8 @@ class Unit extends BaseUnit
         }
     }
 
-    moveTo(x, y)
+    turnTo(x, y)
     {
-        this.isMoving = true;
         if(x<this.x)
         {
             this.flipX = true;
@@ -97,6 +96,12 @@ class Unit extends BaseUnit
             this.flipX = false;
             this.body.setOffset(0, 12);
         }
+    }
+
+    moveTo(x, y)
+    {
+        this.isMoving = true;
+        this.turnTo(x, y);
         this.target = new Phaser.Math.Vector2();
         this.target.x = x;
         this.target.y = y;

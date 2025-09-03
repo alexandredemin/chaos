@@ -613,3 +613,77 @@ class LightningAnimation //extends Phaser.GameObjects.Image
     }
 
 }
+
+class JumpAnimation extends Phaser.GameObjects.Image
+{
+    tween = null;
+    particles = null;
+    emitter = null;
+    callbackObject = null;
+
+    constructor(scene, unit)
+    {
+        super(scene, unit.x, unit.y, unit.texture);
+        this.flipX = unit.flipX;
+        this.setDepth(10000);
+        this.scale = unit.config.scale;
+        this.setActive(false).setVisible(false);
+        scene.add.existing(this);
+    }
+
+    onComplete(obj)
+    {
+        cam.stopFollow();
+        obj.setActive(false).setVisible(false);
+        if(obj.callbackObject != null)
+        {
+            obj.callbackObject.onCallback();
+        }
+        obj.emitter.stop();
+        obj.particles.destroy();
+        obj.emitter.remove();
+    }
+
+    playAt(unit, targetX, targetY, callbackObject)
+    {
+        this.callbackObject = callbackObject;
+        this.setPosition(unit.x, unit.y);
+        this.flipX = unit.flipX;
+        let dur = 4.0*Phaser.Math.Distance.Between(unit.x, unit.y, targetX, targetY);
+        if(dur<250)dur=250;
+        this.tween = this.scene.tweens.add({
+            targets: this,
+            x: targetX,
+            y: targetY,
+            ease: 'Linear',
+            duration: dur,
+            yoyo: false,
+            paused: true,
+            onComplete: this.onComplete.bind(this,this),
+        });
+        this.setActive(true).setVisible(true);
+        this.tween.play();
+        if(this.particles == null)
+        {
+            this.particles = this.scene.add.particles(this.texture);
+            this.particles.setDepth(10000);
+        }
+        let flipX = 1;
+        if(unit.flipX)flipX = -1;
+        if(this.emitter == null)
+        {
+            this.emitter = this.particles.createEmitter({
+                scaleY: { start: unit.scaleY, end: 0 },
+                scaleX: {start: flipX * unit.scaleX, end: 0},
+                lifespan: 200,
+                frequency: 10,
+                quantity: 1,
+                trackVisible: true,
+            });
+        }
+        this.emitter.start();
+        this.emitter.startFollow(this);
+        cam.startFollow(this);
+    }
+
+}

@@ -414,6 +414,7 @@ class JumpAbility extends UnitAbility
     unit = null;
     placeX = -1;
     placeY = -1;
+    target = null;
 
     constructor()
     {
@@ -440,6 +441,7 @@ class JumpAbility extends UnitAbility
         this.unit = null;
         this.placeX = -1;
         this.placeY = -1;
+        this.target = null;
         super.stop(unit);
     }
 
@@ -450,40 +452,62 @@ class JumpAbility extends UnitAbility
         this.next();
     }
 
-    jump()
+    attack()
     {
-        if(this.placeX < 0 || this.placeY < 0) return;
-        this.unit.features.abilityPoints--;
-        let target = getUnitAtMap(this.placeX, this.placeY);
-        this.unit.setPositionFromMap(this.placeX,this.placeY);
-        if(target != null)
+        if(this.target != null)
         {
-            this.unit.visible = true;
             let damaged = false;
             let killed = false;
-            if(Math.random() <= this.unit.config.abilities.jump.config.damage/(this.unit.config.abilities.jump.config.damage + target.getCurrentFeatures().defense))
+            if(Math.random() <= this.unit.config.abilities.jump.config.damage/(this.unit.config.abilities.jump.config.damage + this.target.getCurrentFeatures().defense))
             {
                 damaged = true;
-                target.features.health--;
-                if(target.features.health <= 0) killed = true;
+                this.target.features.health--;
+                if(this.target.features.health <= 0) killed = true;
             }
-            this.unit.die();
-            pointerBlocked = false;
             if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
             {
                 let config = {hit: true, damaged: false, killed: false};
                 if(killed) config.killed = true;
                 if(damaged) config.damaged = true;
-                cam.startFollow(target);
-                //let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
-                let lm = new LossesAnimationManager(target.scene, 200, 200);
-                lm.playAt(target.x,target.y,target,this,config);
+                cam.startFollow(this.target);
+                let lm = new LossesAnimationManager(this.target.scene, 200, 200);
+                lm.playAt(this.target.x,this.target.y,this.target,this,config);
             }
             else
             {
                 if(killed) target.die();
                 this.next();
             }
+        }
+        else
+        {
+            this.next();
+        }
+    }
+
+    jump()
+    {
+        if(this.placeX < 0 || this.placeY < 0) return;
+        this.unit.features.abilityPoints--;
+        this.target = getUnitAtMap(this.placeX, this.placeY);
+        this.unit.setPositionFromMap(this.placeX,this.placeY);
+        if(this.target != null)
+        {
+            this.unit.visible = true;
+            if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+            {
+                pointerBlocked = false;
+                let config = {hit: false, damaged: false, killed: true};
+                cam.startFollow(this.unit);
+                let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
+                lm.playAt(this.unit.x,this.unit.y,this.unit,this,config);
+            }
+            else
+            {
+                this.unit.die();
+                this.next();
+            }
+           
         }
         else
         {
@@ -500,7 +524,7 @@ class JumpAbility extends UnitAbility
     {
         switch (this.step) {
             case 0:
-                let places = selectPlacesOnLineOfSight(this.unit.mapX, this.unit.mapY, this.unit.config.abilities.jump.config.range, true);
+                let places = selectPlacesOnLineOfSight(this.unit.mapX, this.unit.mapY, this.unit.config.abilities.jump.config.range, true, true);
                 if(this.unit.player.control === PlayerControl.human)
                 {
                     setInteractionScenario(userInteractionScenario.placeSelection);
@@ -528,15 +552,16 @@ class JumpAbility extends UnitAbility
             case 1:
                 this.step++;
                 placeSelector.hide();
+                let pos = map.tileToWorldXY(this.placeX, this.placeY);
+                this.unit.turnTo(pos.x+8,pos.y+8);
                 if(this.unit.checkEntityStepOut())
                 {
                     if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
                     {
                         pointerBlocked = true;
                         this.unit.visible = false;
-                        let pos = map.tileToWorldXY(this.placeX, this.placeY);
-                        let throwAnimation = new ThrowSpellAnimation(this.unit.scene, this.unit.x, this.unit.y);
-                        throwAnimation.playAt(this.unit.x, this.unit.y, pos.x+8, pos.y+8,this);
+                        let jumpAnimation = new JumpAnimation(this.unit.scene, this.unit);
+                        jumpAnimation.playAt(this.unit, pos.x+8, pos.y+8,this);
                     }
                     else
                     {
@@ -555,9 +580,10 @@ class JumpAbility extends UnitAbility
                 this.jump();                      
                 break;
             case 3:
-                //pointerBlocked = false;
-                //cam.stopFollow();
-                //this.unit.die();
+                this.step++;
+                this.attack();                      
+                break;
+            case 4:
                 this.stop(this.unit);
                 return true;
                 break;
