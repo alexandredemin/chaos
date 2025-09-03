@@ -36,7 +36,7 @@ class AIControl
         if(this.availableUnits.length > 0)
         {
             let unit = this.availableUnits.pop();
-            if(unit.died)
+            if(!unit || unit.died)
             {
                 this.pass();
             }
@@ -48,8 +48,8 @@ class AIControl
         }
         else
         {
-            if(this.passStage === 1) {
-                this.passStage = 2;
+            if(this.passStage <= 2) {
+                this.passStage++;
                 for (let i = this.player.units.length - 1; i >= 0; i--) {
                     let unt = this.player.units[i];
                     if (unt.features.move > 0 || unt.features.abilityPoints > 0) this.availableUnits.push(unt);
@@ -157,10 +157,13 @@ class AIControl
             if(unit.aiControl.agression) aggressionFactor = unit.aiControl.agression;
             let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
             let stepPlaces = this.getAvailableCells(dmap,unit,null,true);
-            this.computeAtackMatrix(unit,stepPlaces,dmap);
-            this.computeGasMatrix(unit,stepPlaces);
-            this.computeFireMatrix(unit,stepPlaces);
-            this.computeWebMatrix(unit,stepPlaces);
+            if(unit.features.attackPoints > 0) this.computeAtackMatrix(unit,stepPlaces,dmap);
+            if(unit.features.abilityPoints > 0)
+            {
+                this.computeGasMatrix(unit,stepPlaces);
+                this.computeFireMatrix(unit,stepPlaces);
+                this.computeWebMatrix(unit,stepPlaces);
+            }
             this.computeDangerMatrix(unit,stepPlaces);
             let gDMap = this.getDistanceMap(unit,mainGoal[0],mainGoal[1],null,null,null,0,this.getPenaltyMap(unit,aggressionFactor));
             this.computeDistMatrix(unit,stepPlaces,mainGoal,gDMap);
@@ -189,7 +192,8 @@ class AIControl
             for(let i=0;i<stepPlaces.length;i++)
             {
                 let place = stepPlaces[i];
-                place.bestWeight = place.atackWeight;
+                place.bestWeight = 0;
+                if(place.atackWeight != null && place.atackWeight > 0) place.bestWeight = place.bestWeight + place.atackWeight;
                 if(place.gasWeight != null && place.gasWeight > 0) place.bestWeight = place.bestWeight + place.gasWeight;
                 if(place.fireWeight != null) place.bestWeight = place.bestWeight + place.fireWeight;
                 if(place.webWeight != null && place.webWeight > 0) place.bestWeight = place.bestWeight + place.webWeight;
@@ -286,7 +290,7 @@ class AIControl
                         for(let dx=-1;dx<=1;dx++)
                             if(unit.canAtackTo(dx,dy)===true)
                                 if(trg == null || randomInt(0,1) === 1) trg = [unit.mapX+dx,unit.mapY+dy];
-                    if(trg) unit.atackTo(trg[0], trg[1]);
+                    if(trg && unit.features.attackPoints > 0) unit.atackTo(trg[0], trg[1]);
                     else
                     {
                         unit.aiControl.target = null;
