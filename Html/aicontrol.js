@@ -275,7 +275,7 @@ class AIControl
         {
             if(unit.mapX === unit.aiControl.target[0] && unit.mapY === unit.aiControl.target[1])
             {
-                if(unit.config.abilities && unit.features.abilityPoints > 0)
+                if(unit.config.abilities && unit.features.abilityPoints > 0 && unit.config.name !== "imp")
                 {
                     unit.startAbility();
                 }
