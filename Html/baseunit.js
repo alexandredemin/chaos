@@ -1,4 +1,5 @@
 //---------------------------- BaseUnit class ----------------------------
+/*
 function clone(obj)
 {
     let objClone = {};
@@ -12,6 +13,7 @@ function clone(obj)
     }
     return objClone;
 }
+*/
 
 class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
 {

@@ -22,8 +22,8 @@ class Unit extends BaseUnit
             configName: this.config.name,
             mapX: this.mapX,
             mapY: this.mapY,
-            features: this.features,
-            abilities: this.abilities,
+            features: clone(this.features),
+            abilities: clone(this.abilities),
             playerName: this.player.name,
             states: this.states.map(s => s.serialize())
         };

@@ -14,7 +14,7 @@ class UnitState
     serialize() {
         return {
             name: this.name,
-            data: this.data
+            data: clone(this.data)
         };
     }
   

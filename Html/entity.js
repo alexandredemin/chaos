@@ -16,7 +16,7 @@ class Entity extends BaseUnit
             configName: this.config.name,
             mapX: this.mapX,
             mapY: this.mapY,
-            features: this.features,
+            features: clone(this.features),
         };
     }
   

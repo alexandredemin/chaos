@@ -34,6 +34,22 @@
 <script>
 
     //---------------------------- Global functions ----------------------------
+    function clone(obj) {
+        if (obj === null || typeof obj !== 'object') {
+            return obj;
+        }
+        if (Array.isArray(obj)) {
+            return obj.map(item => clone(item));
+        }
+        let objClone = {};
+        for (let key in obj) {
+            if (obj.hasOwnProperty(key)) {
+            objClone[key] = clone(obj[key]);
+            }
+        }
+        return objClone;
+    }
+    
     const userInteractionScenario = {
         movement: 'movement',
         targetSelection: 'targetSelection',
