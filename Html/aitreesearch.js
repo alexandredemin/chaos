@@ -275,6 +275,7 @@ class FireActionType extends ActionType {
     }
 
     generateActions(state, unit, abilityConfig) {
+        /*
         const actions = [];
         const enemies = state.getEnemyUnits({ name: unit.playerName });
         for (const enemy of enemies) {
@@ -289,6 +290,14 @@ class FireActionType extends ActionType {
                 }));
             }
         }
+        return actions;
+        */
+
+        const actions = [];
+        if(!unit.config.abilities || !unit.config.abilities.fire) return actions;
+        let range = unit.config.abilities.fire.config.range;
+        let fireAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
+
         return actions;
     }
 
