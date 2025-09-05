@@ -1,20 +1,21 @@
 class GameState {
 
-    constructor(unitsData = [], entitiesData = []) {
+    constructor(unitsData = [], entitiesData = [], wallsLayer = null) {
         this.unitsData = unitsData; 
         this.entitiesData = entitiesData;
+        this.wallsLayer = wallsLayer;
     }
 
-    static createFrom(units) {
+    static createFrom(units, entities, wallsLayer) {
         const unitsData = units.map(u => u.serialize());
         const entitiesData = entities.map(e => e.serialize());
-        return new GameState(unitsData, entitiesData);
+        return new GameState(unitsData, entitiesData, wallsLayer);
     }
 
     clone() {
         const clonedUnitsData = clone(this.unitsData);
         const clonedEntitiesData = clone(this.entitiesData);
-        return new GameState(clonedUnitsData, clonedEntitiesData);
+        return new GameState(clonedUnitsData, clonedEntitiesData, this.wallsLayer);
     }
 
     getUnitsByPlayer(player){
@@ -49,6 +50,91 @@ class GameState {
         }
 
         return actions;
+    }
+
+    selectUnits(centerMapX, centerMapY, playerArr, unitArr, radius) {
+        let arr = [];
+        let res = [];
+        if (playerArr == null) {
+            arr = this.unitsData;
+        } else {
+            playerArr.forEach(pl => {
+                arr = arr.concat(this.getUnitsByPlayer(pl));
+            });
+        }
+        arr.forEach(unit => {
+            let fl = true;
+            if (unitArr != null) {
+                if (unitArr.includes(unit.id)) fl = false; // фильтр исключений
+            }
+            if (fl) {
+                if (radius > 0) {
+                    let dX = Math.abs(unit.mapX - centerMapX);
+                    let dY = Math.abs(unit.mapY - centerMapY);
+                    if (dX * dX + dY * dY <= radius * radius) {
+                        res.push(unit);
+                    }
+                } else {
+                    if ((Math.abs(unit.mapX - centerMapX) <= 1) && (Math.abs(unit.mapY - centerMapY) <= 1)) {
+                        res.push(unit);
+                    }
+                }
+            }
+        });
+        return res;
+    }
+
+    checkLineOfSight(x1, y1, x2, y2, onWall, onEntity, onUnit) {
+        if (x1 === x2 && y1 === y2) return true;
+        let xx1 = x1;
+        let xx2 = x2;
+        let yy1 = y1;
+        let yy2 = y2;
+        let invFlag = false;
+        if (Math.abs(y2 - y1) > Math.abs(x2 - x1)) {
+            invFlag = true;
+            xx1 = y1;
+            xx2 = y2;
+            yy1 = x1;
+            yy2 = x2;
+        }
+        let k = (yy2 - yy1) / (xx2 - xx1);
+        let b = yy1 - k * xx1;
+        let dx = 1;
+        if (xx2 < xx1) dx = -1;
+        for (let x = xx1 + dx; x !== xx2; x = x + dx) {
+            let y = Math.round(k * x + b);
+            let resX = x;
+            let resY = y;
+            if (invFlag) {
+                resX = y;
+                resY = x;
+            }
+            // check unit
+            let unit = this.getUnitAt(resX, resY);
+            if (unit != null) {
+                if (onUnit) {
+                    if (onUnit(unit) === false) return false;
+                } else return false;
+            }
+            // check entity
+            let entity = this.entitiesData.find(e => e.mapX === resX && e.mapY === resY);
+            if (entity != null) {
+                if (onEntity) {
+                    if (onEntity(entity) === false) return false;
+                } else return false;
+            }
+            // check wall
+            if (this.wallsLayer) {
+                let wallTile = this.wallsLayer.getTileAt(resX, resY);
+                if (wallTile != null) {
+                    if (onWall) {
+                        if (onWall(wallTile) === false) return false;
+                    } else return false;
+                }
+            }
+        }
+        return true;
     }
 }
 
@@ -260,7 +346,6 @@ class AttackActionType extends ActionType {
             let enemyCurrentFeatures = enemyUnit.features;
             const chance = curFeatures.strength/(curFeatures.strength + enemyCurrentFeatures.defense);
             const expectedDamage = Math.round(chance * 100) / 100;
-            //if(Math.random() <= curFeatures.strength/(curFeatures.strength + enemyCurrentFeatures.defense)) enemyUnit.features.health--;
             enemyUnit.features.health -= expectedDamage;
             // remove enemy unit from state if killed
             if(enemyUnit.features.health <= 0) state.unitsData = state.unitsData.filter(u => u.id !== enemyUnit.id);
@@ -294,21 +379,37 @@ class FireActionType extends ActionType {
         */
 
         const actions = [];
-        if(!unit.config.abilities || !unit.config.abilities.fire) return actions;
-        let range = unit.config.abilities.fire.config.range;
-        let fireAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
-
+        if (unit.features.abilityPoints <= 0) return actions;
+        if (!unit.abilities || !unit.abilities.fire) return actions;
+        const range = unit.abilities.fire.config.range;
+        const targets = state.selectUnits(unit.mapX, unit.mapY, null, [unit.id], range);
+        for (let target of targets) {
+            if (target.playerName !== unit.playerName) {
+                const hasLOS = state.checkLineOfSight(unit.mapX, unit.mapY, target.mapX, target.mapY);
+                if (hasLOS) {
+                    actions.push(new Action(this.name, {
+                        unitId: unit.id,
+                        targetId: target.id
+                    }));
+                }
+            }
+        }
         return actions;
     }
 
     apply(state, action) {
+        const unit = state.unitsData.find(u => u.id === action.params.unitId);
         const target = state.unitsData.find(u => u.id === action.params.targetId);
-        if (target) {
-            target.features.hp -= action.params.damage;
-            if (target.features.hp <= 0) {
-                state.unitsData = state.unitsData.filter(u => u.id !== target.id);
-            }
-        }
+        if (!unit || !target) return;
+        this.unit.features.abilityPoints--;
+        if (unit.features.abilityPoints < 0) unit.features.abilityPoints = 0;
+        const ability = unit.abilities.fire;
+        let enemyCurrentFeatures = target.features; 
+        const chance = unit.abilities.fire.config.damage/(this.unit.abilities.fire.config.damage + enemyCurrentFeatures.defense);
+        const expectedDamage = Math.round(chance * 100) / 100;
+        target.features.health -= expectedDamage;
+        // remove enemy unit from state if killed
+        if(target.features.health <= 0) state.unitsData = state.unitsData.filter(u => u.id !== target.id);
     }
 }
 
