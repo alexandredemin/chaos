@@ -1,4 +1,5 @@
 //---------------------------- Unit class ----------------------------
+let nextUnitId = 1;
 
 class Unit extends BaseUnit
 {
@@ -10,15 +11,18 @@ class Unit extends BaseUnit
     states = [];
     recovered = true;
 
-    constructor(config, scene, x, y, visible=true)
+    constructor(config, scene, x, y, visible=true, id=null)
     {
         super(config, scene, x, y, visible);
+        if(id)this.id = id;
+        else this.id = nextUnitId++;
         this.zOffset = 1;
         this.initAnimations();
     }
   
     serialize() {
         return {
+            id: this.id,
             configName: this.config.name,
             mapX: this.mapX,
             mapY: this.mapY,
@@ -31,7 +35,8 @@ class Unit extends BaseUnit
   
     static deserialize(data, scene, playersMap) {
         const cfg = unitConfigs[data.configName];
-        const u = new Unit(cfg, scene, data.mapX, data.mapY);
+        const u = new Unit(cfg, scene, data.mapX, data.mapY, true, data.id);
+        if(data.id >= nextUnitId) nextUnitId = data.id + 1;
         u.setPositionFromMap(data.mapX, data.mapY);
         for (let key in data.features) {u.features[key] = data.features[key];}
         u.abilities = clone(data.abilities);
