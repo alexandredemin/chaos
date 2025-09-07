@@ -1,3 +1,35 @@
+//---------------------------- Debug classes ----------------------------
+class DebugOverlay {
+    constructor(scene, x = 10, y = 10) {
+        this.scene = scene;
+        this.lines = [];
+        this.textObject = scene.add.text(x, y, "", {
+            fontSize: "14px",
+            fontFamily: "monospace",
+            fill: "#00ff00",
+            align: "left"
+        });
+        this.textObject.setDepth(9999); // Make sure it's on top
+    }
+
+    log(message) {
+        this.lines.push(message);
+        if (this.lines.length > 20) { // max 20 lines
+            this.lines.shift();
+        }
+        this.refresh();
+    }
+
+    clear() {
+        this.lines = [];
+        this.refresh();
+    }
+
+    refresh() {
+        this.textObject.setText(this.lines.join("\n"));
+    }
+}
+
 
 //---------------------------- UI classes ----------------------------
 class TextButton extends Phaser.GameObjects.Text

@@ -524,12 +524,14 @@ class JumpAbility extends UnitAbility
     {
         switch (this.step) {
             case 0:
+                this.unit.scene.debug.log("Jupm ability step 2");
                 let places = selectPlacesOnLineOfSight(this.unit.mapX, this.unit.mapY, this.unit.config.abilities.jump.config.range, true, true);
                 if(this.unit.player.control === PlayerControl.human)
                 {
                     setInteractionScenario(userInteractionScenario.placeSelection);
                     placeSelector.show(places,this);
                     this.step++;
+                    this.unit.scene.debug.log("Show place selector");
                 }
                 else
                 {
@@ -550,6 +552,7 @@ class JumpAbility extends UnitAbility
                 }   
                 break;
             case 1:
+                this.unit.scene.debug.log("Jupm ability step 2");
                 this.step++;
                 placeSelector.hide();
                 let pos = map.tileToWorldXY(this.placeX, this.placeY);
