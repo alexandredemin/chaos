@@ -533,6 +533,7 @@ class JumpAbility extends UnitAbility
                     placeSelector.show(places,this);
                     this.step++;
                     this.unit.scene.debug.log("Show place selector");
+                    if(activeInteractionScenario == userInteractionScenario.placeSelection)this.unit.scene.debug.log("scenario: place selection"); 
                 }
                 else
                 {

@@ -397,6 +397,7 @@ class Unit extends BaseUnit
 
                         if(activeInteractionScenario === userInteractionScenario.placeSelection)
                         {
+                            this.scene.debug.log("Place selection mode: pointer down");
                             if(inAdjacentPlaces && (ind === 4))
                             {
                                 pointerPressed = true;
