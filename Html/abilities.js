@@ -423,6 +423,7 @@ class JumpAbility extends UnitAbility
 
     onCallback()
     {
+        this.unit.scene.debug.log("Jump ability callback");
         cam.stopFollow();
         this.next();
     }

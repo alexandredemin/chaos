@@ -405,6 +405,7 @@ class PlaceSelector
 
     select(x,y)
     {
+        PlaceSelector.scene.debug.log("Place selected: "+x+","+y);
         if(this.callbackObject != null)this.callbackObject.setPlace(x,y);
     }
 }
