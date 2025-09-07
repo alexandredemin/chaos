@@ -405,8 +405,10 @@ class Unit extends BaseUnit
                             }
                             else
                             {
+                                try {
                                 pointerPressed = true;
                                 if(placeSelector.check(mapX,mapY)===true) placeSelector.select(mapX,mapY);
+                                } catch(e) { this.scene.debug.log("Place selector error in unit: "+e);}  
                             }
                         }
                         else if(inAdjacentPlaces)

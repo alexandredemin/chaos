@@ -400,7 +400,10 @@ class PlaceSelector
         try{
         for(let i=0;i<PlaceSelector.places.length;i++)
         {
-            if((PlaceSelector.places[i][0]==x)&&(PlaceSelector.places[i][1]==y))return true;
+            if((PlaceSelector.places[i][0]==x)&&(PlaceSelector.places[i][1]==y)){
+                PlaceSelector.scene.debug.log("Place selector check: true");
+                return true;
+            }
         }
         }
         catch(e){ PlaceSelector.scene.debug.log("Place selector error: "+e); }
