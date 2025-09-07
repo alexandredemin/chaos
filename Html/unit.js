@@ -400,6 +400,7 @@ class Unit extends BaseUnit
                             this.scene.debug.log("Place selection mode: pointer down");
                             if(inAdjacentPlaces && (ind === 4))
                             {
+                                this.scene.debug.log("Place selector cancelled");
                                 pointerPressed = true;
                                 selectedUnit.stopAbility();
                             }
