@@ -64,7 +64,7 @@ var GameScene = new Phaser.Class({
         cam = this.cameras.main;
         resize();
 
-        this.debug = new DebugOverlay(this);
+        //this.debug = new DebugOverlay(this);
           
         startScene.scene.launch('UIScene');
     },

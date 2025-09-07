@@ -423,7 +423,6 @@ class JumpAbility extends UnitAbility
 
     onCallback()
     {
-        this.unit.scene.debug.log("Jump ability callback");
         cam.stopFollow();
         this.next();
     }
@@ -525,15 +524,12 @@ class JumpAbility extends UnitAbility
     {
         switch (this.step) {
             case 0:
-                this.unit.scene.debug.log("Jupm ability step 1");
                 let places = selectPlacesOnLineOfSight(this.unit.mapX, this.unit.mapY, this.unit.config.abilities.jump.config.range, true, true);
                 if(this.unit.player.control === PlayerControl.human)
                 {
                     setInteractionScenario(userInteractionScenario.placeSelection);
                     placeSelector.show(places,this);
                     this.step++;
-                    this.unit.scene.debug.log("Show place selector");
-                    if(activeInteractionScenario == userInteractionScenario.placeSelection)this.unit.scene.debug.log("scenario: place selection"); 
                 }
                 else
                 {
@@ -554,7 +550,6 @@ class JumpAbility extends UnitAbility
                 }   
                 break;
             case 1:
-                this.unit.scene.debug.log("Jupm ability step 2");
                 this.step++;
                 placeSelector.hide();
                 let pos = map.tileToWorldXY(this.placeX, this.placeY);

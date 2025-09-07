@@ -397,24 +397,15 @@ class Unit extends BaseUnit
 
                         if(activeInteractionScenario === userInteractionScenario.placeSelection)
                         {
-                            this.scene.debug.log("Place selection mode: pointer down (v1)");
                             if(inAdjacentPlaces && (ind === 4))
                             {
-                                this.scene.debug.log("Place selector cancelled");
                                 pointerPressed = true;
                                 selectedUnit.stopAbility();
                             }
                             else
                             {
-                                try {
                                 pointerPressed = true;
                                 if(placeSelector.check(mapX,mapY)===true) placeSelector.select(mapX,mapY);
-                                } catch(e) { 
-                                    this.scene.debug.log("Place selector error in unit: "+e);
-                                    if (e.stack) {
-                                        this.debug.log(e.stack);
-                                    }
-                                }  
                             }
                         }
                         else if(inAdjacentPlaces)
