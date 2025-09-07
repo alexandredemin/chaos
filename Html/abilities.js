@@ -556,7 +556,7 @@ class JumpAbility extends UnitAbility
                 this.unit.turnTo(pos.x+8,pos.y+8);
                 if(this.unit.checkEntityStepOut())
                 {
-                    if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
+                    if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
                     {
                         pointerBlocked = true;
                         this.unit.visible = false;

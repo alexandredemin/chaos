@@ -402,8 +402,8 @@ const spellConfigs = {
         type: 'summon',
         icon: 'bat',
         scale: 2.0,
-        description: 'Summon bat.\nCost 3',
-        cost: 3,
+        description: 'Summon bat.\nCost 2',
+        cost: 2,
     },
     'spider': {
         id: 'spider',
