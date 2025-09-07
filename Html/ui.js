@@ -397,10 +397,13 @@ class PlaceSelector
     check(x,y)
     {
         PlaceSelector.scene.debug.log("Place selector check: "+x+","+y);
+        try{
         for(let i=0;i<PlaceSelector.places.length;i++)
         {
             if((PlaceSelector.places[i][0]==x)&&(PlaceSelector.places[i][1]==y))return true;
         }
+        }
+        catch(e){ PlaceSelector.scene.debug.log("Place selector error: "+e); }
         return false;
     }
 
