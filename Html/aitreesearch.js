@@ -160,7 +160,7 @@ class ActionType {
         throw new Error("generateActions must be implemented");
     }
 
-    apply(state, action) {
+    apply(state, action, evaluator = null) {
         throw new Error("apply must be implemented");
     }
 }
@@ -192,7 +192,7 @@ class StopActionType extends ActionType {
         return [ new Action(this.name, { unitId: unit.id }) ];
     }
 
-    apply(state, action) {
+    apply(state, action, evaluator = null) {
         //do nothing
     }
 }
@@ -237,7 +237,7 @@ class MoveActionType extends ActionType {
         return actions;
     }
 
-    apply(state, action) {
+    apply(state, action, evaluator = null) {
         const unit = state.unitsData.find(u => u.id === action.params.unitId);
         if (unit) {
             // Check if can step out from current tile
@@ -305,7 +305,7 @@ class AttackActionType extends ActionType {
         return actions;
     }
 
-    apply(state, action) {
+    apply(state, action, evaluator = null) {
         const unit = state.unitsData.find(u => u.id === action.params.unitId);
         if (unit) {
             // Check if can step out from current tile
@@ -347,8 +347,16 @@ class AttackActionType extends ActionType {
             const chance = curFeatures.strength/(curFeatures.strength + enemyCurrentFeatures.defense);
             const expectedDamage = Math.round(chance * 100) / 100;
             enemyUnit.features.health -= expectedDamage;
+            if (evaluator) {
+                evaluator.addDamageDealt(expectedDamage);
+            }
             // remove enemy unit from state if killed
-            if(enemyUnit.features.health <= 0) state.unitsData = state.unitsData.filter(u => u.id !== enemyUnit.id);
+            if(enemyUnit.features.health <= 0){
+                state.unitsData = state.unitsData.filter(u => u.id !== enemyUnit.id);
+                if (evaluator) {
+                    evaluator.addUnitKilled(target);
+                }
+            }
         }
     }
 }
@@ -360,24 +368,6 @@ class FireActionType extends ActionType {
     }
 
     generateActions(state, unit, abilityConfig) {
-        /*
-        const actions = [];
-        const enemies = state.getEnemyUnits({ name: unit.playerName });
-        for (const enemy of enemies) {
-            const dx = unit.mapX - enemy.mapX;
-            const dy = unit.mapY - enemy.mapY;
-            const dist = Math.abs(dx) + Math.abs(dy);
-            if (dist <= abilityConfig.range) {
-                actions.push(new Action(this.name, {
-                    casterId: unit.id,
-                    targetId: enemy.id,
-                    damage: abilityConfig.damage
-                }));
-            }
-        }
-        return actions;
-        */
-
         const actions = [];
         if (unit.features.abilityPoints <= 0) return actions;
         if (!unit.abilities || !unit.abilities.fire) return actions;
@@ -397,28 +387,102 @@ class FireActionType extends ActionType {
         return actions;
     }
 
-    apply(state, action) {
+    apply(state, action, evaluator = null) {
         const unit = state.unitsData.find(u => u.id === action.params.unitId);
         const target = state.unitsData.find(u => u.id === action.params.targetId);
         if (!unit || !target) return;
-        this.unit.features.abilityPoints--;
-        if (unit.features.abilityPoints < 0) unit.features.abilityPoints = 0;
+        unit.features.abilityPoints = Math.max(0, unit.features.abilityPoints - 1);
         const ability = unit.abilities.fire;
-        let enemyCurrentFeatures = target.features; 
-        const chance = unit.abilities.fire.config.damage/(this.unit.abilities.fire.config.damage + enemyCurrentFeatures.defense);
-        const expectedDamage = Math.round(chance * 100) / 100;
+        const enemyCurrentFeatures = target.features; 
+        const chance = ability.config.damage / (ability.config.damage + enemyCurrentFeatures.defense);
+        const expectedDamage = Math.round((chance * 100) / 100;
         target.features.health -= expectedDamage;
-        // remove enemy unit from state if killed
-        if(target.features.health <= 0) state.unitsData = state.unitsData.filter(u => u.id !== target.id);
+        if (evaluator) {
+            evaluator.addDamageDealt(expectedDamage);
+        }
+        // remove target if killed
+        if (target.features.health <= 0) {
+            state.unitsData = state.unitsData.filter(u => u.id !== target.id);
+            if (evaluator) {
+                evaluator.addUnitKilled(target);
+            }
+        }
+    }
+}
+
+//--------- Evaluator --------
+class Evaluator {
+    constructor(initialState, playerName) {
+        this.playerName = playerName;
+
+        // cumulated metrics
+        this.damageDealt = 0;
+        this.damageTaken = 0;
+        this.unitsKilled = 0;
+        this.unitsLost = 0;
+
+        this.initialState = initialState.clone();
+    }
+
+    addDamageDealt(amount) {
+        this.damageDealt += amount;
+    }
+
+    addDamageTaken(amount) {
+        this.damageTaken += amount;
+    }
+
+    addUnitKilled(unit) {
+        this.unitsKilled += 1;
+    }
+
+    addUnitLost(unit) {
+        this.unitsLost += 1;
+    }
+
+    finalize(finalState) {
+        /*
+        const initUnits = this.initialState.unitsData;
+        const finalUnits = finalState.unitsData;
+        // сравниваем здоровье
+        for (let initUnit of initUnits) {
+            const finalUnit = finalUnits.find(u => u.id === initUnit.id);
+            if (!finalUnit) {
+                // юнит погиб
+                if (initUnit.playerName === this.playerName) {
+                    this.unitsLost += 1;
+                } else {
+                    this.unitsKilled += 1;
+                }
+            } else {
+                const diff = initUnit.features.health - finalUnit.features.health;
+                if (diff > 0) {
+                    if (initUnit.playerName === this.playerName) {
+                        this.damageTaken += diff;
+                    } else {
+                        this.damageDealt += diff;
+                    }
+                }
+            }
+        }
+        */
+
+        const score =
+            this.damageDealt * 2 -
+            this.damageTaken * 1.5 -
+            this.unitsKilled * 5 -
+            this.unitsLost * 5;
+
+        return Math.round(score * 100) / 100;
     }
 }
 
 //-------- Search --------
-function planBestTurn(state, unit, evaluateFunction) {
+function planBestTurn(state, unit) {
     let bestSequence = [];
     let bestScore = -Infinity;
 
-    function dfs(currentState, currentUnit, sequence) {
+    function dfs(currentState, currentUnit, sequence, evaluator) {
         const actions = currentState.getAvailableActionsForUnit(currentUnit);
         let hasAnyAction = false;
 
@@ -427,10 +491,10 @@ function planBestTurn(state, unit, evaluateFunction) {
             if (!actionType) continue;
 
             // check action points
-            if (action.typeName === "move" && currentUnit.features.move <= 0) continue;
-            if (action.typeName !== "move" && action.typeName !== "stop" && currentUnit.features.abilityPoints <= 0) continue;
+            if ((action.typeName === "move" || action.typeName === "attack") && currentUnit.features.move <= 0) continue;
+            if ((action.typeName !== "move" && action.typeName !== "attack" && action.typeName !== "stop") && currentUnit.features.abilityPoints <= 0) continue;
 
-            //check repeating moves
+            // check repeating moves
             if (action.typeName === "move") {
                 const pos = action.params.position;
                 if(sequence.length > 0 && sequence[sequence.length - 1].typeName === "move") {
@@ -442,18 +506,25 @@ function planBestTurn(state, unit, evaluateFunction) {
             }
 
             hasAnyAction = true;
-            const nextState = currentState.clone();
-            actionType.apply(nextState, action);
 
-            // find the corresponding unit in the new state
+            // clone state and evaluator
+            const nextState = currentState.clone();
+            const nextEvaluator = Object.assign(
+            Object.create(Object.getPrototypeOf(evaluator)), clone(evaluator));
+
+            // apply action
+            actionType.apply(nextState, action, nextEvaluator);
+
+            // find the updated unit in the new state
             const nextUnit = nextState.unitsData.find(u => u.id === currentUnit.id);
+
             // recurse step
-            dfs(nextState, nextUnit, sequence.concat(action));
+            dfs(nextState, nextUnit, sequence.concat(action), nextEvaluator);
         }
 
-        // evaluate if no actions left
+        // if no actions left, evaluate the state
         if (!hasAnyAction) {
-            const score = evaluateFunction(currentState, unit.playerName);
+            const score = evaluator.finalize(currentState);
             if (score > bestScore) {
                 bestScore = score;
                 bestSequence = sequence;
@@ -461,6 +532,8 @@ function planBestTurn(state, unit, evaluateFunction) {
         }
     }
 
-    dfs(state.clone(), unit, unit.features.move, unit.features.abilityPoints, []);
+    const evaluator = new Evaluator(state, unit.playerName);
+    dfs(state.clone(), unit, [], evaluator);
+
     return { sequence: bestSequence, score: bestScore };
 }
