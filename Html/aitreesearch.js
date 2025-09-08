@@ -395,7 +395,7 @@ class FireActionType extends ActionType {
         const ability = unit.abilities.fire;
         const enemyCurrentFeatures = target.features; 
         const chance = ability.config.damage / (ability.config.damage + enemyCurrentFeatures.defense);
-        const expectedDamage = Math.round((chance * 100) / 100;
+        const expectedDamage = Math.round(chance * 100) / 100;
         target.features.health -= expectedDamage;
         if (evaluator) {
             evaluator.addDamageDealt(expectedDamage);
