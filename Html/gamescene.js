@@ -51,6 +51,8 @@ var GameScene = new Phaser.Class({
         abilities['web'] = new WebAbility();
         abilities['jump'] = new JumpAbility();
 
+        initActionRegistry();
+
         grayScalePipeline = this.renderer.pipelines.get('Gray');
         customPipeline = this.renderer.pipelines.get('Custom');
         customPipeline.set1f('alpha', 1.0);

@@ -65,7 +65,7 @@ class GameState {
         arr.forEach(unit => {
             let fl = true;
             if (unitArr != null) {
-                if (unitArr.includes(unit.id)) fl = false; // фильтр исключений
+                if (unitArr.includes(unit.id)) fl = false; // filter of excluded units
             }
             if (fl) {
                 if (radius > 0) {
@@ -440,7 +440,7 @@ class Evaluator {
         this.unitsLost += 1;
     }
 
-    finalize(finalState) {
+    finalize(finalState, order) {
         /*
         const initUnits = this.initialState.unitsData;
         const finalUnits = finalState.unitsData;
@@ -465,13 +465,29 @@ class Evaluator {
                 }
             }
         }
-        */
-
+        
         const score =
             this.damageDealt * 2 -
             this.damageTaken * 1.5 -
             this.unitsKilled * 5 -
             this.unitsLost * 5;
+
+        */
+        let score = 0;
+        switch(order) {
+            case 'attack':
+            {
+                break;
+            }
+            case 'intercept':
+            {
+                break;
+            }
+            case 'patrol':
+            {
+                break;
+            }
+        }
 
         return Math.round(score * 100) / 100;
     }
@@ -536,4 +552,12 @@ function planBestTurn(state, unit) {
     dfs(state.clone(), unit, [], evaluator);
 
     return { sequence: bestSequence, score: bestScore };
+}
+
+//---------initialization---------
+function initActionRegistry(){
+    ActionRegistry.register(new StopActionType());
+    ActionRegistry.register(new MoveActionType());
+    ActionRegistry.register(new AttackActionType());
+    ActionRegistry.register(new FireActionType());
 }
