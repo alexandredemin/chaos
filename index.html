@@ -428,7 +428,10 @@
             players[playerInd].icons = [];
         }
         //-
-        setInteractionScenario(userInteractionScenario.movement);
+        if (gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human) {
+            setInteractionScenario(userInteractionScenario.movement);
+            if(selectedUnit != null)selectedUnit.resetPipeline();
+        }
         console.log('end turn');
         console.log('prev player ' + playerInd);
         playerInd++;
