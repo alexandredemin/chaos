@@ -18,6 +18,14 @@ class GameState {
         return new GameState(clonedUnitsData, clonedEntitiesData, this.wallsLayer);
     }
 
+    get mapWidth() {
+        return this.wallsLayer ? this.wallsLayer.tilemap.width : 0;
+    }
+
+    get mapHeight() {
+        return this.wallsLayer ? this.wallsLayer.tilemap.height : 0;
+    }
+
     getUnitsByPlayer(player){
         return this.unitsData.filter(u => u.playerName === player.name);
     }
@@ -28,6 +36,10 @@ class GameState {
 
     getUnitAt(x, y) {
         return this.unitsData.find(u => u.mapX === x && u.mapY === y);
+    }
+
+    getEntityAt(x, y) {
+        return this.entitiesData.find(e => e.mapX === x && e.mapY === y);
     }
 
     getAvailableActionsForUnit(unit) {
@@ -136,6 +148,74 @@ class GameState {
         }
         return true;
     }
+
+    getDistanceMap(unit, startX, startY, onEntity, onUnit, onCell, maxDist = 0, penaltyMap = null) {
+        const distMap = Array.from({ length: this.mapHeight }, () => Array(this.mapWidth).fill(-1));
+        const cellInd = Array.from({ length: this.mapHeight }, () => Array(this.mapWidth).fill(-1));
+        let startCost = 0;
+        let border = [[startX, startY, startCost]];
+        distMap[startY][startX] = startCost;
+        while (border.length > 0) {
+            let border2 = [];
+            for (let cell of border) {
+                cellInd[cell[1]][cell[0]] = -10;
+            }
+            while (border.length > 0) {
+                const cell = border.pop();
+                for (let yy = cell[1] - 1; yy <= cell[1] + 1; yy++) {
+                    for (let xx = cell[0] - 1; xx <= cell[0] + 1; xx++) {
+                        if (xx < 0 || xx >= this.mapWidth || yy < 0 || yy >= this.mapHeight) continue;
+                        if (xx === cell[0] && yy === cell[1]) continue;
+                        if (cellInd[yy][xx] < -1) continue;
+                        let d = 1;
+                        // walls
+                        let wallTile = this.wallsLayer ? this.wallsLayer.getTileAt(xx, yy) : null;
+                        if (wallTile != null) continue;
+                        // units
+                        let unt = this.getUnitAt(xx, yy);
+                        if (unt != null && !unt.died) {
+                            if (onUnit) {
+                                if (onUnit(unt) === false) continue;
+                            } else {
+                                if (unt.playerName === unit.playerName) {
+                                    d += unit.features.move;
+                                } else {
+                                    // it is better to change this value according to expectations of time to kill enemy unit
+                                    d += unt.features.health * unit.features.move;
+                                }
+                            }
+                        }
+                        // entities
+                        let entity = this.getEntityAt(xx, yy);
+                        if (entity != null) {
+                            if (onEntity) {
+                                if (onEntity(entity) === false) continue;
+                            } else {
+                                d += Math.floor(entity.evaluateStep(unit) + 0.5) * unit.features.move;
+                            }
+                        }
+                        if (onCell && onCell([xx, yy]) === false) continue;
+                        if (penaltyMap) {
+                            d += penaltyMap[yy][xx];
+                        }
+                        const newDist = cell[2] + d;
+                        if (distMap[yy][xx] > -1 && newDist >= distMap[yy][xx]) continue;
+                        if (maxDist > 0 && newDist > startCost + maxDist) continue;
+                        if (cellInd[yy][xx] >= 0) {
+                            border2[cellInd[yy][xx]][2] = newDist;
+                        } else {
+                            border2.push([xx, yy, newDist]);
+                            cellInd[yy][xx] = border2.length - 1;
+                        }
+                        distMap[yy][xx] = newDist;
+                    }
+                }
+            }
+            border = border2;
+        }
+        return distMap;
+    }
+    
 }
 
 
@@ -553,6 +633,8 @@ function planBestTurn(state, unit) {
 
     return { sequence: bestSequence, score: bestScore };
 }
+
+//---------auxiliary functions---------
 
 //---------initialization---------
 function initActionRegistry(){
