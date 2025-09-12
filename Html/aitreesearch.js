@@ -1,9 +1,12 @@
 class GameState {
 
-    constructor(unitsData = [], entitiesData = [], wallsLayer = null) {
+    constructor(unitsData = [], entitiesData = [], wallsLayer = null, sharedCache = null) {
         this.unitsData = unitsData; 
         this.entitiesData = entitiesData;
         this.wallsLayer = wallsLayer;
+
+        // if sharedCache is provided, use it; otherwise, create a new one
+        this._distanceMapCache = sharedCache ?? new Map(); // unitId -> distMap
     }
 
     static createFrom(units, entities, wallsLayer) {
@@ -12,10 +15,15 @@ class GameState {
         return new GameState(unitsData, entitiesData, wallsLayer);
     }
 
-    clone() {
+    clone(useSharedCache = false) {
         const clonedUnitsData = clone(this.unitsData);
         const clonedEntitiesData = clone(this.entitiesData);
-        return new GameState(clonedUnitsData, clonedEntitiesData, this.wallsLayer);
+        const newCache = useSharedCache ? this._distanceMapCache : null;
+        return new GameState(clonedUnitsData, clonedEntitiesData, this.wallsLayer, newCache);
+    }
+
+    clearCache() {
+        this._distanceMapCache.clear();
     }
 
     get mapWidth() {
@@ -40,6 +48,11 @@ class GameState {
 
     getEntityAt(x, y) {
         return this.entitiesData.find(e => e.mapX === x && e.mapY === y);
+    }
+
+    static hasState(unit, stateName) {
+        if (!unit || !unit.states) return false;
+        return unit.states.some(s => s.name === stateName);
     }
 
     getAvailableActionsForUnit(unit) {
@@ -215,6 +228,56 @@ class GameState {
         }
         return distMap;
     }
+
+    getDistanceMapCached(unit, ignoreUnits = []) {
+        const cacheKey = unit.id + "|" + ignoreUnits.map(u => u.id).join(",");
+        if (!this._distanceMapCache.has(cacheKey)) {
+            const distMap = this.getDistanceMap(unit, unit.mapX, unit.mapY, null, (u) => {
+                return !ignoreUnits.includes(u);
+            });
+            this._distanceMapCache.set(cacheKey, distMap);
+        }
+        return this._distanceMapCache.get(cacheKey);
+    }
+
+    getCellDanger(x, y, playerName, ignoreUnits = []) {
+        let danger = 0;
+        for (const enemy of this.unitsData) {
+            if (enemy.playerName === playerName || ignoreUnits.includes(enemy)) continue;
+            const distMap = this.getDistanceMapCached(enemy, ignoreUnits);
+            const dist = distMap[y]?.[x];
+            if (dist == null || dist < 0) continue;
+             const moveRange = enemy.config.features.move
+            // melee attacks
+            if (dist <= moveRange) {
+                danger += enemy.features.strength;
+            }
+            // ranged attacks
+            if (enemy.abilities) {
+                for (const abilityName in enemy.abilities) {
+                    const ability = enemy.abilities[abilityName];
+                    if(ability.config.range){
+                        const abilityRange = ability.config.range;
+                        if(Math.abs(enemy.mapX - x) > moveRange + abilityRange || Math.abs(enemy.mapY - y) > moveRange + abilityRange) continue;           
+                        for (let yy = Math.max(0, enemy.mapY - moveRange); yy <= Math.min(this.mapHeight - 1, enemy.mapY + moveRange); yy++) {
+                            for (let xx = Math.max(0, enemy.mapX - moveRange); xx <= Math.min(this.mapWidth - 1, enemy.mapY + moveRange); xx++) {
+                                const dist = distMap[yy]?.[xx];
+                                if (dist < 0 || dist > moveRange) continue;
+                                const dx = xx - x;
+                                const dy = yy - y;
+                                const distSq = dx * dx + dy * dy;
+                                if (distSq <= abilityRange * abilityRange) {
+                                    if(ability.type === "fire" && !this.checkLineOfSight(xx, yy, x, y)) continue;
+                                    dangerScore += ability.config.damage;
+                                }
+                            }
+                        }
+                    }    
+                }
+            }
+        }
+        return danger;
+    }
     
 }
 
@@ -338,6 +401,12 @@ class MoveActionType extends ActionType {
             unit.mapY = action.params.position.y;
             unit.features.move -= 1;
             if(unit.features.move < 0)unit.features.move = 0;
+            // 
+            if (evaluator) {
+                if(GameState.hasState(unit, "infected")){
+                    //evaluator.addDamageDealt(expectedDamage);
+                }
+            }
             //
             /*
             let ent = Entity.getEntityAtMap(unit.mapX,unit.mapY);
@@ -554,7 +623,7 @@ class Evaluator {
 
         */
         let score = 0;
-        switch(order) {
+        switch(order.type) {
             case 'attack':
             {
                 break;
@@ -574,7 +643,7 @@ class Evaluator {
 }
 
 //-------- Search --------
-function planBestTurn(state, unit) {
+function planBestTurn(state, unit, order) {
     let bestSequence = [];
     let bestScore = -Infinity;
 
@@ -604,7 +673,7 @@ function planBestTurn(state, unit) {
             hasAnyAction = true;
 
             // clone state and evaluator
-            const nextState = currentState.clone();
+            const nextState = currentState.clone(true);
             const nextEvaluator = Object.assign(
             Object.create(Object.getPrototypeOf(evaluator)), clone(evaluator));
 
@@ -620,7 +689,7 @@ function planBestTurn(state, unit) {
 
         // if no actions left, evaluate the state
         if (!hasAnyAction) {
-            const score = evaluator.finalize(currentState);
+            const score = evaluator.finalize(currentState, order);
             if (score > bestScore) {
                 bestScore = score;
                 bestSequence = sequence;
@@ -629,7 +698,7 @@ function planBestTurn(state, unit) {
     }
 
     const evaluator = new Evaluator(state, unit.playerName);
-    dfs(state.clone(), unit, [], evaluator);
+    dfs(state.clone(true), unit, [], evaluator);
 
     return { sequence: bestSequence, score: bestScore };
 }
