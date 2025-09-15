@@ -497,14 +497,14 @@ class AttackActionType extends ActionType {
             const expectedDamage = Math.round(chance * 100) / 100;
             enemyUnit.features.health -= expectedDamage;
             if (evaluator) {
-                evaluator.addDamageDealt(expectedDamage);
+                evaluator.addDamageDealt(expectedDamage, enemyUnit.id);
             }
             // remove enemy unit from state if killed
             if(enemyUnit.features.health <= 0){
-                state.unitsData = state.unitsData.filter(u => u.id !== enemyUnit.id);
                 if (evaluator) {
-                    evaluator.addUnitKilled(target);
+                    evaluator.addUnitKilled(enemyUnit.id);
                 }
+                state.unitsData = state.unitsData.filter(u => u.id !== enemyUnit.id);
             }
         }
     }
@@ -547,46 +547,69 @@ class FireActionType extends ActionType {
         const expectedDamage = Math.round(chance * 100) / 100;
         target.features.health -= expectedDamage;
         if (evaluator) {
-            evaluator.addDamageDealt(expectedDamage);
+            evaluator.addDamageDealt(expectedDamage, target.id);
         }
         // remove target if killed
         if (target.features.health <= 0) {
-            state.unitsData = state.unitsData.filter(u => u.id !== target.id);
             if (evaluator) {
-                evaluator.addUnitKilled(target);
+                evaluator.addUnitKilled(target, target.id);
             }
+            state.unitsData = state.unitsData.filter(u => u.id !== target.id);
         }
     }
 }
 
 //--------- Evaluator --------
 class Evaluator {
-    constructor(initialState, playerName) {
+    constructor(initialState, playerName, unitId) {
         this.playerName = playerName;
+        this.unitId = unitId;
 
         // cumulated metrics
         this.damageDealt = 0;
         this.damageTaken = 0;
-        this.unitsKilled = 0;
         this.unitsLost = 0;
+
+        // damage by unit : { unitId: damage }
+        this.damageByUnit = {};
+        // array of killed units ids
+        this.unitsKilled = [];
 
         this.initialState = initialState.clone();
     }
 
-    addDamageDealt(amount) {
+    addDamageDealt(amount, targetUnitId = null) {
         this.damageDealt += amount;
+        if (targetUnitId) {
+            if (!this.damageByUnit[targetUnitId]) {
+                this.damageByUnit[targetUnitId] = 0;
+            }
+            this.damageByUnit[targetUnitId] += amount;
+        }
     }
 
     addDamageTaken(amount) {
         this.damageTaken += amount;
     }
 
-    addUnitKilled(unit) {
-        this.unitsKilled += 1;
+    addUnitKilled(targetUnitId) {
+        if (!this.unitsKilled.includes(targetUnitId)) {
+            this.unitsKilled.push(targetUnitId);
+        }
     }
 
     addUnitLost(unit) {
         this.unitsLost += 1;
+    }
+
+    // get damage dealt to a specific unit
+    getDamageToUnit(unitId) {
+        return this.damageByUnit[unitId] || 0;
+    }
+
+    // check if a specific unit was killed
+    hasKilledUnit(unitId) {
+        return this.unitsKilled.includes(unitId);
     }
 
     finalize(finalState, order) {
@@ -622,6 +645,8 @@ class Evaluator {
             this.unitsLost * 5;
 
         */
+        
+        const unit = finalState.unitsData.find(u => u.id === this.unitId);
         let score = 0;
         switch(order.type) {
             case 'attack':
@@ -630,6 +655,7 @@ class Evaluator {
             }
             case 'intercept':
             {
+                score = this.evaluateIntersection(finalState, unit, order); 
                 break;
             }
             case 'patrol':
@@ -639,6 +665,66 @@ class Evaluator {
         }
 
         return Math.round(score * 100) / 100;
+    }
+
+    evaluateIntersection(state, unit, order) {
+        const target = state.unitsData.find(u => u.id === order.targetId);
+        // find my wizard
+        const myUnits = state.getUnitsByPlayer({ name: unit.playerName }) || [];
+        const myWizard = myUnits.find(u => u.configName === "wizard");
+        // distance from my unit to target
+        const dmUnit = state.getDistanceMapCached(unit);
+        const distUnitToTarget = (dmUnit && target) ? dmUnit[target.mapY]?.[target.mapX] : -1;
+        // distance from my unit to my wizard
+        const distUnitToWizard = (dmUnit && myWizard) ? dmUnit[myWizard.mapY]?.[myWizard.mapX] : -1;
+        // distance from target to my wizard
+        const dmTarget = state.getDistanceMapCached(target);
+        const distTargetToWizard = (dmTarget && myWizard) ? dmTarget[myWizard.mapY]?.[myWizard.mapX] : -1;
+        // check if unit is on the path from target to my wizard
+        // simple heuristic: dist(target->unit) + dist(unit->wizard) ≈ dist(target->wizard)
+        let onPathBonus = 0;
+        if(distUnitToTarget >= 0 && distUnitToWizard >= 0 && distTargetToWizard >= 0) {
+            onPathBonus = - Math.abs((distUnitToTarget + distUnitToWizard) - distTargetToWizard);
+        }
+        // danger at unit's position
+        const danger = state.getCellDanger(unit.mapX, unit.mapY, unit.playerName, /* ignoreUnits: none */ []);
+        
+        // final score calculation
+        const W_TARGET_DAMAGE = 1.5; // weight for target damage
+        const MIN_DANGER_FACTOR = 0.2;   // minimal penalty for danger when close to my wizard
+        const MAX_DANGER_FACTOR = 3.0;   // maximal penalty for danger when far from my wizard
+        const MAX_INFLUENCE_DIST = 12;   // distance where danger penalty is maximal
+
+        let score = 0;
+        // 1) reward for damage
+        let totalDamage = evaluator.damageDealt;
+        let targetDamage = evaluator.getDamageToUnit(target.id);
+        // reward for damage to the target, more weight
+        if (targetDamage > 0) {
+            totalDamage += targetDamage * W_TARGET_DAMAGE;
+        }
+        // maximal reward for killing the target
+        if (evaluator.hasKilledUnit(target.id)) {
+            score += 1000;
+        }
+        score += totalDamage;
+        // 2) penalty for deviation from the path
+        score += onPathBonus;
+        // 3) penalty for danger, more penalty if far from my wizard
+        let dangerPenalty = 0;
+        if (distTargetToWizard < 0) {
+            const dangerFactor = MAX_DANGER_FACTOR;
+            dangerPenalty = danger * dangerFactor;
+        } 
+        else {
+            // normalize distance to [0..1]
+            const t = Math.max(0, Math.min(distTargetToWizard / MAX_INFLUENCE_DIST, 1));
+            const dangerFactor = MIN_DANGER_FACTOR + t * (MAX_DANGER_FACTOR - MIN_DANGER_FACTOR);
+            dangerPenalty = danger * dangerFactor;
+        }
+        score -= dangerPenalty;
+
+        return score;
     }
 }
 
@@ -697,7 +783,7 @@ function planBestTurn(state, unit, order) {
         }
     }
 
-    const evaluator = new Evaluator(state, unit.playerName);
+    const evaluator = new Evaluator(state, unit.playerName, unit.id);
     dfs(state.clone(true), unit, [], evaluator);
 
     return { sequence: bestSequence, score: bestScore };
