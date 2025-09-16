@@ -655,7 +655,7 @@ class Evaluator {
             }
             case 'intercept':
             {
-                score = this.evaluateIntersection(finalState, unit, order); 
+                score = this.evaluateInterception(finalState, unit, order); 
                 break;
             }
             case 'patrol':
@@ -667,7 +667,7 @@ class Evaluator {
         return Math.round(score * 100) / 100;
     }
 
-    evaluateIntersection(state, unit, order) {
+    evaluateInterception(state, unit, order) {
         const target = state.unitsData.find(u => u.id === order.targetId);
         // find my wizard
         const myUnits = state.getUnitsByPlayer({ name: unit.playerName }) || [];
