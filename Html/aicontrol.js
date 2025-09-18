@@ -78,6 +78,69 @@ class AIControl
         this.stepUnit(unit);
     }
 
+    stepByPlan(unit)
+    {
+        //if(!unit.aiControl) unit.aiControl = {plan: null};
+        //if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died)
+        if(!unit.aiControl.plan){
+            state = GameState.createFrom(units, entities, wallsLayer); 
+            const order = {
+                type: "intercept",
+                targetId: unit.aiControl.mainTarget.id
+            };
+            const { sequence, score } = planBestTurn(state, unit, order);
+            unit.aiControl.plan = sequence;
+            //+log
+            console.log(unit.config.name + " " + order.type + " plan: " + sequence.map(a => a.getName()));
+            //-
+        }
+        if(unit.aiControl.plan && unit.aiControl.plan.length > 0)
+        {
+            let action = unit.aiControl.plan.shift();
+            if(action)
+            {
+                switch(action.type){
+                    case "stop":
+                    {
+                        unit.aiControl.plan = null;
+                        this.pass();
+                        break;
+                    }
+                    case "move":
+                    {
+                        if(unit.canStepTo(action.position.x-unit.mapX,action.position.y-unit.mapY)){                     
+                            unit.stepTo(action.position.x,action.position.y);
+                        }
+                        else{
+                            unit.aiControl.plan = null;
+                            this.step(unit);
+                        }
+                        break;
+                    }
+                    case "attack":
+                    {
+                        if(unit.canAtackTo(action.position.x-unit.mapX,action.position.y-unit.mapY)){
+                            unit.atackTo(action.position.x,action.position.y);
+                        }
+                        else{
+                            unit.aiControl.plan = null;
+                            this.step(unit);
+                        }
+                        break;
+                    }
+                    case "fire":
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        else{
+            unit.aiControl.plan = null;
+            this.pass();
+        }
+    }
+
     stepToTarget(unit,target,dmap)
     {
         if(!dmap) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
