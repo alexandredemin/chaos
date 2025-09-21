@@ -75,7 +75,12 @@ class AIControl
             this.stepWizard(unit);
             return;
         }
-        this.stepUnit(unit);
+        //if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died){
+        //    this.stepByPlan(unit);
+        //}
+        //else{
+            this.stepUnit(unit);
+        //}
     }
 
     stepByPlan(unit)
@@ -99,6 +104,7 @@ class AIControl
             let action = unit.aiControl.plan.shift();
             if(action)
             {
+                unit.aiControl.action = action;
                 switch(action.type){
                     case "stop":
                     {
@@ -130,6 +136,7 @@ class AIControl
                     }
                     case "fire":
                     {
+                        unit.startAbility();
                         break;
                     }
                 }
@@ -688,10 +695,15 @@ class AIControl
     selectFireTarget(unit,targets)
     {
         let res = null;
-        targets.forEach(trg => {
-            if(trg === trg.player.wizard) return trg;
-            if(!res || (trg.features.strength > res.features.strength || (trg.features.strength === res.features.strength && randomInt(0,1) === 1))) res = trg;
-        });
+        if(unit.aiControl && unit.aiControl.action && unit.aiControl.action.type === "fire" && unit.aiControl.action.targetId){
+            for(let trg of targets) if(trg.id === unit.aiControl.action.targetId) return trg;
+        }
+        else{
+            targets.forEach(trg => {
+                if(trg === trg.player.wizard) return trg;
+                if(!res || (trg.features.strength > res.features.strength || (trg.features.strength === res.features.strength && randomInt(0,1) === 1))) res = trg;
+            });
+        }
         return res;
     }
 
