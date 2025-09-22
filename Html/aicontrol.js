@@ -88,12 +88,12 @@ class AIControl
         //if(!unit.aiControl) unit.aiControl = {plan: null};
         //if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died)
         if(!unit.aiControl.plan){
-            state = GameState.createFrom(units, entities, wallsLayer); 
+            let state = GameState.createFrom(units, entities, wallsLayer); 
             const order = {
                 type: "intercept",
                 targetId: unit.aiControl.mainTarget.id
             };
-            const { sequence, score } = planBestTurn(state, unit, order);
+            const { sequence, score } = planBestTurn(state, unit.id, order);
             unit.aiControl.plan = sequence;
             //+log
             console.log(unit.config.name + " " + order.type + " plan: " + sequence.map(a => a.getName()));
@@ -105,7 +105,7 @@ class AIControl
             if(action)
             {
                 unit.aiControl.action = action;
-                switch(action.type){
+                switch(action.typeName){
                     case "stop":
                     {
                         unit.aiControl.plan = null;
@@ -114,8 +114,8 @@ class AIControl
                     }
                     case "move":
                     {
-                        if(unit.canStepTo(action.position.x-unit.mapX,action.position.y-unit.mapY)){                     
-                            unit.stepTo(action.position.x,action.position.y);
+                        if(unit.canStepTo(action.params.position.x-unit.mapX,action.params.position.y-unit.mapY)){                     
+                            unit.stepTo(action.params.position.x,action.params.position.y);
                         }
                         else{
                             unit.aiControl.plan = null;
@@ -125,8 +125,8 @@ class AIControl
                     }
                     case "attack":
                     {
-                        if(unit.canAtackTo(action.position.x-unit.mapX,action.position.y-unit.mapY)){
-                            unit.atackTo(action.position.x,action.position.y);
+                        if(unit.canAtackTo(action.params.position.x-unit.mapX,action.params.position.y-unit.mapY)){
+                            unit.atackTo(action.params.position.x,action.params.position.y);
                         }
                         else{
                             unit.aiControl.plan = null;

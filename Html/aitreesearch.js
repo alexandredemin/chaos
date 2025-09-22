@@ -204,7 +204,8 @@ class GameState {
                             if (onEntity) {
                                 if (onEntity(entity) === false) continue;
                             } else {
-                                d += Math.floor(entity.evaluateStep(unit) + 0.5) * unit.features.move;
+                                //d += Math.floor(entity.evaluateStep(unit) + 0.5) * unit.features.move;
+                                d += Math.floor(2 + 0.5) * unit.features.move;
                             }
                         }
                         if (onCell && onCell([xx, yy]) === false) continue;
@@ -247,7 +248,7 @@ class GameState {
             const distMap = this.getDistanceMapCached(enemy, ignoreUnits);
             const dist = distMap[y]?.[x];
             if (dist == null || dist < 0) continue;
-             const moveRange = enemy.config.features.move
+            const moveRange = unitConfigs[enemy.configName].features.move;
             // melee attacks
             if (dist <= moveRange) {
                 danger += enemy.features.strength;
@@ -336,7 +337,11 @@ class StopActionType extends ActionType {
     }
 
     apply(state, action, evaluator = null) {
-        //do nothing
+        const unit = state.unitsData.find(u => u.id === action.params.unitId);
+        if (!unit) return;
+        unit.features.move = 0;
+        unit.features.attackPoints = 0;
+        unit.features.abilityPoints = 0;
     }
 }
 
@@ -348,7 +353,7 @@ class MoveActionType extends ActionType {
     canStepTo(state, unit, x, y) {
         if(unit.features.move <= 0)return false;
         if((x<0)||(x>=map.width)||(y<0)||(y>=map.height))return false;
-        let unitAtPos = state.getUnitAtMap(x, y);
+        let unitAtPos = state.getUnitAt(x, y);
         if(unitAtPos!=null)return false;
         let wallTile = wallsLayer.getTileAt(x, y);
         if(wallTile != null)
@@ -427,11 +432,11 @@ class AttackActionType extends ActionType {
     }
 
     canAtackTo(state, unit, x, y) {
-        if(unit.features.move <= 0)return false;
+        if(unit.features.move <= 0 || unit.features.attackPoints <= 0)return false;
         if((x<0)||(x>=map.width)||(y<0)||(y>=map.height))return false;
-        let unitAtPos = state.getUnitAtMap(x, y);
+        let unitAtPos = state.getUnitAt(x, y);
         if(unitAtPos==null)return false;
-        if(unit.player!==unitAtPos.player)return true;
+        if(unit.playerName!==unitAtPos.playerName)return true;
         return false;
     }
 
@@ -465,7 +470,7 @@ class AttackActionType extends ActionType {
             if(unit.features.move < 0)unit.features.move = 0;
             unit.features.attackPoints--;
             if(unit.features.attackPoints < 0)unit.features.attackPoints = 0;
-            let enemyUnit = state.getUnitAtMap(action.params.position.x, action.params.position.y);
+            let enemyUnit = state.getUnitAt(action.params.position.x, action.params.position.y);
             //
             /*
             let damaged = false;
@@ -697,14 +702,14 @@ class Evaluator {
 
         let score = 0;
         // 1) reward for damage
-        let totalDamage = evaluator.damageDealt;
-        let targetDamage = evaluator.getDamageToUnit(target.id);
+        let totalDamage = this.damageDealt;
+        let targetDamage = this.getDamageToUnit(target.id);
         // reward for damage to the target, more weight
         if (targetDamage > 0) {
             totalDamage += targetDamage * W_TARGET_DAMAGE;
         }
         // maximal reward for killing the target
-        if (evaluator.hasKilledUnit(target.id)) {
+        if (this.hasKilledUnit(target.id)) {
             score += 1000;
         }
         score += totalDamage;
@@ -729,7 +734,7 @@ class Evaluator {
 }
 
 //-------- Search --------
-function planBestTurn(state, unit, order) {
+function planBestTurn(state, unitId, order) {
     let bestSequence = [];
     let bestScore = -Infinity;
 
@@ -742,7 +747,9 @@ function planBestTurn(state, unit, order) {
             if (!actionType) continue;
 
             // check action points
-            if ((action.typeName === "move" || action.typeName === "attack") && currentUnit.features.move <= 0) continue;
+            if((currentUnit.features.move <= 0) && (currentUnit.features.abilityPoints <= 0)) continue;
+            if (action.typeName === "move" && currentUnit.features.move <= 0) continue;
+            if (action.typeName === "attack" && (currentUnit.features.move <= 0 || currentUnit.features.attackPoints <=0)) continue;
             if ((action.typeName !== "move" && action.typeName !== "attack" && action.typeName !== "stop") && currentUnit.features.abilityPoints <= 0) continue;
 
             // check repeating moves
@@ -760,8 +767,9 @@ function planBestTurn(state, unit, order) {
 
             // clone state and evaluator
             const nextState = currentState.clone(true);
-            const nextEvaluator = Object.assign(
-            Object.create(Object.getPrototypeOf(evaluator)), clone(evaluator));
+            //const nextEvaluator = Object.assign(
+            //Object.create(Object.getPrototypeOf(evaluator)), clone(evaluator));
+            const nextEvaluator = evaluator;
 
             // apply action
             actionType.apply(nextState, action, nextEvaluator);
@@ -776,6 +784,7 @@ function planBestTurn(state, unit, order) {
         // if no actions left, evaluate the state
         if (!hasAnyAction) {
             const score = evaluator.finalize(currentState, order);
+            console.log(`Sequence: ${sequence.map(a => a.getName()).join(" -> ")}, Score: ${score}`);
             if (score > bestScore) {
                 bestScore = score;
                 bestSequence = sequence;
@@ -783,7 +792,9 @@ function planBestTurn(state, unit, order) {
         }
     }
 
-    const evaluator = new Evaluator(state, unit.playerName, unit.id);
+    // find unit in the state
+    const unit = state.unitsData.find(u => u.id === unitId);
+    const evaluator = new Evaluator(state, unit.playerName, unitId);
     dfs(state.clone(true), unit, [], evaluator);
 
     return { sequence: bestSequence, score: bestScore };
