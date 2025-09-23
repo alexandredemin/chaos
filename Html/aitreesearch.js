@@ -241,6 +241,19 @@ class GameState {
         return this._distanceMapCache.get(cacheKey);
     }
 
+    getBaseCost(dMap,x,y){
+        let baseCost = dMap[y][x];
+        for(let yy=y-1; yy<=y+1; yy++)
+            for(let xx=x-1; xx<=x+1; xx++)
+            {
+                if((xx<0)||(xx>=this.mapWidth)||(yy<0)||(yy>=this.mapHeight)||((xx===x)&&(yy===y)))continue;
+                if(dMap[yy][xx] < 0) continue;
+                let c = dMap[yy][xx]+1;
+                if(c < baseCost) baseCost = c;
+            }
+        return baseCost;
+    }
+
     getCellDanger(x, y, playerName, ignoreUnits = []) {
         let danger = 0;
         for (const enemy of this.unitsData) {
@@ -269,7 +282,7 @@ class GameState {
                                 const distSq = dx * dx + dy * dy;
                                 if (distSq <= abilityRange * abilityRange) {
                                     if(ability.type === "fire" && !this.checkLineOfSight(xx, yy, x, y)) continue;
-                                    dangerScore += ability.config.damage;
+                                    danger += ability.config.damage;
                                 }
                             }
                         }
@@ -583,6 +596,16 @@ class Evaluator {
         this.initialState = initialState.clone();
     }
 
+    clone() {
+        const cloned = new Evaluator(this.initialState, this.playerName, this.unitId);
+        cloned.damageDealt = this.damageDealt;
+        cloned.damageTaken = this.damageTaken;
+        cloned.unitsLost = this.unitsLost;
+        cloned.damageByUnit = { ...this.damageByUnit };
+        cloned.unitsKilled = [...this.unitsKilled];
+        return cloned;
+    }
+
     addDamageDealt(amount, targetUnitId = null) {
         this.damageDealt += amount;
         if (targetUnitId) {
@@ -679,12 +702,15 @@ class Evaluator {
         const myWizard = myUnits.find(u => u.configName === "wizard");
         // distance from my unit to target
         const dmUnit = state.getDistanceMapCached(unit);
-        const distUnitToTarget = (dmUnit && target) ? dmUnit[target.mapY]?.[target.mapX] : -1;
+        let distUnitToTarget = (dmUnit && target) ? dmUnit[target.mapY]?.[target.mapX] : -1;
+        if(distUnitToTarget > 0) distUnitToTarget = state.getBaseCost(dmUnit,target.mapX,target.mapY);
         // distance from my unit to my wizard
-        const distUnitToWizard = (dmUnit && myWizard) ? dmUnit[myWizard.mapY]?.[myWizard.mapX] : -1;
+        let distUnitToWizard = (dmUnit && myWizard) ? dmUnit[myWizard.mapY]?.[myWizard.mapX] : -1;
+        if(distUnitToWizard > 0) distUnitToWizard = state.getBaseCost(dmUnit,myWizard.mapX,myWizard.mapY);
         // distance from target to my wizard
         const dmTarget = state.getDistanceMapCached(target);
-        const distTargetToWizard = (dmTarget && myWizard) ? dmTarget[myWizard.mapY]?.[myWizard.mapX] : -1;
+        let distTargetToWizard = (dmTarget && myWizard) ? dmTarget[myWizard.mapY]?.[myWizard.mapX] : -1;
+        if(distTargetToWizard > 0) distTargetToWizard = state.getBaseCost(dmTarget,myWizard.mapX,myWizard.mapY);
         // check if unit is on the path from target to my wizard
         // simple heuristic: dist(target->unit) + dist(unit->wizard) ≈ dist(target->wizard)
         let onPathBonus = 0;
@@ -767,9 +793,7 @@ function planBestTurn(state, unitId, order) {
 
             // clone state and evaluator
             const nextState = currentState.clone(true);
-            //const nextEvaluator = Object.assign(
-            //Object.create(Object.getPrototypeOf(evaluator)), clone(evaluator));
-            const nextEvaluator = evaluator;
+            const nextEvaluator = evaluator.clone();
 
             // apply action
             actionType.apply(nextState, action, nextEvaluator);

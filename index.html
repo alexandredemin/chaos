@@ -35,81 +35,55 @@
 <script>
 
     //---------------------------- Global functions ----------------------------
-    /*
-    function clone(obj) {
+    function clone(obj, visited = new WeakMap()) {
         if (obj === null || typeof obj !== 'object') {
             return obj;
         }
-        if (Array.isArray(obj)) {
-            return obj.map(item => clone(item));
+        // already visited (cloned) object
+        if (visited.has(obj)) {
+            return visited.get(obj);
         }
-        let objClone = {};
-        for (let key in obj) {
-            if (obj.hasOwnProperty(key)) {
-            objClone[key] = clone(obj[key]);
+        // Date
+        if (obj instanceof Date) {
+            return new Date(obj.getTime());
+        }
+        // Map
+        if (obj instanceof Map) {
+            const m = new Map();
+            visited.set(obj, m);
+            for (const [k, v] of obj.entries()) {
+                m.set(k, clone(v, visited));
+            }
+            return m;
+        }
+        // Set
+        if (obj instanceof Set) {
+            const s = new Set();
+            visited.set(obj, s);
+            for (const v of obj.values()) {
+                s.add(clone(v, visited));
+            }
+            return s;
+        }
+        // Array
+        if (Array.isArray(obj)) {
+            const arr = [];
+            visited.set(obj, arr);
+            for (const item of obj) {
+                arr.push(clone(item, visited));
+            }
+            return arr;
+        }
+        // Object
+        const objClone = {};
+        visited.set(obj, objClone);
+        for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                objClone[key] = clone(obj[key], visited);
             }
         }
         return objClone;
     }
-    */
-    /**/
-    function clone(obj, visited = new WeakMap()) {
-    // Примитивы
-    if (obj === null || typeof obj !== 'object') {
-        return obj;
-    }
-
-    // Уже клонированный объект (цикл)
-    if (visited.has(obj)) {
-        return visited.get(obj);
-    }
-
-    // Date
-    if (obj instanceof Date) {
-        return new Date(obj.getTime());
-    }
-
-    // Map
-    if (obj instanceof Map) {
-        const m = new Map();
-        visited.set(obj, m);
-        for (const [k, v] of obj.entries()) {
-            m.set(k, clone(v, visited));
-        }
-        return m;
-    }
-
-    // Set
-    if (obj instanceof Set) {
-        const s = new Set();
-        visited.set(obj, s);
-        for (const v of obj.values()) {
-            s.add(clone(v, visited));
-        }
-        return s;
-    }
-
-    // Array
-    if (Array.isArray(obj)) {
-        const arr = [];
-        visited.set(obj, arr);
-        for (const item of obj) {
-            arr.push(clone(item, visited));
-        }
-        return arr;
-    }
-
-    // Обычный объект / экземпляр класса
-    const objClone = {};
-    visited.set(obj, objClone);
-    for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            objClone[key] = clone(obj[key], visited);
-        }
-    }
-    return objClone;
-}
-    /**/
     
     const userInteractionScenario = {
         movement: 'movement',
