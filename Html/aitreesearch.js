@@ -736,11 +736,24 @@ class Evaluator {
         }
         // maximal reward for killing the target
         if (this.hasKilledUnit(target.id)) {
-            score += 1000;
+            totalDamage += 1000;
         }
         score += totalDamage;
         // 2) penalty for deviation from the path
         score += onPathBonus;
+
+        if(distTargetToWizard <= MAX_INFLUENCE_DIST / 3){
+            score -= distUnitToTarget;
+        }
+        else if(distUnitToTarget <= 2 * MAX_INFLUENCE_DIST / 3){
+            score -= distUnitToTarget;
+            score -= danger;
+        }
+        else if(distUnitToTarget <= MAX_INFLUENCE_DIST){
+            score -= danger * 3;
+        }
+
+        /*
         // 3) penalty for danger, more penalty if far from my wizard
         let dangerPenalty = 0;
         if (distTargetToWizard < 0) {
@@ -751,9 +764,11 @@ class Evaluator {
             // normalize distance to [0..1]
             const t = Math.max(0, Math.min(distTargetToWizard / MAX_INFLUENCE_DIST, 1));
             const dangerFactor = MIN_DANGER_FACTOR + t * (MAX_DANGER_FACTOR - MIN_DANGER_FACTOR);
-            dangerPenalty = danger * dangerFactor;
+            //dangerPenalty = danger * dangerFactor;
+            dangerPenalty = 0;
         }
         score -= dangerPenalty;
+        */
 
         return score;
     }
