@@ -230,12 +230,11 @@ class GameState {
         return distMap;
     }
 
-    getDistanceMapCached(unit, ignoreUnits = []) {
-        const cacheKey = unit.id + "|" + ignoreUnits.map(u => u.id).join(",");
+    getDistanceMapCached(unit) {
+        const posKey = `${unit.mapX},${unit.mapY}`;
+        const cacheKey = `${unit.id}@${posKey}`;
         if (!this._distanceMapCache.has(cacheKey)) {
-            const distMap = this.getDistanceMap(unit, unit.mapX, unit.mapY, null, (u) => {
-                return !ignoreUnits.includes(u);
-            });
+            const distMap = this.getDistanceMap(unit,unit.mapX,unit.mapY, null, null, null, 0, null);
             this._distanceMapCache.set(cacheKey, distMap);
         }
         return this._distanceMapCache.get(cacheKey);
@@ -696,6 +695,7 @@ class Evaluator {
     }
 
     evaluateInterception(state, unit, order) {
+        /*
         const target = state.unitsData.find(u => u.id === order.targetId);
         // find my wizard
         const myUnits = state.getUnitsByPlayer({ name: unit.playerName }) || [];
@@ -718,7 +718,7 @@ class Evaluator {
             onPathBonus = - Math.abs((distUnitToTarget + distUnitToWizard) - distTargetToWizard);
         }
         // danger at unit's position
-        const danger = state.getCellDanger(unit.mapX, unit.mapY, unit.playerName, /* ignoreUnits: none */ []);
+        const danger = state.getCellDanger(unit.mapX, unit.mapY, unit.playerName,[]);
         
         // final score calculation
         const W_TARGET_DAMAGE = 1.5; // weight for target damage
@@ -752,25 +752,16 @@ class Evaluator {
         else if(distUnitToTarget <= MAX_INFLUENCE_DIST){
             score -= danger * 3;
         }
-
-        /*
-        // 3) penalty for danger, more penalty if far from my wizard
-        let dangerPenalty = 0;
-        if (distTargetToWizard < 0) {
-            const dangerFactor = MAX_DANGER_FACTOR;
-            dangerPenalty = danger * dangerFactor;
-        } 
-        else {
-            // normalize distance to [0..1]
-            const t = Math.max(0, Math.min(distTargetToWizard / MAX_INFLUENCE_DIST, 1));
-            const dangerFactor = MIN_DANGER_FACTOR + t * (MAX_DANGER_FACTOR - MIN_DANGER_FACTOR);
-            //dangerPenalty = danger * dangerFactor;
-            dangerPenalty = 0;
-        }
-        score -= dangerPenalty;
+        return score;
         */
 
-        return score;
+        const target = state.unitsData.find(u => u.id === order.targetId);
+        // find my wizard
+        const myUnits = state.getUnitsByPlayer({ name: unit.playerName }) || [];
+        const myWizard = myUnits.find(u => u.configName === "wizard");
+        const dmTarget = state.getDistanceMapCached(target);
+        const dmMyWizard = state.getDistanceMapCached(myWizard);
+        
     }
 }
 
