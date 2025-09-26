@@ -230,11 +230,11 @@ class GameState {
         return distMap;
     }
 
-    getDistanceMapCached(unit) {
-        const posKey = `${unit.mapX},${unit.mapY}`;
+    getDistanceMapCached(unit, startX, startY) {
+        const posKey = `${startX},${startY}`;
         const cacheKey = `${unit.id}@${posKey}`;
         if (!this._distanceMapCache.has(cacheKey)) {
-            const distMap = this.getDistanceMap(unit,unit.mapX,unit.mapY, null, null, null, 0, null);
+            const distMap = this.getDistanceMap(unit,startX,startY, null, null, null, 0, null);
             this._distanceMapCache.set(cacheKey, distMap);
         }
         return this._distanceMapCache.get(cacheKey);
@@ -257,7 +257,7 @@ class GameState {
         let danger = 0;
         for (const enemy of this.unitsData) {
             if (enemy.playerName === playerName || ignoreUnits.includes(enemy)) continue;
-            const distMap = this.getDistanceMapCached(enemy, ignoreUnits);
+            const distMap = this.getDistanceMapCached(enemy, enemy.mapX, enemy.mapY);
             const dist = distMap[y]?.[x];
             if (dist == null || dist < 0) continue;
             const moveRange = unitConfigs[enemy.configName].features.move;
@@ -756,13 +756,31 @@ class Evaluator {
         */
 
         const target = state.unitsData.find(u => u.id === order.targetId);
-        // find my wizard
         const myUnits = state.getUnitsByPlayer({ name: unit.playerName }) || [];
         const myWizard = myUnits.find(u => u.configName === "wizard");
-        const dmTarget = state.getDistanceMapCached(target);
-        const dmMyWizard = state.getDistanceMapCached(myWizard);
+        const dmUnitFromTarget = state.getDistanceMapCached(unit,target.mapX, target.mapY);
+        let distUnitToTarget = (dmTarget && target) ? dmUnitFromTarget[unit.mapY]?.[unit.mapX] : -1;
+        if(distUnitToTarget > 0) distUnitToTarget = state.getBaseCost(dmUnitFromTarget,unit.mapX,unit.mapY);
+        const dmTarget = state.getDistanceMapCached(target, target.mapX, target.mapY);
+        let distTargetToWizard = (dmTarget && myWizard) ? dmTarget[myWizard.mapY]?.[myWizard.mapX] : -1;
+        if(distTargetToWizard > 0) distTargetToWizard = state.getBaseCost(dmTarget,myWizard.mapX,myWizard.mapY);
         
+        const W_TARGET_DAMAGE = 1.5; // weight for target damage
+        let score = 0;
+        let totalDamage = this.damageDealt;
+        let targetDamage = this.getDamageToUnit(target.id);
+        if (targetDamage > 0) {
+            totalDamage += targetDamage * W_TARGET_DAMAGE;
+        }
+        if (this.hasKilledUnit(target.id)) {
+            totalDamage += 1000;
+        }
+        score += totalDamage;
+        if(distUnitToTarget >= 0) score -= distUnitToTarget;
+
+        return score;
     }
+
 }
 
 //-------- Search --------
