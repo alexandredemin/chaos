@@ -114,8 +114,8 @@ class AIControl
                     }
                     case "move":
                     {
-                        if(unit.canStepTo(action.params.position.x-unit.mapX,action.params.position.y-unit.mapY)){                     
-                            unit.stepTo(action.params.position.x,action.params.position.y);
+                        if(unit.canStepTo(action.params.endPosition.x-unit.mapX,action.params.endPosition.y-unit.mapY)){                     
+                            unit.stepTo(action.params.endPosition.x,action.params.endPosition.y);
                         }
                         else{
                             unit.aiControl.plan = null;

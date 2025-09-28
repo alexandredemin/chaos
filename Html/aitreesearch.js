@@ -345,6 +345,7 @@ class StopActionType extends ActionType {
     }
 
     generateActions(state, unit) {
+        if (unit.features.move <= 0 && (!unit.abilities || unit.features.abilityPoints <= 0)) return [];
         return [ new Action(this.name, { unitId: unit.id }) ];
     }
 
@@ -380,17 +381,23 @@ class MoveActionType extends ActionType {
 
     generateActions(state, unit) {
         const actions = [];
+        if(unit.features.move <= 0)return actions;
         const possibleTiles = [
             {x: unit.mapX+1, y: unit.mapY},
             {x: unit.mapX-1, y: unit.mapY},
             {x: unit.mapX,   y: unit.mapY+1},
-            {x: unit.mapX,   y: unit.mapY-1}
+            {x: unit.mapX,   y: unit.mapY-1},
+            {x: unit.mapX+1, y: unit.mapY+1},
+            {x: unit.mapX-1, y: unit.mapY-1},
+            {x: unit.mapX+1, y: unit.mapY-1},
+            {x: unit.mapX-1, y: unit.mapY+1}
         ];
         for (const tile of possibleTiles) {
             if (this.canStepTo(state, unit, tile.x, tile.y)) {
                 actions.push(new Action(this.name, {
                     unitId: unit.id,
-                    position: tile
+                    startPosition: { x: unit.mapX, y: unit.mapY },
+                    endPosition: tile,
                 }));
             }
         }
@@ -414,8 +421,8 @@ class MoveActionType extends ActionType {
             }
             if(checkEntityStepOut()) {
             */
-            unit.mapX = action.params.position.x;
-            unit.mapY = action.params.position.y;
+            unit.mapX = action.params.endPosition.x;
+            unit.mapY = action.params.endPosition.y;
             unit.features.move -= 1;
             if(unit.features.move < 0)unit.features.move = 0;
             // 
@@ -454,11 +461,16 @@ class AttackActionType extends ActionType {
 
     generateActions(state, unit) {
         const actions = [];
+        if(unit.features.move <= 0 || unit.features.attackPoints <= 0)return actions;
         const possibleTiles = [
             {x: unit.mapX+1, y: unit.mapY},
             {x: unit.mapX-1, y: unit.mapY},
             {x: unit.mapX,   y: unit.mapY+1},
-            {x: unit.mapX,   y: unit.mapY-1}
+            {x: unit.mapX,   y: unit.mapY-1},
+            {x: unit.mapX+1, y: unit.mapY+1},
+            {x: unit.mapX-1, y: unit.mapY-1},
+            {x: unit.mapX+1, y: unit.mapY-1},
+            {x: unit.mapX-1, y: unit.mapY+1}
         ];
         for (const tile of possibleTiles) {
             if (this.canAtackTo(state, unit, tile.x, tile.y)) {
@@ -759,7 +771,7 @@ class Evaluator {
         const myUnits = state.getUnitsByPlayer({ name: unit.playerName }) || [];
         const myWizard = myUnits.find(u => u.configName === "wizard");
         const dmUnitFromTarget = state.getDistanceMapCached(unit,target.mapX, target.mapY);
-        let distUnitToTarget = (dmTarget && target) ? dmUnitFromTarget[unit.mapY]?.[unit.mapX] : -1;
+        let distUnitToTarget = (dmUnitFromTarget && target) ? dmUnitFromTarget[unit.mapY]?.[unit.mapX] : -1;
         if(distUnitToTarget > 0) distUnitToTarget = state.getBaseCost(dmUnitFromTarget,unit.mapX,unit.mapY);
         const dmTarget = state.getDistanceMapCached(target, target.mapX, target.mapY);
         let distTargetToWizard = (dmTarget && myWizard) ? dmTarget[myWizard.mapY]?.[myWizard.mapX] : -1;
@@ -804,9 +816,9 @@ function planBestTurn(state, unitId, order) {
 
             // check repeating moves
             if (action.typeName === "move") {
-                const pos = action.params.position;
+                const pos = action.params.endPosition;
                 if(sequence.length > 0 && sequence[sequence.length - 1].typeName === "move") {
-                    const lastPos = sequence[sequence.length - 1].params.position;
+                    const lastPos = sequence[sequence.length - 1].params.startPosition;
                     if (lastPos.x === pos.x && lastPos.y === pos.y) {
                         continue;
                     }
