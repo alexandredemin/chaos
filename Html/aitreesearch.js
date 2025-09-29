@@ -162,6 +162,26 @@ class GameState {
         return true;
     }
 
+    evaluateStepFromEntity(unit, entity) {
+        if(entity.configName == "web"){
+            if(unit.features.webImmunity === true)
+            {
+                return 0;
+            }
+            else
+            {
+                return (unit.features.strength + this.features.strength)/unit.features.strength;
+            }    
+        }
+        else if(entity.configName == "fire"){
+            return 100;
+        }
+        else if(entity.configName == "glue_blob"){
+            return (unit.features.strength + this.features.strength)/unit.features.strength;
+        }
+        else return 0;
+    }
+
     getDistanceMap(unit, startX, startY, onEntity, onUnit, onCell, maxDist = 0, penaltyMap = null) {
         const distMap = Array.from({ length: this.mapHeight }, () => Array(this.mapWidth).fill(-1));
         const cellInd = Array.from({ length: this.mapHeight }, () => Array(this.mapWidth).fill(-1));
@@ -191,10 +211,10 @@ class GameState {
                                 if (onUnit(unt) === false) continue;
                             } else {
                                 if (unt.playerName === unit.playerName) {
-                                    d += unit.features.move;
+                                    d += unitConfigs[unit.configName].features.move;
                                 } else {
                                     // it is better to change this value according to expectations of time to kill enemy unit
-                                    d += unt.features.health * unit.features.move;
+                                    d += unitConfigs[unt.configName].features.health * unitConfigs[unit.configName].features.move;
                                 }
                             }
                         }
@@ -204,8 +224,7 @@ class GameState {
                             if (onEntity) {
                                 if (onEntity(entity) === false) continue;
                             } else {
-                                //d += Math.floor(entity.evaluateStep(unit) + 0.5) * unit.features.move;
-                                d += Math.floor(2 + 0.5) * unit.features.move;
+                                d += Math.floor(this.evaluateStepFromEntity(unit, entity) * unitConfigs[unit.configName].features.move + 0.5);
                             }
                         }
                         if (onCell && onCell([xx, yy]) === false) continue;
