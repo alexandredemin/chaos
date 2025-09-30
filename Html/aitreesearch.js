@@ -160,7 +160,7 @@ class GameState {
             }
         }
         return true;
-    }
+    }             
 
     evaluateStepFromEntity(unit, entity) {
         if(entity.configName == "web"){
@@ -170,14 +170,14 @@ class GameState {
             }
             else
             {
-                return (unit.features.strength + this.features.strength)/unit.features.strength;
+                return (unit.features.strength + entity.features.strength)/unit.features.strength;
             }    
         }
         else if(entity.configName == "fire"){
             return 100;
         }
         else if(entity.configName == "glue_blob"){
-            return (unit.features.strength + this.features.strength)/unit.features.strength;
+            return (unit.features.strength + entity.features.strength)/unit.features.strength;
         }
         else return 0;
     }
@@ -323,6 +323,45 @@ class Action {
     getName() {
         return `${this.typeName} ${JSON.stringify(this.params)}`;
     }
+
+    static stepOutFromEntity(unit, entity) {
+        if(entity.configName == "web"){
+            if(unit.features.webImmunity === true)
+            {
+                return true;
+            }   
+            else
+            {
+                return false;
+            }
+        }
+        else if(entity.configName == "glue_blob"){
+            return false;
+        }
+        else if(entity.configName == "pentagram"){
+            return true;
+        }
+        else return true;
+    }
+
+    static stepIntoEntity(unit, entity) {
+        if(entity.configName == "web"){
+            if(!unit.features.webImmunity)
+            {
+                unit.features.move = 0;
+            }
+        }
+        else if(entity.configName == "glue_blob"){
+            unit.features.move = 0;
+        }
+        else if(entity.configName == "fire"){
+            unit.features.health--;
+        }
+        else if(entity.configName == "pentagram"){
+            return;
+        }
+    }
+
 }
 
 class ActionType {
