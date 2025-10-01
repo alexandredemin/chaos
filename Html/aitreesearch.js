@@ -332,10 +332,12 @@ class Action {
             }   
             else
             {
+                unit.features.move = 0;
                 return false;
             }
         }
         else if(entity.configName == "glue_blob"){
+            unit.features.move = 0;
             return false;
         }
         else if(entity.configName == "pentagram"){
@@ -356,6 +358,11 @@ class Action {
         }
         else if(entity.configName == "fire"){
             unit.features.health--;
+            if(unit.features.health <= 0){
+                unit.features.move = 0;
+                unit.features.attackPoints = 0;
+                unit.features.abilityPoints = 0;
+            }
         }
         else if(entity.configName == "pentagram"){
             return;
@@ -465,39 +472,24 @@ class MoveActionType extends ActionType {
     apply(state, action, evaluator = null) {
         const unit = state.unitsData.find(u => u.id === action.params.unitId);
         if (unit) {
-            // Check if can step out from current tile
-            /*
-            checkEntityStepOut()
-            {
-                let canStep = true;
-                let ent = Entity.getEntityAtMap(unit.mapX,unit.mapY);
-                if(ent != null)
-                {
-                    canStep = ent.onStepOut(unit);
+            let canStep = true; 
+            let entity = state.getEntityAt(unit.mapX, unit.mapY);
+            if(entity != null) canStep = Action.stepOutFromEntity(unit, entity);
+            if(canStep){
+                unit.mapX = action.params.endPosition.x;
+                unit.mapY = action.params.endPosition.y;
+                unit.features.move -= 1;
+                if(unit.features.move < 0)unit.features.move = 0;
+                // 
+                if (evaluator) {
+                    if(GameState.hasState(unit, "infected")){
+                        //evaluator.addDamageDealt(expectedDamage);
+                    }
                 }
-                return canStep;
-            }
-            if(checkEntityStepOut()) {
-            */
-            unit.mapX = action.params.endPosition.x;
-            unit.mapY = action.params.endPosition.y;
-            unit.features.move -= 1;
-            if(unit.features.move < 0)unit.features.move = 0;
-            // 
-            if (evaluator) {
-                if(GameState.hasState(unit, "infected")){
-                    //evaluator.addDamageDealt(expectedDamage);
-                }
-            }
-            //
-            /*
-            let ent = Entity.getEntityAtMap(unit.mapX,unit.mapY);
-            if(ent != null)
-            {
-                let result = ent.onStepIn(unit);
-                if(result != null)
-                {
-            */
+                //
+                let entity2 = state.getEntityAt(unit.mapX, unit.mapY);
+                if(entity2 != null) Action.stepIntoEntity(unit, entity2);
+            }      
         }
     }
 }
@@ -544,16 +536,32 @@ class AttackActionType extends ActionType {
     apply(state, action, evaluator = null) {
         const unit = state.unitsData.find(u => u.id === action.params.unitId);
         if (unit) {
-            // Check if can step out from current tile
-            /*
-            if(checkEntityStepOut()) {
-            */
-            unit.features.move = unit.features.move - unit.features.attackCost;
-            if(unit.features.move < 0)unit.features.move = 0;
-            unit.features.attackPoints--;
-            if(unit.features.attackPoints < 0)unit.features.attackPoints = 0;
-            let enemyUnit = state.getUnitAt(action.params.position.x, action.params.position.y);
-            //
+            let canStep = true; 
+            let entity = state.getEntityAt(unit.mapX, unit.mapY);
+            if(entity != null) canStep = Action.stepOutFromEntity(unit, entity);
+            if(canStep){
+                unit.features.move = unit.features.move - unit.features.attackCost;
+                if(unit.features.move < 0)unit.features.move = 0;
+                unit.features.attackPoints--;
+                if(unit.features.attackPoints < 0)unit.features.attackPoints = 0;
+                let enemyUnit = state.getUnitAt(action.params.position.x, action.params.position.y);
+                let curFeatures = unit.features;
+                let enemyCurrentFeatures = enemyUnit.features;
+                const chance = curFeatures.strength/(curFeatures.strength + enemyCurrentFeatures.defense);
+                const expectedDamage = Math.round(chance * 100) / 100;
+                enemyUnit.features.health -= expectedDamage;
+                if (evaluator) {
+                    evaluator.addDamageDealt(expectedDamage, enemyUnit.id);
+                }
+                // remove enemy unit from state if killed
+                if(enemyUnit.features.health <= 0){
+                    if (evaluator) {
+                        evaluator.addUnitKilled(enemyUnit.id);
+                    }
+                    state.unitsData = state.unitsData.filter(u => u.id !== enemyUnit.id);
+                }
+            }
+
             /*
             let damaged = false;
             let killed = false;
@@ -578,21 +586,6 @@ class AttackActionType extends ActionType {
                 let curFeatures = unit.getCurrentFeatures();
                 let enemyCurrentFeatures = enemyUnit.getCurrentFeatures();
             */
-            let curFeatures = unit.features;
-            let enemyCurrentFeatures = enemyUnit.features;
-            const chance = curFeatures.strength/(curFeatures.strength + enemyCurrentFeatures.defense);
-            const expectedDamage = Math.round(chance * 100) / 100;
-            enemyUnit.features.health -= expectedDamage;
-            if (evaluator) {
-                evaluator.addDamageDealt(expectedDamage, enemyUnit.id);
-            }
-            // remove enemy unit from state if killed
-            if(enemyUnit.features.health <= 0){
-                if (evaluator) {
-                    evaluator.addUnitKilled(enemyUnit.id);
-                }
-                state.unitsData = state.unitsData.filter(u => u.id !== enemyUnit.id);
-            }
         }
     }
 }
