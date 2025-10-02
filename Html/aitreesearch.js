@@ -170,14 +170,18 @@ class GameState {
             }
             else
             {
-                return (unit.features.strength + entity.features.strength)/unit.features.strength;
+                let turns = (unit.features.strength + entity.features.strength)/unit.features.strength;
+                let unitMove = unitConfigs[unit.configName].features.move;
+                return Math.floor((turns + 1) * unitMove + 0.5) + Math.floor(0.5 * unitMove + 0.5);
             }    
         }
         else if(entity.configName == "fire"){
             return 100;
         }
         else if(entity.configName == "glue_blob"){
-            return (unit.features.strength + entity.features.strength)/unit.features.strength;
+            let turns = (unit.features.strength + entity.features.strength)/unit.features.strength;
+            let unitMove = unitConfigs[unit.configName].features.move;
+            return Math.floor(turns * unitMove + 0.5) + Math.floor(0.5 * unitMove + 0.5);
         }
         else return 0;
     }
@@ -224,7 +228,7 @@ class GameState {
                             if (onEntity) {
                                 if (onEntity(entity) === false) continue;
                             } else {
-                                d += Math.floor(this.evaluateStepFromEntity(unit, entity) * unitConfigs[unit.configName].features.move + 0.5);
+                                d += this.evaluateStepFromEntity(unit, entity);
                             }
                         }
                         if (onCell && onCell([xx, yy]) === false) continue;
@@ -474,7 +478,10 @@ class MoveActionType extends ActionType {
         if (unit) {
             let canStep = true; 
             let entity = state.getEntityAt(unit.mapX, unit.mapY);
-            if(entity != null) canStep = Action.stepOutFromEntity(unit, entity);
+            if(entity != null){
+                canStep = Action.stepOutFromEntity(unit, entity);
+                evaluator.addEntityKilled();
+            }
             if(canStep){
                 unit.mapX = action.params.endPosition.x;
                 unit.mapY = action.params.endPosition.y;
@@ -538,7 +545,10 @@ class AttackActionType extends ActionType {
         if (unit) {
             let canStep = true; 
             let entity = state.getEntityAt(unit.mapX, unit.mapY);
-            if(entity != null) canStep = Action.stepOutFromEntity(unit, entity);
+            if(entity != null){
+                canStep = Action.stepOutFromEntity(unit, entity);
+                evaluator.addEntityKilled();
+            }
             if(canStep){
                 unit.features.move = unit.features.move - unit.features.attackCost;
                 if(unit.features.move < 0)unit.features.move = 0;
@@ -649,6 +659,7 @@ class Evaluator {
         this.damageDealt = 0;
         this.damageTaken = 0;
         this.unitsLost = 0;
+        this.entitiesKilled = 0;
 
         // damage by unit : { unitId: damage }
         this.damageByUnit = {};
@@ -663,6 +674,7 @@ class Evaluator {
         cloned.damageDealt = this.damageDealt;
         cloned.damageTaken = this.damageTaken;
         cloned.unitsLost = this.unitsLost;
+        cloned.entitiesKilled = this.entitiesKilled;
         cloned.damageByUnit = { ...this.damageByUnit };
         cloned.unitsKilled = [...this.unitsKilled];
         return cloned;
@@ -690,6 +702,10 @@ class Evaluator {
 
     addUnitLost(unit) {
         this.unitsLost += 1;
+    }
+
+    addEntityKilled() {
+        this.entitiesKilled += 1;
     }
 
     // get damage dealt to a specific unit
@@ -839,6 +855,7 @@ class Evaluator {
             totalDamage += 1000;
         }
         score += totalDamage;
+        score += this.entitiesKilled * 5;
         if(distUnitToTarget >= 0) score -= distUnitToTarget;
 
         return score;
