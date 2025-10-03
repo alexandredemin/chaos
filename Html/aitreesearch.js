@@ -188,29 +188,24 @@ class GameState {
 
     getDistanceMap(unit, startX, startY, onEntity, onUnit, onCell, maxDist = 0, penaltyMap = null) {
         const distMap = Array.from({ length: this.mapHeight }, () => Array(this.mapWidth).fill(-1));
-        const cellInd = Array.from({ length: this.mapHeight }, () => Array(this.mapWidth).fill(-1));
         let startCost = 0;
         let border = [[startX, startY, startCost]];
         distMap[startY][startX] = startCost;
         while (border.length > 0) {
             let border2 = [];
-            for (let cell of border) {
-                cellInd[cell[1]][cell[0]] = -10;
-            }
             while (border.length > 0) {
                 const cell = border.pop();
                 for (let yy = cell[1] - 1; yy <= cell[1] + 1; yy++) {
                     for (let xx = cell[0] - 1; xx <= cell[0] + 1; xx++) {
                         if (xx < 0 || xx >= this.mapWidth || yy < 0 || yy >= this.mapHeight) continue;
                         if (xx === cell[0] && yy === cell[1]) continue;
-                        if (cellInd[yy][xx] < -1) continue;
                         let d = 1;
                         // walls
                         let wallTile = this.wallsLayer ? this.wallsLayer.getTileAt(xx, yy) : null;
                         if (wallTile != null) continue;
                         // units
                         let unt = this.getUnitAt(xx, yy);
-                        if (unt != null && !unt.died) {
+                        if (unt != null && !unt.died && unt !== unit) {
                             if (onUnit) {
                                 if (onUnit(unt) === false) continue;
                             } else {
@@ -238,12 +233,7 @@ class GameState {
                         const newDist = cell[2] + d;
                         if (distMap[yy][xx] > -1 && newDist >= distMap[yy][xx]) continue;
                         if (maxDist > 0 && newDist > startCost + maxDist) continue;
-                        if (cellInd[yy][xx] >= 0) {
-                            border2[cellInd[yy][xx]][2] = newDist;
-                        } else {
-                            border2.push([xx, yy, newDist]);
-                            cellInd[yy][xx] = border2.length - 1;
-                        }
+                        border2.push([xx, yy, newDist]);
                         distMap[yy][xx] = newDist;
                     }
                 }
@@ -718,7 +708,7 @@ class Evaluator {
         return this.unitsKilled.includes(unitId);
     }
 
-    finalize(finalState, order) {
+    finalize(finalState, order, sequence) {
         /*
         const initUnits = this.initialState.unitsData;
         const finalUnits = finalState.unitsData;
@@ -761,7 +751,7 @@ class Evaluator {
             }
             case 'intercept':
             {
-                score = this.evaluateInterception(finalState, unit, order); 
+                score = this.evaluateInterception(finalState, unit, order, sequence); 
                 break;
             }
             case 'patrol':
@@ -773,7 +763,7 @@ class Evaluator {
         return Math.round(score * 100) / 100;
     }
 
-    evaluateInterception(state, unit, order) {
+    evaluateInterception(state, unit, order, sequence) {
         /*
         const target = state.unitsData.find(u => u.id === order.targetId);
         // find my wizard
@@ -839,24 +829,61 @@ class Evaluator {
         const myWizard = myUnits.find(u => u.configName === "wizard");
         const dmUnitFromTarget = state.getDistanceMapCached(unit,target.mapX, target.mapY);
         let distUnitToTarget = (dmUnitFromTarget && target) ? dmUnitFromTarget[unit.mapY]?.[unit.mapX] : -1;
-        if(distUnitToTarget > 0) distUnitToTarget = state.getBaseCost(dmUnitFromTarget,unit.mapX,unit.mapY);
+        //if(distUnitToTarget > 0) distUnitToTarget = state.getBaseCost(dmUnitFromTarget,unit.mapX,unit.mapY);
         const dmTarget = state.getDistanceMapCached(target, target.mapX, target.mapY);
         let distTargetToWizard = (dmTarget && myWizard) ? dmTarget[myWizard.mapY]?.[myWizard.mapX] : -1;
         if(distTargetToWizard > 0) distTargetToWizard = state.getBaseCost(dmTarget,myWizard.mapX,myWizard.mapY);
+        // danger at unit's position
+        const danger = state.getCellDanger(unit.mapX, unit.mapY, unit.playerName,[]);
         
-        const W_TARGET_DAMAGE = 1.5; // weight for target damage
+        const TARGET_DAMAGE_BONUS = 1.5; // bonus for target damage
+        const TARGET_KILLED_BONUS = 5; // bonus for killed target
+        const UNIT_KILLED_BONUS = 2; // bonus for killed unit
+        const ENTITY_KILLED_BONUS = 1.5; // bonus for killed entity
+        const UNIT_LOST_PENALTY = 2; // penalty for lost unit
+
         let score = 0;
         let totalDamage = this.damageDealt;
         let targetDamage = this.getDamageToUnit(target.id);
         if (targetDamage > 0) {
-            totalDamage += targetDamage * W_TARGET_DAMAGE;
+            totalDamage += targetDamage * TARGET_DAMAGE_BONUS;
         }
         if (this.hasKilledUnit(target.id)) {
-            totalDamage += 1000;
+            totalDamage += TARGET_KILLED_BONUS;
         }
         score += totalDamage;
-        score += this.entitiesKilled * 5;
+        score += this.unitsKilled.length * UNIT_KILLED_BONUS;
+        score -= this.damageTaken;
+        score -= this.unitsLost * UNIT_LOST_PENALTY;
+        score += this.entitiesKilled * ENTITY_KILLED_BONUS;
         if(distUnitToTarget >= 0) score -= distUnitToTarget;
+        /*
+        const enemyMoveRange = unitConfigs[target.configName].features.move;
+        let enemyDistantRange = 0;
+        if (target.abilities) {
+                for (const abilityName in target.abilities) {
+                    const ability = target.abilities[abilityName];
+                    if(ability.config.range){
+                        if(ability.config.range > enemyDistantRange) enemyDistantRange = ability.config.range;
+                    }
+                }    
+        }
+        const enemyDangerRange = Math.max(enemyMoveRange, enemyDistantRange);
+
+        if(distTargetToWizard <= enemyDangerRange){
+            // when target is close to my wizard (1 turn)
+            if(distUnitToTarget >= 0) score -= distUnitToTarget;
+        }
+        else if(distUnitToTarget <= enemyDangerRange + enemyMoveRange){
+            // when target is far from my wizard (2 turns)
+            score -= distUnitToTarget;
+            score -= danger;
+        }
+        else if(distUnitToTarget <= enemyDangerRange + enemyMoveRange * 2){
+            // when target is very far from my wizard (3+ turns)
+            score -= danger * 3;
+        }
+        */
 
         return score;
     }
@@ -911,7 +938,7 @@ function planBestTurn(state, unitId, order) {
 
         // if no actions left, evaluate the state
         if (!hasAnyAction) {
-            const score = evaluator.finalize(currentState, order);
+            const score = evaluator.finalize(currentState, order, sequence);
             console.log(`Sequence: ${sequence.map(a => a.getName()).join(" -> ")}, Score: ${score}`);
             if (score > bestScore) {
                 bestScore = score;
