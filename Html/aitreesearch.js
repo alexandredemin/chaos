@@ -274,17 +274,19 @@ class GameState {
         return baseCost;
     }
 
-    getCellDanger(x, y, playerName, ignoreUnits = []) {
+    getCellDanger(x, y, unit, ignoreUnits = []) {
         let danger = 0;
         for (const enemy of this.unitsData) {
-            if (enemy.playerName === playerName || ignoreUnits.includes(enemy)) continue;
+            if (enemy.playerName === unit.playerName || ignoreUnits.includes(enemy)) continue;
             const distMap = this.getDistanceMapCached(enemy, enemy.mapX, enemy.mapY);
-            const dist = distMap[y]?.[x];
+            let dist = distMap[y]?.[x];
             if (dist == null || dist < 0) continue;
+            dist = this.getBaseCost(distMap,enemy.mapX,enemy.mapY);
             const moveRange = unitConfigs[enemy.configName].features.move;
             // melee attacks
             if (dist <= moveRange) {
-                danger += enemy.features.strength;
+                const chance = enemy.features.strength/(enemy.features.strength + unit.features.defense);
+                danger += Math.round(chance * 100) / 100;
             }
             // ranged attacks
             const rangeAbility = GameState.getRangeAttackAbility(enemy);
@@ -299,8 +301,9 @@ class GameState {
                         const dy = yy - y;
                         const distSq = dx * dx + dy * dy;
                         if (distSq <= abilityRange * abilityRange) {
-                            if(ability.type === "fire" && !this.checkLineOfSight(xx, yy, x, y)) continue;
-                            danger += ability.config.damage;
+                            if(rangeAbility.type === "fire" && !this.checkLineOfSight(xx, yy, x, y)) continue;
+                            const chance = rangeAbility.config.damage/(rangeAbility.config.damage + unit.features.defense);
+                            danger += Math.round(chance * 100) / 100;
                         }
                     }
                 }
@@ -838,11 +841,11 @@ class Evaluator {
         let distTargetToWizard = (dmTarget && myWizard) ? dmTarget[myWizard.mapY]?.[myWizard.mapX] : -1;
         if(distTargetToWizard > 0) distTargetToWizard = state.getBaseCost(dmTarget,myWizard.mapX,myWizard.mapY);
         // danger at unit's position
-        const danger = state.getCellDanger(unit.mapX, unit.mapY, unit.playerName,[]);
+        const danger = state.getCellDanger(unit.mapX, unit.mapY, unit,[]);
         
         const TARGET_DAMAGE_BONUS = 1.5; // bonus for target damage
         const TARGET_KILLED_BONUS = 5; // bonus for killed target
-        const UNIT_KILLED_BONUS = 2; // bonus for killed unit
+        const UNIT_KILLED_BONUS = 1; // bonus for killed unit
         const ENTITY_KILLED_BONUS = 1.5; // bonus for killed entity
         const UNIT_LOST_PENALTY = 2; // penalty for lost unit
 
@@ -861,33 +864,20 @@ class Evaluator {
         score -= this.unitsLost * UNIT_LOST_PENALTY;
         score += this.entitiesKilled * ENTITY_KILLED_BONUS;
         if(distUnitToTarget >= 0) score -= distUnitToTarget;
-        /*
-        const enemyMoveRange = unitConfigs[target.configName].features.move;
-        let enemyDistantRange = 0;
-        if (target.abilities) {
-                for (const abilityName in target.abilities) {
-                    const ability = target.abilities[abilityName];
-                    if(ability.config.range){
-                        if(ability.config.range > enemyDistantRange) enemyDistantRange = ability.config.range;
-                    }
-                }    
-        }
-        const enemyDangerRange = Math.max(enemyMoveRange, enemyDistantRange);
 
-        if(distTargetToWizard <= enemyDangerRange){
+        const enemyMoveRange = unitConfigs[target.configName].features.move;
+        if(distTargetToWizard <= enemyMoveRange){
             // when target is close to my wizard (1 turn)
-            if(distUnitToTarget >= 0) score -= distUnitToTarget;
-        }
-        else if(distUnitToTarget <= enemyDangerRange + enemyMoveRange){
-            // when target is far from my wizard (2 turns)
-            score -= distUnitToTarget;
             score -= danger;
         }
-        else if(distUnitToTarget <= enemyDangerRange + enemyMoveRange * 2){
-            // when target is very far from my wizard (3+ turns)
-            score -= danger * 3;
+        else if(distUnitToTarget <= 2 * enemyMoveRange){
+            // when target is far from my wizard (2 turns)
+            score -= danger * 1.5;
         }
-        */
+        else{
+            // when target is very far from my wizard (3+ turns)
+            score -= danger * 2;
+        }
 
         return score;
     }
@@ -943,7 +933,7 @@ function planBestTurn(state, unitId, order) {
         // if no actions left, evaluate the state
         if (!hasAnyAction) {
             const score = evaluator.finalize(currentState, order, sequence);
-            console.log(`Sequence: ${sequence.map(a => a.getName()).join(" -> ")}, Score: ${score}`);
+            //console.log(`Sequence: ${sequence.map(a => a.getName()).join(" -> ")}, Score: ${score}`);
             if (score > bestScore) {
                 bestScore = score;
                 bestSequence = sequence;
