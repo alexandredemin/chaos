@@ -55,6 +55,14 @@ class GameState {
         return unit.states.some(s => s.name === stateName);
     }
 
+    static getRangeAttackAbility(unit) {
+        if (!unit || !unit.abilities) return null;
+        for (const abilityName in unit.abilities) {
+            const ability = unit.abilities[abilityName];
+            if(ability.config.range) return ability;
+        }
+    }
+
     getAvailableActionsForUnit(unit) {
         let actions = [];
 
@@ -279,26 +287,22 @@ class GameState {
                 danger += enemy.features.strength;
             }
             // ranged attacks
-            if (enemy.abilities) {
-                for (const abilityName in enemy.abilities) {
-                    const ability = enemy.abilities[abilityName];
-                    if(ability.config.range){
-                        const abilityRange = ability.config.range;
-                        if(Math.abs(enemy.mapX - x) > moveRange + abilityRange || Math.abs(enemy.mapY - y) > moveRange + abilityRange) continue;           
-                        for (let yy = Math.max(0, enemy.mapY - moveRange); yy <= Math.min(this.mapHeight - 1, enemy.mapY + moveRange); yy++) {
-                            for (let xx = Math.max(0, enemy.mapX - moveRange); xx <= Math.min(this.mapWidth - 1, enemy.mapY + moveRange); xx++) {
-                                const dist = distMap[yy]?.[xx];
-                                if (dist < 0 || dist > moveRange) continue;
-                                const dx = xx - x;
-                                const dy = yy - y;
-                                const distSq = dx * dx + dy * dy;
-                                if (distSq <= abilityRange * abilityRange) {
-                                    if(ability.type === "fire" && !this.checkLineOfSight(xx, yy, x, y)) continue;
-                                    danger += ability.config.damage;
-                                }
-                            }
+            const rangeAbility = GameState.getRangeAttackAbility(enemy);
+            if (rangeAbility) {
+                const abilityRange = rangeAbility.config.range;
+                if(Math.abs(enemy.mapX - x) > moveRange + abilityRange || Math.abs(enemy.mapY - y) > moveRange + abilityRange) continue;           
+                for (let yy = Math.max(0, enemy.mapY - moveRange); yy <= Math.min(this.mapHeight - 1, enemy.mapY + moveRange); yy++) {
+                     for (let xx = Math.max(0, enemy.mapX - moveRange); xx <= Math.min(this.mapWidth - 1, enemy.mapY + moveRange); xx++) {
+                        const dist = distMap[yy]?.[xx];
+                        if (dist < 0 || dist > moveRange) continue;
+                        const dx = xx - x;
+                        const dy = yy - y;
+                        const distSq = dx * dx + dy * dy;
+                        if (distSq <= abilityRange * abilityRange) {
+                            if(ability.type === "fire" && !this.checkLineOfSight(xx, yy, x, y)) continue;
+                            danger += ability.config.damage;
                         }
-                    }    
+                    }
                 }
             }
         }
