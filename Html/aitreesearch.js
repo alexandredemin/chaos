@@ -603,7 +603,7 @@ class FireActionType extends ActionType {
         super("fire", false);
     }
 
-    generateActions(state, unit, abilityConfig) {
+    generateActions(state, unit) {
         const actions = [];
         if (unit.features.abilityPoints <= 0) return actions;
         if (!unit.abilities || !unit.abilities.fire) return actions;
@@ -639,10 +639,52 @@ class FireActionType extends ActionType {
         // remove target if killed
         if (target.features.health <= 0) {
             if (evaluator) {
-                evaluator.addUnitKilled(target, target.id);
+                evaluator.addUnitKilled(target.id);
             }
             state.unitsData = state.unitsData.filter(u => u.id !== target.id);
         }
+    }
+}
+
+class GasActionType extends ActionType {
+    constructor() {
+        super("gas", false);
+    }
+
+    generateActions(state, unit) {
+        const actions = [];
+        if (unit.features.abilityPoints <= 0) return actions;
+        if (!unit.abilities || !unit.abilities.gas) return actions;
+        actions.push(new Action(this.name, {
+                        unitId: unit.id,
+                    }));
+        return actions;
+    }
+
+    apply(state, action, evaluator = null) {
+        const unit = state.unitsData.find(u => u.id === action.params.unitId);
+        if (!unit) return;
+        unit.features.abilityPoints = Math.max(0, unit.features.abilityPoints - 1);
+        const ability = unit.abilities.gas;
+        const targets = state.selectUnits(unit.mapX, unit.mapY, null, [unit.id], ability.config.range);
+        for (let target of targets) {
+            if(target.features.gasImmunity === true) continue;
+            const chance = ability.config.damage / (ability.config.damage + target.features.defense);
+            const expectedDamage = Math.round(chance * 100) / 100;
+            target.features.health -= expectedDamage;
+            if (evaluator) {
+                if(unit.playerName === target.playerName) evaluator.addDamageTaken(expectedDamage);
+                else evaluator.addDamageDealt(expectedDamage, target.id);
+            }
+            // remove target if killed
+            if (target.features.health <= 0) {
+                if (evaluator) {
+                    if(unit.playerName === target.playerName) evaluator.addUnitLost(target);
+                    else evaluator.addUnitKilled(target.id);
+                }
+                state.unitsData = state.unitsData.filter(u => u.id !== target.id);
+            }
+        } 
     }
 }
 
@@ -957,4 +999,5 @@ function initActionRegistry(){
     ActionRegistry.register(new MoveActionType());
     ActionRegistry.register(new AttackActionType());
     ActionRegistry.register(new FireActionType());
+    ActionRegistry.register(new GasActionType());
 }
