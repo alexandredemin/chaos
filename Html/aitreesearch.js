@@ -168,7 +168,27 @@ class GameState {
             }
         }
         return true;
-    }             
+    }
+    
+    selectPlacesOnLineOfSight(centerX, centerY, radius, withUnits = false, withEntities = false) {
+        let res = [];
+        for (let r = 1; r <= radius; r++) {
+            for (let y = centerY - r; y <= centerY + r; y++) {
+                for (let x = centerX - r; x <= centerX + r; x++) {
+                    if ((x < 0) || (x >= this.mapWidth) || (y < 0) || (y >= this.mapHeight) || ((x === centerX) && (y === centerY))) continue;
+                    if ((withUnits === false) && (this.getUnitAt(x, y) != null)) continue;
+                    if ((withEntities === false) && (this.getEntityAt(x, y) != null)) continue;
+                    let wallTile = this.wallsLayer ? this.wallsLayer.getTileAt(xx, yy) : null;
+                    if (wallTile != null) continue;
+                    let dX = Math.abs(x - centerX);
+                    let dY = Math.abs(y - centerY);
+                    if (dX * dX + dY * dY > r * r) continue;
+                    if (this.checkLineOfSight(centerX, centerY, x, y, null, null, null) === true) res.push([x, y]);
+                }
+            }
+        }
+        return res;
+    }
 
     evaluateStepFromEntity(unit, entity) {
         if(entity.configName == "web"){
@@ -646,6 +666,7 @@ class FireActionType extends ActionType {
     }
 }
 
+
 class GasActionType extends ActionType {
     constructor() {
         super("gas", false);
@@ -685,6 +706,66 @@ class GasActionType extends ActionType {
                 state.unitsData = state.unitsData.filter(u => u.id !== target.id);
             }
         } 
+    }
+}
+
+
+class JumpActionType extends ActionType {
+    constructor() {
+        super("jump", false);
+    }
+
+    generateActions(state, unit) {
+        const actions = [];
+        if (unit.features.abilityPoints <= 0) return actions;
+        if (!unit.abilities || !unit.abilities.jump) return actions;
+        const range = unit.abilities.jump.config.range;
+        let places = state.selectPlacesOnLineOfSight(unit.mapX, unit.mapY, range, true, true);
+        for(let place of places) {
+            actions.push(new Action(this.name, {
+                        unitId: unit.id,
+                        position: { x: place[0], y: place[1] }
+                    }));
+        }        
+        return actions;
+    }
+
+    apply(state, action, evaluator = null) {
+        const unit = state.unitsData.find(u => u.id === action.params.unitId);
+        if (!unit) return;
+        unit.features.abilityPoints = Math.max(0, unit.features.abilityPoints - 1);
+        const ability = unit.abilities.jump;
+        let target = state.getUnitAt(action.params.position.x, action.params.position.y);
+        if(target != null && target.playerName !== unit.playerName) {
+            const enemyCurrentFeatures = target.features; 
+            const chance = ability.config.damage / (ability.config.damage + enemyCurrentFeatures.defense);
+            const expectedDamage = Math.round(chance * 100) / 100;
+            target.features.health -= expectedDamage;
+            if (evaluator) {
+                evaluator.addDamageDealt(expectedDamage, target.id);
+                // jumper dies
+                evaluator.addUnitLost(unit);
+                evaluator.addDamageTaken(unit.features.health);
+            }
+            // remove target if killed
+            if (target.features.health <= 0) {
+                if (evaluator) {
+                    evaluator.addUnitKilled(target.id);
+                }
+                state.unitsData = state.unitsData.filter(u => u.id !== target.id);
+            }
+            // jumper dies
+            unit.features.health = 0;
+            unit.features.move = 0;
+            unit.features.attackPoints = 0;
+            unit.features.abilityPoints = 0;
+        }
+        else{
+            unit.mapX = action.params.position.x;
+            unit.mapY = action.params.position.y;
+            let entity = state.getEntityAt(unit.mapX, unit.mapY);
+            if(entity != null) Action.stepIntoEntity(unit, entity);
+        }
     }
 }
 
