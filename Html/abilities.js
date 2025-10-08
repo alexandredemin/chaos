@@ -533,20 +533,19 @@ class JumpAbility extends UnitAbility
                 }
                 else
                 {
-                    //TODO: ai control
-                    /*
-                    this.target = this.unit.player.aiControl.selectRocketJumpTarget(this.unit);
-                    if(this.target == null)
+                    const targetPlace = this.unit.player.aiControl.selectRocketJumpTarget(this.unit);
+                    if(targetPlace == null)
                     {
-                        if(this.unit.player.control === PlayerControl.computer) this.unit.player.aiControl.onRocketJump(this.unit,false);
+                        //this.unit.player.aiControl.onRocketJump(this.unit,false);
                         this.stop(this.unit);
                     }
                     else
                     {
+                        this.placeX = targetPlace.x;
+                        this.placeY = targetPlace.y;
                         this.step++;
                         this.next();
                     }
-                    */
                 }   
                 break;
             case 1:

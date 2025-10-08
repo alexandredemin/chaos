@@ -178,7 +178,7 @@ class GameState {
                     if ((x < 0) || (x >= this.mapWidth) || (y < 0) || (y >= this.mapHeight) || ((x === centerX) && (y === centerY))) continue;
                     if ((withUnits === false) && (this.getUnitAt(x, y) != null)) continue;
                     if ((withEntities === false) && (this.getEntityAt(x, y) != null)) continue;
-                    let wallTile = this.wallsLayer ? this.wallsLayer.getTileAt(xx, yy) : null;
+                    let wallTile = this.wallsLayer ? this.wallsLayer.getTileAt(x, y) : null;
                     if (wallTile != null) continue;
                     let dX = Math.abs(x - centerX);
                     let dY = Math.abs(y - centerY);
@@ -1081,4 +1081,5 @@ function initActionRegistry(){
     ActionRegistry.register(new AttackActionType());
     ActionRegistry.register(new FireActionType());
     ActionRegistry.register(new GasActionType());
+    ActionRegistry.register(new JumpActionType());
 }
