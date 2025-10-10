@@ -444,6 +444,7 @@ class StopActionType extends ActionType {
     }
 }
 
+/*
 class MoveActionType extends ActionType {
     constructor() {
         super("move", true);
@@ -514,6 +515,124 @@ class MoveActionType extends ActionType {
                 let entity2 = state.getEntityAt(unit.mapX, unit.mapY);
                 if(entity2 != null) Action.stepIntoEntity(unit, entity2);
             }      
+        }
+    }
+}
+*/
+class MoveActionType extends ActionType {
+    constructor() {
+        super("move", true);
+    }
+
+    canStepTo(state, unit, x, y) {
+        if(unit.features.move <= 0)return false;
+        if((x<0)||(x>=map.width)||(y<0)||(y>=map.height))return false;
+        let unitAtPos = state.getUnitAt(x, y);
+        if(unitAtPos!=null)return false;
+        let wallTile = wallsLayer.getTileAt(x, y);
+        if(wallTile != null)
+        {
+            if(wallTile.properties['collides'] === true)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    generateActions(state, unit) {
+        const actions = [];
+        const movePoints = unit.features.move;
+        if (movePoints <= 0) return actions;
+        // generate distance map from current position
+        const dmap = state.getDistanceMap(unit, unit.mapX, unit.mapY, null, null, null, movePoints);
+        // function to reconstruct path from dmap
+        function reconstructPath(dmap, startX, startY, endX, endY) {
+            const path = [];
+            let x = endX;
+            let y = endY;
+            const dirs = [
+                {dx: 1, dy: 0}, {dx: -1, dy: 0},
+                {dx: 0, dy: 1}, {dx: 0, dy: -1},
+                {dx: 1, dy: 1}, {dx: 1, dy: -1},
+                {dx: -1, dy: 1}, {dx: -1, dy: -1}
+            ];
+            const maxIter = state.mapWidth * state.mapHeight; // cyclic prevention
+            let steps = 0;
+            while (!(x === startX && y === startY) && steps++ < maxIter) {
+                path.push({x, y});
+                let best = {x, y};
+                let bestDist = dmap[y][x];
+                for (const d of dirs) {
+                    const nx = x + d.dx;
+                    const ny = y + d.dy;
+                    if (ny < 0 || ny >= dmap.length || nx < 0 || nx >= dmap[0].length) continue;
+                    const dist = dmap[ny][nx];
+                    if (dist >= 0 && dist < bestDist) {
+                        best = {x: nx, y: ny};
+                        bestDist = dist;
+                    }
+                }
+                if (best.x === x && best.y === y) break; // no progress, stop
+                x = best.x;
+                y = best.y;
+            }
+            path.push({x: startX, y: startY});
+            path.reverse();
+            return path;
+        }
+        // iterate over dmap to find reachable cells
+        for (let y = 0; y < dmap.length; y++) {
+            for (let x = 0; x < dmap[0].length; x++) {
+                const dist = dmap[y][x];
+                if (dist > 0 && dist <= movePoints) {
+                    // reconstruct path to (x,y)
+                    const path = reconstructPath(dmap, unit.mapX, unit.mapY, x, y);
+                    if (path.length > 1) {
+                        actions.push(new Action(this.name, {
+                            unitId: unit.id,
+                            startPosition: { x: unit.mapX, y: unit.mapY },
+                            endPosition: { x, y },
+                            path: path
+                        }));
+                    }
+                }
+            }
+        }
+        return actions;
+    }
+
+    apply(state, action, evaluator = null) {
+        const unit = state.unitsData.find(u => u.id === action.params.unitId);
+        if (!unit) return;
+        const path = action.params.path || [];
+        if (path.length <= 1) return;
+        let steps = Math.min(unit.features.move, path.length - 1);
+        for (let i = 1; i <= steps; i++) {
+            const pos = path[i];
+            let canStep = true; 
+            let entity = state.getEntityAt(unit.mapX, unit.mapY);
+            if(entity != null){
+                canStep = Action.stepOutFromEntity(unit, entity);
+                evaluator.addEntityKilled();
+            }
+            if(canStep){
+                unit.mapX = pos.x;;
+                unit.mapY = pos.y;
+                unit.features.move -= 1;
+                if(unit.features.move < 0)unit.features.move = 0;
+                // 
+                if (evaluator) {
+                    if(GameState.hasState(unit, "infected")){
+                        //evaluator.addDamageDealt(expectedDamage);
+                    }
+                }
+                //
+                let entity2 = state.getEntityAt(unit.mapX, unit.mapY);
+                if(entity2 != null) Action.stepIntoEntity(unit, entity2);
+            } 
+            else break;
+            if(unit.features.move <= 0) break;
         }
     }
 }
@@ -722,6 +841,8 @@ class JumpActionType extends ActionType {
         const range = unit.abilities.jump.config.range;
         let places = state.selectPlacesOnLineOfSight(unit.mapX, unit.mapY, range, true, true);
         for(let place of places) {
+            let unitAtPos = state.getUnitAt(place[0], place[1]);
+            if(unitAtPos != null && unit.playerName === unitAtPos.playerName) continue;
             actions.push(new Action(this.name, {
                         unitId: unit.id,
                         position: { x: place[0], y: place[1] }
@@ -954,7 +1075,30 @@ class Evaluator {
         return score;
         */
 
+        const TARGET_DAMAGE_BONUS = 1.5; // bonus for target damage
+        const TARGET_KILLED_BONUS = 5; // bonus for killed target
+        const UNIT_KILLED_BONUS = 1; // bonus for killed unit
+        const ENTITY_KILLED_BONUS = 1.5; // bonus for killed entity
+        const UNIT_LOST_PENALTY = 2; // penalty for lost unit
+
+        let score = 0;
+        let totalDamage = this.damageDealt;
+        let targetDamage = this.getDamageToUnit(order.targetId);
+        if (targetDamage > 0) {
+            totalDamage += targetDamage * TARGET_DAMAGE_BONUS;
+        }
+        if (this.hasKilledUnit(order.targetId)) {
+            totalDamage += TARGET_KILLED_BONUS;
+        }
+        score += totalDamage;
+        score += this.unitsKilled.length * UNIT_KILLED_BONUS;
+        score -= this.damageTaken;
+        score -= this.unitsLost * UNIT_LOST_PENALTY;
+        score += this.entitiesKilled * ENTITY_KILLED_BONUS;
+
         const target = state.unitsData.find(u => u.id === order.targetId);
+        if(!target) return score;
+
         const myUnits = state.getUnitsByPlayer({ name: unit.playerName }) || [];
         const myWizard = myUnits.find(u => u.configName === "wizard");
         const dmUnitFromTarget = state.getDistanceMapCached(unit,target.mapX, target.mapY);
@@ -966,26 +1110,6 @@ class Evaluator {
         // danger at unit's position
         const danger = state.getCellDanger(unit.mapX, unit.mapY, unit,[]);
         
-        const TARGET_DAMAGE_BONUS = 1.5; // bonus for target damage
-        const TARGET_KILLED_BONUS = 5; // bonus for killed target
-        const UNIT_KILLED_BONUS = 1; // bonus for killed unit
-        const ENTITY_KILLED_BONUS = 1.5; // bonus for killed entity
-        const UNIT_LOST_PENALTY = 2; // penalty for lost unit
-
-        let score = 0;
-        let totalDamage = this.damageDealt;
-        let targetDamage = this.getDamageToUnit(target.id);
-        if (targetDamage > 0) {
-            totalDamage += targetDamage * TARGET_DAMAGE_BONUS;
-        }
-        if (this.hasKilledUnit(target.id)) {
-            totalDamage += TARGET_KILLED_BONUS;
-        }
-        score += totalDamage;
-        score += this.unitsKilled.length * UNIT_KILLED_BONUS;
-        score -= this.damageTaken;
-        score -= this.unitsLost * UNIT_LOST_PENALTY;
-        score += this.entitiesKilled * ENTITY_KILLED_BONUS;
         if(distUnitToTarget >= 0) score -= distUnitToTarget;
 
         const enemyMoveRange = unitConfigs[target.configName].features.move;
@@ -1027,6 +1151,7 @@ function planBestTurn(state, unitId, order) {
             if ((action.typeName !== "move" && action.typeName !== "attack" && action.typeName !== "stop") && currentUnit.features.abilityPoints <= 0) continue;
 
             // check repeating moves
+            /*
             if (action.typeName === "move") {
                 const pos = action.params.endPosition;
                 if(sequence.length > 0 && sequence[sequence.length - 1].typeName === "move") {
@@ -1034,6 +1159,14 @@ function planBestTurn(state, unitId, order) {
                     if (lastPos.x === pos.x && lastPos.y === pos.y) {
                         continue;
                     }
+                }
+            }
+            */
+           // avoid two consecutive moves
+            if (sequence.length > 0) {
+                const lastAction = sequence[sequence.length - 1];
+                if (lastAction.typeName === "move" && action.typeName === "move") {
+                    continue;
                 }
             }
 

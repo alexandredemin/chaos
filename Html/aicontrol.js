@@ -88,6 +88,7 @@ class AIControl
         //if(!unit.aiControl) unit.aiControl = {plan: null};
         //if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died)
         if(!unit.aiControl.plan){
+            unit.aiControl.action = null;
             let state = GameState.createFrom(units, entities, wallsLayer); 
             const order = {
                 type: "intercept",
@@ -101,24 +102,33 @@ class AIControl
         }
         if(unit.aiControl.plan && unit.aiControl.plan.length > 0)
         {
-            let action = unit.aiControl.plan.shift();
-            if(action)
+            if(unit.aiControl.action == null) unit.aiControl.action = unit.aiControl.plan.shift();
+            if(unit.aiControl.action)
             {
-                unit.aiControl.action = action;
+                const action = unit.aiControl.action;
                 switch(action.typeName){
                     case "stop":
                     {
                         unit.aiControl.plan = null;
+                        unit.aiControl.action = null;
                         this.pass();
                         break;
                     }
                     case "move":
                     {
-                        if(unit.canStepTo(action.params.endPosition.x-unit.mapX,action.params.endPosition.y-unit.mapY)){                     
-                            unit.stepTo(action.params.endPosition.x,action.params.endPosition.y);
+                        let pos = null;
+                        while(action.params.path.length > 0){
+                            pos = action.params.path.shift();
+                            if(pos.x !== unit.mapX || pos.y !== unit.mapY) break;
+                        }
+                        if(action.params.path.length === 0) unit.aiControl.action = null;
+                        if(pos && unit.canStepTo(pos.x-unit.mapX,pos.y-unit.mapY)){                   
+                            unit.stepTo(pos.x,pos.y);
                         }
                         else{
                             unit.aiControl.plan = null;
+                            unit.aiControl.action = null;
+                            console.log("step failed");
                             this.step(unit);
                         }
                         break;
@@ -132,11 +142,13 @@ class AIControl
                             unit.aiControl.plan = null;
                             this.step(unit);
                         }
+                        unit.aiControl.action = null;
                         break;
                     }
                     case "fire": case "gas": case "jump":
                     {
                         unit.startAbility();
+                        unit.aiControl.action = null;
                         break;
                     }
                 }
@@ -144,6 +156,7 @@ class AIControl
         }
         else{
             unit.aiControl.plan = null;
+            unit.aiControl.action = null;
             this.pass();
         }
     }
