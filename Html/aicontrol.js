@@ -83,10 +83,25 @@ class AIControl
         //}
     }
 
+    isGoalAchieved(unit)
+    {
+        if(unit.aiControl && unit.aiControl.order){
+            if(unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && unit.aiControl.mainTarget.died) return true;
+            else if(unit.aiControl.order == "patrol" && unit.aiControl.mainTargetPos && unit.mapX === unit.aiControl.mainTargetPos[0] && unit.mapY === unit.aiControl.mainTargetPos[1]) return true;
+        }
+        return false;
+    }
+
     stepByPlan(unit)
     {
         //if(!unit.aiControl) unit.aiControl = {plan: null};
         //if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died)
+        if(this.isGoalAchieved(unit)){
+            // Goal achieved, need to choose new goal
+            unit.aiControl.plan = null;
+            unit.aiControl.action = null;
+            this.setMainTarget(unit,null,null,null,null);
+        }
         if(!unit.aiControl.plan){
             unit.aiControl.action = null;
             let state = GameState.createFrom(units, entities, wallsLayer); 
@@ -140,6 +155,8 @@ class AIControl
                         }
                         else{
                             unit.aiControl.plan = null;
+                            unit.aiControl.action = null;
+                            console.log("attack failed");
                             this.step(unit);
                         }
                         unit.aiControl.action = null;
@@ -637,8 +654,8 @@ class AIControl
                     let summonSpells = [];
                     for (let spl of Object.keys(unit.abilities.conjure.config.spells)) if (spellConfigs[spl].type === 'summon' && unit.abilities.conjure.config.spells[spl] != 0) summonSpells.push(spl);
                     //if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['spider'];
-                    //if(unit.player.name === "player 2") unit.aiControl.plannedSpell = spellConfigs['imp'];
-                    //else if(unit.player.name === "Player3") unit.aiControl.plannedSpell = spellConfigs['goblin'];
+                    //if(unit.player.name === "player 2") unit.aiControl.plannedSpell = spellConfigs['muddy'];
+                    //else if(unit.player.name === "player 3") unit.aiControl.plannedSpell = spellConfigs['muddy'];
                     //else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                     if(summonSpells.length > 0) unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                 }
