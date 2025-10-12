@@ -1205,6 +1205,138 @@ function planBestTurn(state, unitId, order) {
     return { sequence: bestSequence, score: bestScore };
 }
 
+//---------MCTS search---------
+function planBestTurnMCTS(state, unitId, order, simulations = 500, maxDepth = 5, explorationC = 1.4) {
+    const unit = state.unitsData.find(u => u.id === unitId);
+    const rootEvaluator = new Evaluator(state, unit.playerName, unitId);
+    const rootState = state.clone(true);
+
+    class Node {
+        constructor(parent, state, unit, sequence, evaluator) {
+            this.parent = parent;
+            this.state = state;
+            this.unit = unit;
+            this.sequence = sequence;
+            this.evaluator = evaluator;
+            this.children = [];
+            this.untriedActions = state.getAvailableActionsForUnit(unit);
+            this.visits = 0;
+            this.totalScore = 0;
+        }
+
+        getUCT(parentVisits, c = explorationC) {
+            if (this.visits === 0) return Infinity;
+            return (this.totalScore / this.visits) + c * Math.sqrt(Math.log(parentVisits) / this.visits);
+        }
+
+        isFullyExpanded() {
+            return this.untriedActions.length === 0;
+        }
+
+        bestChild() {
+            return this.children.reduce((a, b) => (a.visits > b.visits ? a : b));
+        }
+    }
+
+    const root = new Node(null, rootState, unit, [], rootEvaluator);
+
+    function isActionAllowed(unit, action, sequence) {
+        if (!action) return false;
+        // Check action points
+        if ((unit.features.move <= 0) && (unit.features.abilityPoints <= 0)) return false;
+        if (action.typeName === "move" && unit.features.move <= 0) return false;
+        if (action.typeName === "attack" && (unit.features.move <= 0 || unit.features.attackPoints <= 0)) return false;
+        if ((action.typeName !== "move" && action.typeName !== "attack" && action.typeName !== "stop") && unit.features.abilityPoints <= 0) return false;
+        // Avoid two consecutive moves
+        if (sequence.length > 0) {
+            const lastAction = sequence[sequence.length - 1];
+            if (lastAction.typeName === "move" && action.typeName === "move") {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function select(node) {
+        while (node.isFullyExpanded() && node.children.length > 0) {
+            node = node.children.reduce((best, child) => {
+                const uct = child.getUCT(node.visits);
+                return (!best || uct > best.uct) ? { node: child, uct } : best;
+            }, null).node;
+        }
+        return node;
+    }
+
+    function expand(node) {
+        node.untriedActions = node.untriedActions.filter(a => isActionAllowed(node.unit, a, node.sequence));
+        if (node.untriedActions.length === 0) return node;
+        const action = node.untriedActions.pop();
+        const actionType = ActionRegistry.get(action.typeName);
+        if (!actionType) return node;
+        const nextState = node.state.clone(true);
+        const nextEvaluator = node.evaluator.clone();
+        actionType.apply(nextState, action, nextEvaluator);
+        const nextUnit = nextState.unitsData.find(u => u.id === node.unit.id);
+        if (!nextUnit) return node;
+        const child = new Node(node, nextState, nextUnit, node.sequence.concat(action), nextEvaluator);
+        node.children.push(child);
+        return child;
+    }
+
+    function simulate(state, unit, evaluator, baseSequence = []) {
+        const simEvaluator = evaluator.clone();
+        let simState = state.clone(true);
+        let simUnit = simState.unitsData.find(u => u.id === unit.id);
+        let sequence = baseSequence.slice();
+        for (let d = 0; d < maxDepth; d++) {
+            if (!simUnit) break;
+            const actions = simState.getAvailableActionsForUnit(simUnit).filter(a => isActionAllowed(simUnit, a, sequence));
+            if (actions.length === 0) break;
+            const action = actions[Math.floor(Math.random() * actions.length)];
+            const actionType = ActionRegistry.get(action.typeName);
+            if (!actionType) continue;
+            actionType.apply(simState, action, simEvaluator);
+            sequence.push(action);
+            simUnit = simState.unitsData.find(u => u.id === unit.id);
+            if (!simUnit) break;
+        }
+        return simEvaluator.finalize(simState, order, sequence);
+    }
+
+    function backpropagate(node, score) {
+        while (node) {
+            node.visits++;
+            node.totalScore += score;
+            node = node.parent;
+        }
+    }
+
+    function getBestSequence(node) {
+        let bestNode = node;
+        while (bestNode.children.length > 0) {
+            bestNode = bestNode.children.reduce((a, b) =>
+                (a.totalScore / a.visits) > (b.totalScore / b.visits) ? a : b
+            );
+        }
+        return bestNode.sequence;
+    }
+
+    for (let i = 0; i < simulations; i++) {
+        let node = select(root);
+        const expanded = expand(node);
+        const score = simulate(expanded.state, expanded.unit, expanded.evaluator, expanded.sequence);
+        backpropagate(expanded, score);
+    }
+
+    //const bestChild = root.children.length > 0 ? root.bestChild() : null;
+    //const bestSequence = bestChild ? bestChild.sequence : [];
+    //const bestScore = bestChild ? bestChild.totalScore / bestChild.visits : 0;
+    const bestSequence = root.children.length > 0 ? getBestSequence(root) : [];
+    const bestScore = root.children.length > 0  ? root.children.reduce((a, b) => (a.totalScore / a.visits) > (b.totalScore / b.visits) ? (b.totalScore / b.visits) : (a.totalScore / a.visits)): 0;
+
+    return { sequence: bestSequence, score: bestScore };
+}
+
 //---------auxiliary functions---------
 
 //---------initialization---------
