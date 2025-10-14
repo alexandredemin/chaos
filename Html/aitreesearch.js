@@ -1016,65 +1016,6 @@ class Evaluator {
 
     evaluateInterception(state, unit, order, sequence) {
         /*
-        const target = state.unitsData.find(u => u.id === order.targetId);
-        // find my wizard
-        const myUnits = state.getUnitsByPlayer({ name: unit.playerName }) || [];
-        const myWizard = myUnits.find(u => u.configName === "wizard");
-        // distance from my unit to target
-        const dmUnit = state.getDistanceMapCached(unit);
-        let distUnitToTarget = (dmUnit && target) ? dmUnit[target.mapY]?.[target.mapX] : -1;
-        if(distUnitToTarget > 0) distUnitToTarget = state.getBaseCost(dmUnit,target.mapX,target.mapY);
-        // distance from my unit to my wizard
-        let distUnitToWizard = (dmUnit && myWizard) ? dmUnit[myWizard.mapY]?.[myWizard.mapX] : -1;
-        if(distUnitToWizard > 0) distUnitToWizard = state.getBaseCost(dmUnit,myWizard.mapX,myWizard.mapY);
-        // distance from target to my wizard
-        const dmTarget = state.getDistanceMapCached(target);
-        let distTargetToWizard = (dmTarget && myWizard) ? dmTarget[myWizard.mapY]?.[myWizard.mapX] : -1;
-        if(distTargetToWizard > 0) distTargetToWizard = state.getBaseCost(dmTarget,myWizard.mapX,myWizard.mapY);
-        // check if unit is on the path from target to my wizard
-        // simple heuristic: dist(target->unit) + dist(unit->wizard) ≈ dist(target->wizard)
-        let onPathBonus = 0;
-        if(distUnitToTarget >= 0 && distUnitToWizard >= 0 && distTargetToWizard >= 0) {
-            onPathBonus = - Math.abs((distUnitToTarget + distUnitToWizard) - distTargetToWizard);
-        }
-        // danger at unit's position
-        const danger = state.getCellDanger(unit.mapX, unit.mapY, unit.playerName,[]);
-        
-        // final score calculation
-        const W_TARGET_DAMAGE = 1.5; // weight for target damage
-        const MIN_DANGER_FACTOR = 0.2;   // minimal penalty for danger when close to my wizard
-        const MAX_DANGER_FACTOR = 3.0;   // maximal penalty for danger when far from my wizard
-        const MAX_INFLUENCE_DIST = 12;   // distance where danger penalty is maximal
-
-        let score = 0;
-        // 1) reward for damage
-        let totalDamage = this.damageDealt;
-        let targetDamage = this.getDamageToUnit(target.id);
-        // reward for damage to the target, more weight
-        if (targetDamage > 0) {
-            totalDamage += targetDamage * W_TARGET_DAMAGE;
-        }
-        // maximal reward for killing the target
-        if (this.hasKilledUnit(target.id)) {
-            totalDamage += 1000;
-        }
-        score += totalDamage;
-        // 2) penalty for deviation from the path
-        score += onPathBonus;
-
-        if(distTargetToWizard <= MAX_INFLUENCE_DIST / 3){
-            score -= distUnitToTarget;
-        }
-        else if(distUnitToTarget <= 2 * MAX_INFLUENCE_DIST / 3){
-            score -= distUnitToTarget;
-            score -= danger;
-        }
-        else if(distUnitToTarget <= MAX_INFLUENCE_DIST){
-            score -= danger * 3;
-        }
-        return score;
-        */
-
         const TARGET_DAMAGE_BONUS = 1.5; // bonus for target damage
         const TARGET_KILLED_BONUS = 5; // bonus for killed target
         const UNIT_KILLED_BONUS = 1; // bonus for killed unit
@@ -1127,6 +1068,41 @@ class Evaluator {
         }
 
         return score;
+        */
+
+        const TARGET_KILLED_BONUS = 1000; // bonus for killed target
+        const TARGET_DAMAGE_BONUS = 500; // bonus for target damage
+        const TARGET_APPROACH_BONUS = 100; // bonus for approach to target
+
+        let score = 0;
+        const target = state.unitsData.find(u => u.id === order.targetId);
+        if(!target) return score;
+        const dmUnitFromTarget = state.getDistanceMapCached(unit,target.mapX, target.mapY);
+        let distUnitToTarget = (dmUnitFromTarget && target) ? dmUnitFromTarget[unit.mapY]?.[unit.mapX] : -1;
+        const unitInitial = this.initialState.unitsData.find(u => u.id === unit.id);
+        let distUnitToTargetInitial = (dmUnitFromTarget && target) ? dmUnitFromTarget[unitInitial.mapY]?.[unitInitial.mapX] : -1;
+        let approach = 0;
+        if(distUnitToTarget >= 0 && distUnitToTargetInitial >= 0) {
+            approach = distUnitToTargetInitial - distUnitToTarget;
+        }
+        else if(distUnitToTarget >= 0 && distUnitToTargetInitial < 0) {
+            approach = unitConfigs[unit.configName].features.move;
+        }
+
+        let targetDamage = this.getDamageToUnit(order.targetId);
+
+        if(this.hasKilledUnit(order.targetId)) {
+            score += TARGET_KILLED_BONUS;
+        }
+        else if(targetDamage > 0) {
+            score += TARGET_DAMAGE_BONUS;
+        }
+        else if(approach > 0) {
+            score += TARGET_APPROACH_BONUS;
+        }
+        
+
+        return score;
     }
 
 }
@@ -1150,18 +1126,6 @@ function planBestTurn(state, unitId, order) {
             if (action.typeName === "attack" && (currentUnit.features.move <= 0 || currentUnit.features.attackPoints <=0)) continue;
             if ((action.typeName !== "move" && action.typeName !== "attack" && action.typeName !== "stop") && currentUnit.features.abilityPoints <= 0) continue;
 
-            // check repeating moves
-            /*
-            if (action.typeName === "move") {
-                const pos = action.params.endPosition;
-                if(sequence.length > 0 && sequence[sequence.length - 1].typeName === "move") {
-                    const lastPos = sequence[sequence.length - 1].params.startPosition;
-                    if (lastPos.x === pos.x && lastPos.y === pos.y) {
-                        continue;
-                    }
-                }
-            }
-            */
            // avoid two consecutive moves
             if (sequence.length > 0) {
                 const lastAction = sequence[sequence.length - 1];
