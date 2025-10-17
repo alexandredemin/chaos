@@ -98,6 +98,7 @@ class AIControl
         //if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died)
         if(this.isGoalAchieved(unit)){
             // Goal achieved, need to choose new goal
+            console.log("goal achieved");
             unit.aiControl.plan = null;
             unit.aiControl.action = null;
             this.setMainTarget(unit,null,null,null,null);

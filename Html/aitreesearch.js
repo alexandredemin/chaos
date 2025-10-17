@@ -312,7 +312,8 @@ class GameState {
             const rangeAbility = GameState.getRangeAttackAbility(enemy);
             if (rangeAbility) {
                 const abilityRange = rangeAbility.config.range;
-                if(Math.abs(enemy.mapX - x) > moveRange + abilityRange || Math.abs(enemy.mapY - y) > moveRange + abilityRange) continue;           
+                if(Math.abs(enemy.mapX - x) > moveRange + abilityRange || Math.abs(enemy.mapY - y) > moveRange + abilityRange) continue; 
+                let maxChance = 0;          
                 for (let yy = Math.max(0, enemy.mapY - moveRange); yy <= Math.min(this.mapHeight - 1, enemy.mapY + moveRange); yy++) {
                      for (let xx = Math.max(0, enemy.mapX - moveRange); xx <= Math.min(this.mapWidth - 1, enemy.mapY + moveRange); xx++) {
                         const dist = distMap[yy]?.[xx];
@@ -323,10 +324,11 @@ class GameState {
                         if (distSq <= abilityRange * abilityRange) {
                             if(rangeAbility.type === "fire" && !this.checkLineOfSight(xx, yy, x, y)) continue;
                             const chance = rangeAbility.config.damage/(rangeAbility.config.damage + unit.features.defense);
-                            danger += Math.round(chance * 100) / 100;
+                            if(chance > maxChance) maxChance = chance;
                         }
                     }
                 }
+                if(maxChance > 0) danger += Math.round(maxChance * 100) / 100;
             }
         }
         return danger;
@@ -1073,6 +1075,9 @@ class Evaluator {
         const TARGET_KILLED_BONUS = 1000; // bonus for killed target
         const TARGET_DAMAGE_BONUS = 500; // bonus for target damage
         const TARGET_APPROACH_BONUS = 100; // bonus for approach to target
+        const UNIT_KILLED_REWARD = 1; // rewad for killed unit
+        const ENTITY_KILLED_REWARD = 1.5; // reward for killed entity
+        const UNIT_LOST_PENALTY = 2; // penalty for lost unit
 
         let score = 0;
         const target = state.unitsData.find(u => u.id === order.targetId);
@@ -1100,7 +1105,15 @@ class Evaluator {
         else if(approach > 0) {
             score += TARGET_APPROACH_BONUS;
         }
-        
+        // danger at unit's position
+        const danger = state.getCellDanger(unit.mapX, unit.mapY, unit,[]);
+
+        score += this.damageDealt;
+        score += this.unitsKilled.length * UNIT_KILLED_REWARD;
+        score -= this.damageTaken;
+        score -= this.unitsLost * UNIT_LOST_PENALTY;
+        score += this.entitiesKilled * ENTITY_KILLED_REWARD;
+        score += approach - danger * 2;
 
         return score;
     }
@@ -1297,6 +1310,17 @@ function planBestTurnMCTS(state, unitId, order, simulations = 500, maxDepth = 5,
     //const bestScore = bestChild ? bestChild.totalScore / bestChild.visits : 0;
     const bestSequence = root.children.length > 0 ? getBestSequence(root) : [];
     const bestScore = root.children.length > 0  ? root.children.reduce((a, b) => (a.totalScore / a.visits) > (b.totalScore / b.visits) ? (b.totalScore / b.visits) : (a.totalScore / a.visits)): 0;
+
+    //+ for debugging !!!
+    const finState = rootState.clone(true);
+    for(let i = 0; i < bestSequence.length; i++) {
+        const action = bestSequence[i];
+        const actionType = ActionRegistry.get(action.typeName);
+        if (!actionType) continue;
+        actionType.apply(finState, action, rootEvaluator);
+    }
+    rootEvaluator.finalize(finState, order, bestSequence);
+    //-
 
     return { sequence: bestSequence, score: bestScore };
 }
