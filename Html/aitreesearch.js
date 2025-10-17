@@ -301,7 +301,7 @@ class GameState {
             const distMap = this.getDistanceMapCached(enemy, enemy.mapX, enemy.mapY);
             let dist = distMap[y]?.[x];
             if (dist == null || dist < 0) continue;
-            dist = this.getBaseCost(distMap,enemy.mapX,enemy.mapY);
+            dist = this.getBaseCost(distMap,x,y);
             const moveRange = unitConfigs[enemy.configName].features.move;
             // melee attacks
             if (dist <= moveRange) {

@@ -117,7 +117,7 @@ class AIControl
             console.log(unit.config.name + " " + order.type + " plan: " + sequence.map(a => a.getName()));
             //-
         }
-        if(unit.aiControl.plan && unit.aiControl.plan.length > 0)
+        if(unit.aiControl.action || (unit.aiControl.plan && unit.aiControl.plan.length > 0))
         {
             if(unit.aiControl.action == null) unit.aiControl.action = unit.aiControl.plan.shift();
             if(unit.aiControl.action)
