@@ -173,7 +173,7 @@ const unitConfigs = {
                 type: 'jump',
                 config: {
                     range: 5,
-                    damage: 3
+                    damage: 5
                 }
             }
         }

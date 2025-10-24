@@ -697,9 +697,11 @@ class AttackActionType extends ActionType {
                 let enemyCurrentFeatures = enemyUnit.features;
                 const chance = curFeatures.strength/(curFeatures.strength + enemyCurrentFeatures.defense);
                 const expectedDamage = Math.round(chance * 100) / 100;
+                let damageDealt = expectedDamage;
+                if(damageDealt > enemyUnit.features.health && enemyUnit.features.health > 0) damageDealt = enemyUnit.features.health;
                 enemyUnit.features.health -= expectedDamage;
                 if (evaluator) {
-                    evaluator.addDamageDealt(expectedDamage, enemyUnit.id);
+                    evaluator.addDamageDealt(damageDealt, enemyUnit.id);
                 }
                 // remove enemy unit from state if killed
                 if(enemyUnit.features.health <= 0){
@@ -773,9 +775,11 @@ class FireActionType extends ActionType {
         const enemyCurrentFeatures = target.features; 
         const chance = ability.config.damage / (ability.config.damage + enemyCurrentFeatures.defense);
         const expectedDamage = Math.round(chance * 100) / 100;
+        let damageDealt = expectedDamage;
+        if(damageDealt > enemyUnit.features.health && enemyUnit.features.health > 0) damageDealt = enemyUnit.features.health;
         target.features.health -= expectedDamage;
         if (evaluator) {
-            evaluator.addDamageDealt(expectedDamage, target.id);
+            evaluator.addDamageDealt(damageDealt, target.id);
         }
         // remove target if killed
         if (target.features.health <= 0) {
@@ -813,10 +817,12 @@ class GasActionType extends ActionType {
             if(target.features.gasImmunity === true) continue;
             const chance = ability.config.damage / (ability.config.damage + target.features.defense);
             const expectedDamage = Math.round(chance * 100) / 100;
+            let damageDealt = expectedDamage;
+            if(damageDealt > enemyUnit.features.health && enemyUnit.features.health > 0) damageDealt = enemyUnit.features.health;
             target.features.health -= expectedDamage;
             if (evaluator) {
-                if(unit.playerName === target.playerName) evaluator.addDamageTaken(expectedDamage);
-                else evaluator.addDamageDealt(expectedDamage, target.id);
+                if(unit.playerName === target.playerName) evaluator.addDamageTaken(damageDealt);
+                else evaluator.addDamageDealt(damageDealt, target.id);
             }
             // remove target if killed
             if (target.features.health <= 0) {
@@ -863,9 +869,11 @@ class JumpActionType extends ActionType {
             const enemyCurrentFeatures = target.features; 
             const chance = ability.config.damage / (ability.config.damage + enemyCurrentFeatures.defense);
             const expectedDamage = Math.round(chance * 100) / 100;
+            let damageDealt = expectedDamage;
+            if(damageDealt > enemyUnit.features.health && enemyUnit.features.health > 0) damageDealt = enemyUnit.features.health;
             target.features.health -= expectedDamage;
             if (evaluator) {
-                evaluator.addDamageDealt(expectedDamage, target.id);
+                evaluator.addDamageDealt(damageDealt, target.id);
                 // jumper dies
                 evaluator.addUnitLost(unit);
                 evaluator.addDamageTaken(unit.features.health);
@@ -1075,6 +1083,7 @@ class Evaluator {
         const TARGET_KILLED_BONUS = 1000; // bonus for killed target
         const TARGET_DAMAGE_BONUS = 500; // bonus for target damage
         const TARGET_APPROACH_BONUS = 100; // bonus for approach to target
+        const TARGET_DAMAGE_REWARD = 1.5; // reward for target damage
         const UNIT_KILLED_REWARD = 1; // rewad for killed unit
         const ENTITY_KILLED_REWARD = 1.5; // reward for killed entity
         const UNIT_LOST_PENALTY = 2; // penalty for lost unit
@@ -1096,18 +1105,19 @@ class Evaluator {
 
         let targetDamage = this.getDamageToUnit(order.targetId);
 
-        if(this.hasKilledUnit(order.targetId)) {
+        if(this.hasKilledUnit(order.targetId) && this.damageDealt >= this.damageTaken) {
             score += TARGET_KILLED_BONUS;
         }
-        else if(targetDamage > 0) {
+        else if(targetDamage > 0 && this.damageDealt >= this.damageTaken) {
             score += TARGET_DAMAGE_BONUS;
         }
-        else if(approach > 0) {
+        else if(approach > 0 && this.damageDealt >= this.damageTaken) {
             score += TARGET_APPROACH_BONUS;
         }
         // danger at unit's position
         const danger = state.getCellDanger(unit.mapX, unit.mapY, unit,[]);
 
+        score += targetDamage * TARGET_DAMAGE_REWARD;
         score += this.damageDealt;
         score += this.unitsKilled.length * UNIT_KILLED_REWARD;
         score -= this.damageTaken;
