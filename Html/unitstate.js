@@ -161,9 +161,14 @@ class GiganticState extends UnitState
     {
         if(unit.hasState('gigantic') === false){
             let state = new GiganticState(unit);
-            if(stateData != null)state.data = clone(stateData);
-            unit.addState(state);
-            state.start(); 
+            if(stateData == null){
+                unit.addState(state);
+                state.start();
+            }
+            else{
+                state.data = clone(stateData);
+                unit.addState(state);              
+            } 
         }
         else{
             for(let i=0; i<unit.states.length; i++){
