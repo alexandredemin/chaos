@@ -698,8 +698,8 @@ class AttackActionType extends ActionType {
                 const chance = curFeatures.strength/(curFeatures.strength + enemyCurrentFeatures.defense);
                 const expectedDamage = Math.round(chance * 100) / 100;
                 let damageDealt = expectedDamage;
-                if(damageDealt > enemyUnit.features.health && enemyUnit.features.health > 0) damageDealt = enemyUnit.features.health;
-                enemyUnit.features.health -= expectedDamage;
+                if(damageDealt > enemyCurrentFeatures.health && enemyCurrentFeatures.health > 0) damageDealt = enemyCurrentFeatures.health;
+                enemyCurrentFeatures.health -= expectedDamage;
                 if (evaluator) {
                     evaluator.addDamageDealt(damageDealt, enemyUnit.id);
                 }
@@ -776,7 +776,7 @@ class FireActionType extends ActionType {
         const chance = ability.config.damage / (ability.config.damage + enemyCurrentFeatures.defense);
         const expectedDamage = Math.round(chance * 100) / 100;
         let damageDealt = expectedDamage;
-        if(damageDealt > enemyUnit.features.health && enemyUnit.features.health > 0) damageDealt = enemyUnit.features.health;
+        if(damageDealt > enemyCurrentFeatures.health && enemyCurrentFeatures.health > 0) damageDealt = enemyCurrentFeatures.health;
         target.features.health -= expectedDamage;
         if (evaluator) {
             evaluator.addDamageDealt(damageDealt, target.id);
@@ -818,7 +818,7 @@ class GasActionType extends ActionType {
             const chance = ability.config.damage / (ability.config.damage + target.features.defense);
             const expectedDamage = Math.round(chance * 100) / 100;
             let damageDealt = expectedDamage;
-            if(damageDealt > enemyUnit.features.health && enemyUnit.features.health > 0) damageDealt = enemyUnit.features.health;
+            if(damageDealt > target.features.health && target.features.health > 0) damageDealt = target.features.health;
             target.features.health -= expectedDamage;
             if (evaluator) {
                 if(unit.playerName === target.playerName) evaluator.addDamageTaken(damageDealt);
@@ -870,7 +870,7 @@ class JumpActionType extends ActionType {
             const chance = ability.config.damage / (ability.config.damage + enemyCurrentFeatures.defense);
             const expectedDamage = Math.round(chance * 100) / 100;
             let damageDealt = expectedDamage;
-            if(damageDealt > enemyUnit.features.health && enemyUnit.features.health > 0) damageDealt = enemyUnit.features.health;
+            if(damageDealt > enemyCurrentFeatures.health && enemyCurrentFeatures.health > 0) damageDealt = enemyCurrentFeatures.health;
             target.features.health -= expectedDamage;
             if (evaluator) {
                 evaluator.addDamageDealt(damageDealt, target.id);
@@ -1102,29 +1102,32 @@ class Evaluator {
         else if(distUnitToTarget >= 0 && distUnitToTargetInitial < 0) {
             approach = unitConfigs[unit.configName].features.move;
         }
-
-        let targetDamage = this.getDamageToUnit(order.targetId);
-
-        if(this.hasKilledUnit(order.targetId) && this.damageDealt >= this.damageTaken) {
-            score += TARGET_KILLED_BONUS;
-        }
-        else if(targetDamage > 0 && this.damageDealt >= this.damageTaken) {
-            score += TARGET_DAMAGE_BONUS;
-        }
-        else if(approach > 0 && this.damageDealt >= this.damageTaken) {
-            score += TARGET_APPROACH_BONUS;
-        }
         // danger at unit's position
         const danger = state.getCellDanger(unit.mapX, unit.mapY, unit,[]);
 
+        let targetDamage = this.getDamageToUnit(order.targetId);
         score += targetDamage * TARGET_DAMAGE_REWARD;
         score += this.damageDealt;
         score += this.unitsKilled.length * UNIT_KILLED_REWARD;
         score -= this.damageTaken;
         score -= this.unitsLost * UNIT_LOST_PENALTY;
         score += this.entitiesKilled * ENTITY_KILLED_REWARD;
-        score += approach - danger * 2;
 
+        if(this.hasKilledUnit(order.targetId) && this.damageDealt >= this.damageTaken) {
+            score += TARGET_KILLED_BONUS;
+            score -=  danger * 2;
+        }
+        else if(targetDamage > 0 && this.damageDealt >= this.damageTaken) {
+            score += TARGET_DAMAGE_BONUS;
+            score -=  danger * 2;
+        }
+        else if(approach > 0 && this.damageDealt >= this.damageTaken) {
+            score += TARGET_APPROACH_BONUS;
+            score += approach - danger * 2;
+        }
+        else{
+            score += approach - danger * 2;
+        }
         return score;
     }
 
