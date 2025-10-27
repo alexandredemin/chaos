@@ -75,12 +75,12 @@ class AIControl
             this.stepWizard(unit);
             return;
         }
-        if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died){
-            this.stepByPlan(unit);
-        }
-        else{
+        //if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died){
+        //    this.stepByPlan(unit);
+        //}
+        //else{
             this.stepUnit(unit);
-        }
+        //}
     }
 
     isGoalAchieved(unit)
