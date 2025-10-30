@@ -162,13 +162,24 @@ class GiganticState extends UnitState
         if(unit.hasState('gigantic') === false){
             let state = new GiganticState(unit);
             if(stateData == null){
-                unit.addState(state);
-                state.start();
+                state.data.init_originY = unit.originY;
+                state.data.init_scale = unit.scale;
+                let str = (unit.config.features.strength + unit.config.features.defense) * unit.config.features.health * 0.5;
+                let max_factor = 3;
+                let min_factor = 1;
+                let max_str = 20;
+                state.data.factor = max_factor - (str - min_factor) * (max_factor - min_factor)/(max_str - 1);
+                if(state.data.factor < min_factor) state.data.factor = min_factor;
+                unit.features.strength = Math.floor(unit.features.strength * state.data.factor + 0.5);
+                unit.features.defense = Math.floor(unit.features.defense * state.data.factor + 0.5);
+                unit.features.health = Math.floor(unit.features.health * state.data.factor + 0.5);
+                state.data.timeleft = GiganticState.duration;
             }
             else{
-                state.data = clone(stateData);
-                unit.addState(state);              
-            } 
+                state.data = clone(stateData);          
+            }
+            unit.addState(state);
+            state.start();
         }
         else{
             for(let i=0; i<unit.states.length; i++){
@@ -182,13 +193,11 @@ class GiganticState extends UnitState
   
     start()
     {
-        this.data.init_originY = this.unit.originY;
-        this.data.init_scale = this.unit.scale;
         let init_y = this.unit.y;
         const bounds = this.unit.getBounds();
         const bottomCenterY = bounds.bottom;
         this.unit.setOrigin(this.unit.originX, 1);
-        this.unit.y = bottomCenterY;
+        this.unit.y = bottomCenterY - 1;
         this.tween = this.unit.scene.tweens.add({
             targets: this.unit,
             scale: {start: this.unit.scale, to: this.unit.config.scale * 1.5},
@@ -200,16 +209,6 @@ class GiganticState extends UnitState
             onComplete: function(){ this.targets[0].setOrigin(0.5, 1 - (0.5 * 16 / (this.targets[0].height*this.targets[0].scale))); this.targets[0].setPosition(this.targets[0].x, init_y);},
         });
         this.tween.play();
-        let str = (this.unit.config.features.strength + this.unit.config.features.defense) * this.unit.config.features.health * 0.5;
-        let max_factor = 3;
-        let min_factor = 1;
-        let max_str = 20;
-        this.data.factor = max_factor - (str - min_factor) * (max_factor - min_factor)/(max_str - 1);
-        if(this.data.factor < min_factor) this.data.factor = min_factor;
-        this.unit.features.strength = Math.floor(this.unit.features.strength * this.data.factor + 0.5);
-        this.unit.features.defense = Math.floor(this.unit.features.defense * this.data.factor + 0.5);
-        this.unit.features.health = Math.floor(this.unit.features.health * this.data.factor + 0.5);
-        this.data.timeleft = GiganticState.duration;
     }
 
     onCallback()
@@ -236,7 +235,8 @@ class GiganticState extends UnitState
         const bounds = this.unit.getBounds();
         const bottomCenterY = bounds.bottom;
         this.unit.setOrigin(this.unit.originX, 1);
-        this.unit.y = bottomCenterY;
+        this.unit.y = bottomCenterY - 1;
+        const init_originY = this.data.init_originY;
         this.tween = this.unit.scene.tweens.add({
             targets: this.unit,
             scale: {start: this.unit.scale, to: this.data.init_scale},
@@ -245,7 +245,7 @@ class GiganticState extends UnitState
             yoyo: false,
             repeat: 0,
             paused: true,
-            onComplete: function(){ this.targets[0].setOrigin(this.targets[0].originX, this.data.init_originY); this.targets[0].setPosition(this.targets[0].x, init_y); },
+            onComplete: function(){ this.targets[0].setOrigin(this.targets[0].originX, init_originY); this.targets[0].setPosition(this.targets[0].x, init_y); },
         });
         this.tween.play();
         this.unit.features.strength = this.unit.config.features.strength;
