@@ -314,6 +314,19 @@ class Unit extends BaseUnit
         this.processStates();
     }
 
+    consumeResources()
+    {
+        if(this.config.name === "wizard") return;
+        if(this.player && this.player.wizard){
+            if( this.player.wizard.features.mana >= 1 ) {
+                this.player.wizard.features.mana = this.player.wizard.features.mana - 1;
+                return;
+            }
+        }
+        //disappear unit
+        // ...
+    }
+
     addState(state)
     {
         this.states.push(state);

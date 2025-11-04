@@ -45,9 +45,9 @@ const StartScene = new Phaser.Class({
         gameSettings.spellDistrib = gameState.spellDistrib;
         gameSettings.magicPoints = gameState.magicPoints;
         gameSettings.showEnemyMoves = gameState.showEnemyMoves;
+        gameSettings.rules = gameState.rules;
         //playersSettings = gameState.players;
         //currentTurn = gameState.turn;
-        // Восстанови также units, карту, спеллы, очки и т.д.
         this.deleteAllMenu();
         this.scene.start('GameScene', { loadSavedGame: true, savedState: gameState });
     },
@@ -90,9 +90,9 @@ const StartScene = new Phaser.Class({
         if (!this.settingsMenu) return;
         const selectedMap = this.mapMenu.items[0].options[this.mapMenu.items[0].optionInd].value;
         const isRandom = selectedMap === "random";
-        // Indexes of random map settings are 4 and 5
-        this.settingsMenu.items[4].visible = isRandom;
+        // Indexes of random map settings are 5 and 6
         this.settingsMenu.items[5].visible = isRandom;
+        this.settingsMenu.items[6].visible = isRandom;
     },
   
     showSettingsMenu: function()
@@ -107,6 +107,17 @@ const StartScene = new Phaser.Class({
             menuItems.push({label: "spells: unlimited",action: ()=>startScene.showMagicPoints(),options:spellOptions});
             menuItems.push({label: "magic points: 100",action: null,options:magicPoints});
             menuItems.push({label: "show enemy moves off",action: null,options:[{text:"show enemy moves on",value:true},{text:"show enemy moves off",value:false},]});
+            menuItems.push({
+                label: "rules: standard",
+                action: null,
+                options: [
+                    { text: "rules: standard", value: "standard" },
+                    { text: "rules: advanced", value: "advanced" }
+                ], 
+                optionInd: 0,
+                text: "rules: standard",
+                visible: true
+            });
             menuItems.push({label: "",action:null});
             // add random map parameters
             menuItems.push({
@@ -235,8 +246,8 @@ const StartScene = new Phaser.Class({
         gameSettings.selectedMap = selectedMap;
 
         if (selectedMap === "random") {
-            const width = this.settingsMenu.items[4].options[this.settingsMenu.items[4].optionInd].value;
-            const height = this.settingsMenu.items[5].options[this.settingsMenu.items[5].optionInd].value;
+            const width = this.settingsMenu.items[5].options[this.settingsMenu.items[5].optionInd].value;
+            const height = this.settingsMenu.items[6].options[this.settingsMenu.items[6].optionInd].value;
             gameSettings.randomMapConfig = { width, height };
         }
 
@@ -245,6 +256,7 @@ const StartScene = new Phaser.Class({
             gameSettings.spellDistrib = this.settingsMenu.items[0].options[this.settingsMenu.items[0].optionInd].value;
             gameSettings.magicPoints = this.settingsMenu.items[1].options[this.settingsMenu.items[1].optionInd].value;
             gameSettings.showEnemyMoves = this.settingsMenu.items[2].options[this.settingsMenu.items[2].optionInd].value;
+            gameSettings.rules = this.settingsMenu.items[3].options[this.settingsMenu.items[3].optionInd].value;
         }
 
         this.deleteAllMenu();
