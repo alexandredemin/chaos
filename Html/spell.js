@@ -501,7 +501,7 @@ class AtackSpell extends Spell
                 if(damaged) config.damaged = true;
                 cam.startFollow(this.target);
                 let lm = new LossesAnimationManager(this.wizard.scene, 200, 200);
-                lm.playAt(this.target.x,this.target.y,this.target,this,config);
+                lm.playAt(this.target.x,this.target.y,this.target,this,null,config);
             }
             else
             {
@@ -614,7 +614,7 @@ class AtackPlaceSpell extends Spell
                 if(damaged) config.damaged = true;
                 cam.startFollow(target);
                 let lm = new LossesAnimationManager(target.scene, 200, 200);
-                lm.playAt(target.x,target.y,target,this,config);
+                lm.playAt(target.x,target.y,target,this,null,config);
             }
             else
             {

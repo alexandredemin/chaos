@@ -7,6 +7,7 @@ class LossesAnimationManager
     damageAnimation = null;
     disappearanceAnimation = null;
     callbackObject = null;
+    callbackMethod = null;
     unit = null;
 
     constructor(scene, x, y)
@@ -32,14 +33,26 @@ class LossesAnimationManager
         {
             if(this.callbackObject != null)
             {
-                this.callbackObject.onCallback();
+                if (typeof this.callbackObject === "function") {
+                    this.callbackObject();
+                }
+                else {
+                    if(this.callbackMethod != null && this.callbackObject[this.callbackMethod] != null && typeof this.callbackObject[this.callbackMethod] === "function")
+                    {
+                        this.callbackObject[this.callbackMethod].call(this.callbackObject);
+                    }
+                    else {
+                        this.callbackObject.onCallback();
+                    }
+                }
             }
         }
     }
 
-    playAt(x,y,unit,callbackObject,config)
+    playAt(x,y,unit,callbackObject,callbackMethod,config)
     {
         this.callbackObject = callbackObject;
+        this.callbackMethod = callbackMethod;
         this.unit = unit;
         if(config.killed) this.animationQueue.push(this.disappearanceAnimation);
         if(config.damaged) this.animationQueue.push(this.damageAnimation);

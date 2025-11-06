@@ -187,7 +187,7 @@ class FireAbility extends UnitAbility
                 if(damaged) config.damaged = true;
                 cam.startFollow(this.target);
                 let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
-                lm.playAt(this.target.x,this.target.y,this.target,this,config);
+                lm.playAt(this.target.x,this.target.y,this.target,null,this,config);
             }
             else
             {
@@ -324,7 +324,7 @@ class GasAbility  extends UnitAbility
                 if(damaged) config.damaged = true;
                 cam.startFollow(target);
                 let lm = new LossesAnimationManager(target.scene, 200, 200);
-                lm.playAt(target.x,target.y,target,this,config);
+                lm.playAt(target.x,target.y,target,this,null,config);
             }
             else
             {
@@ -471,7 +471,7 @@ class JumpAbility extends UnitAbility
                 if(damaged) config.damaged = true;
                 cam.startFollow(this.target);
                 let lm = new LossesAnimationManager(this.target.scene, 200, 200);
-                lm.playAt(this.target.x,this.target.y,this.target,this,config);
+                lm.playAt(this.target.x,this.target.y,this.target,this,null,config);
             }
             else
             {
@@ -500,7 +500,7 @@ class JumpAbility extends UnitAbility
                 let config = {hit: false, damaged: false, killed: true};
                 cam.startFollow(this.unit);
                 let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
-                lm.playAt(this.unit.x,this.unit.y,this.unit,this,config);
+                lm.playAt(this.unit.x,this.unit.y,this.unit,this,null,config);
             }
             else
             {

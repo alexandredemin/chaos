@@ -170,7 +170,7 @@ class Unit extends BaseUnit
                     {
                         cam.startFollow(this);
                         let lm = new LossesAnimationManager(this.scene, 200, 200);
-                        lm.playAt(this.x,this.y,this,this,config);
+                        lm.playAt(this.x,this.y,this,this,null,config);
                     }
                     else
                     {
@@ -247,7 +247,7 @@ class Unit extends BaseUnit
             hideArrows();
             cam.startFollow(enemyUnit);
             let lm = new LossesAnimationManager(this.scene, 200, 200);
-            lm.playAt(enemyUnit.x,enemyUnit.y,enemyUnit,this,config);
+            lm.playAt(enemyUnit.x,enemyUnit.y,enemyUnit,this,null,config);
         }
         else
         {

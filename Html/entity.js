@@ -196,7 +196,7 @@ class WebEntity extends Entity
                 hideArrows();
                 cam.startFollow(this);
                 var lm = new LossesAnimationManager(this.scene, 200, 200);
-                lm.playAt(this.x,this.y,this,null,config);
+                lm.playAt(this.x,this.y,this,null,null,config);
             }
             else
             {  
@@ -286,7 +286,7 @@ class FireEntity extends Entity
                 if(killed) config.killed = true;
                 cam.startFollow(unit);
                 let lm = new LossesAnimationManager(this.scene, 200, 200);
-                lm.playAt(unit.x,unit.y,unit,this,config);
+                lm.playAt(unit.x,unit.y,unit,this,null,config);
             }
             else
             {
@@ -433,7 +433,7 @@ class GlueBlobEntity extends Entity
             hideArrows();
             cam.startFollow(this);
             let lm = new LossesAnimationManager(this.scene, 200, 200);
-            lm.playAt(this.x,this.y,this,null,config);
+            lm.playAt(this.x,this.y,this,null,null,config);
         }
         else
         {  

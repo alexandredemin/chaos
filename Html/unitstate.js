@@ -95,7 +95,7 @@ class InfectedState extends UnitState
                     if(killed) config.killed = true;
                     cam.startFollow(this.unit);
                     let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
-                    lm.playAt(this.unit.x,this.unit.y,this.unit,this,config);
+                    lm.playAt(this.unit.x,this.unit.y,this.unit,this,null,config);
                 }
                 else
                 {
