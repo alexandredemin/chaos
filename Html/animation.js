@@ -8,6 +8,7 @@ class LossesAnimationManager
     disappearanceAnimation = null;
     callbackObject = null;
     callbackMethod = null;
+    callbackArgs = null;
     unit = null;
 
     constructor(scene, x, y)
@@ -29,30 +30,24 @@ class LossesAnimationManager
             let anim = this.animationQueue.pop();
             anim.playAt(this.unit.x,this.unit.y,this.unit,this);
         }
-        else
-        {
-            if(this.callbackObject != null)
-            {
+        else {
+            if (this.callbackObject != null) {
                 if (typeof this.callbackObject === "function") {
-                    this.callbackObject();
-                }
-                else {
-                    if(this.callbackMethod != null && this.callbackObject[this.callbackMethod] != null && typeof this.callbackObject[this.callbackMethod] === "function")
-                    {
-                        this.callbackObject[this.callbackMethod].call(this.callbackObject);
-                    }
-                    else {
-                        this.callbackObject.onCallback();
-                    }
+                    this.callbackObject.apply(null, this.callbackArgs || []);
+                } else if (this.callbackMethod != null && this.callbackObject[this.callbackMethod] != null && typeof this.callbackObject[this.callbackMethod] === "function") {
+                    this.callbackObject[this.callbackMethod].apply(this.callbackObject, this.callbackArgs || []);
+                } else if (typeof this.callbackObject.onCallback === "function") {
+                    this.callbackObject.onCallback();
                 }
             }
         }
     }
 
-    playAt(x,y,unit,callbackObject,callbackMethod,config)
+    playAt(x,y,unit,callbackObject,callbackMethod,config, callbackArgs = null)
     {
         this.callbackObject = callbackObject;
         this.callbackMethod = callbackMethod;
+        this.callbackArgs = callbackArgs;
         this.unit = unit;
         if(config.killed) this.animationQueue.push(this.disappearanceAnimation);
         if(config.damaged) this.animationQueue.push(this.damageAnimation);

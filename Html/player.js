@@ -35,6 +35,24 @@ class Player
         }
     }
 
+    killUnits(diedUnits)
+    {
+        if(diedUnits.length === 0) return;
+        let unit = diedUnits.pop();
+        if(gameSettings.showEnemyMoves == true || this.control === PlayerControl.human)
+        {
+            const config = {hit: false, damaged: false, killed: true};
+            cam.startFollow(unit);
+            let lm = new LossesAnimationManager(unit.scene, 200, 200);
+            lm.playAt(unit.x,unit.y,unit,this,"killUnits",config,[diedUnits]);
+        }
+        else {
+            unit.die();
+            this.killUnits(diedUnits);
+        }
+    
+    }
+
     processRecover()
     {
         for(let i=0; i<this.units.length; i++)
@@ -61,14 +79,42 @@ class Player
         }
     }
 
+    consumeResources()
+    {
+        let availableMana = 0;
+        if(this.wizard) availableMana = this.wizard.features.mana;
+        let diedUnits = [];
+        for (let i = this.units.length - 1; i >= 0; i--) {
+            const unit = this.units[i];
+            if (unit !== this.wizard && unit.features.manaUpkeep) {
+                if (unit.features.manaUpkeep > availableMana) {
+                    diedUnits.push(unit);
+                } else {
+                    availableMana -= unit.features.manaUpkeep;
+                }
+            }
+        }
+        this.wizard.features.mana = availableMana;
+        if(diedUnits.length > 0)
+        {
+            if(gameSettings.showEnemyMoves == true || this.control === PlayerControl.human)
+            {
+                this.killUnits(diedUnits);
+            }
+            else {
+                diedUnits.forEach(unit => unit.die());
+            }
+        }
+    }
+
     startTurn()
     {
-        //if(gameSettings.showEnemyMoves == true || this.control === PlayerControl.human)
         if(gameSettings.showEnemyMoves == false && this.control === PlayerControl.human)
         {
             this.units.forEach(item => {item.visible=true; checkUnitVisibility(item);});
         }
         this.units.forEach(item => item.recovered = false);
         this.processRecover();
+        if(gameSettings.rules === "advanced") this.consumeResources();
     }
 }

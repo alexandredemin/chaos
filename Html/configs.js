@@ -206,6 +206,7 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 2,
+            manaUpkeep: 1,
         },
         abilities: {
             fire: {
