@@ -187,7 +187,7 @@ class FireAbility extends UnitAbility
                 if(damaged) config.damaged = true;
                 cam.startFollow(this.target);
                 let lm = new LossesAnimationManager(this.unit.scene, 200, 200);
-                lm.playAt(this.target.x,this.target.y,this.target,null,this,config);
+                lm.playAt(this.target.x,this.target.y,this.target,this,null,config);
             }
             else
             {
