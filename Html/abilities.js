@@ -167,7 +167,7 @@ class FireAbility extends UnitAbility
         this.unit.features.abilityPoints--;
         if(this.target != null)
         {
-            if(this.target.player.control === PlayerControl.computer && this.target.player.aiControl)
+            if(this.target.player.control === PlayerControl.computer && this.unit.player !== this.target.player && this.target.player.aiControl)
             {
                 if(this.target.player.aiControl.distantThreats == null) this.target.player.aiControl.distantThreats = [];
                 if(this.target.player.aiControl.distantThreats.includes(this.unit) == false)this.target.player.aiControl.distantThreats.push(this.unit);
@@ -304,7 +304,7 @@ class GasAbility  extends UnitAbility
     {
         if(target != null)
         {
-            if(target.player.control === PlayerControl.computer && target.player.aiControl)
+            if(target.player.control === PlayerControl.computer && this.unit.player !== target.player && target.player.aiControl)
             {
                 if(target.player.aiControl.distantThreats == null) target.player.aiControl.distantThreats = [];
                 if(target.player.aiControl.distantThreats.includes(this.unit) == false)target.player.aiControl.distantThreats.push(this.unit);

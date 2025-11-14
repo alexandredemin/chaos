@@ -111,10 +111,12 @@ class AIControl
                 targetId: unit.aiControl.mainTarget.id
             };
             //const { sequence, score } = planBestTurn(state, unit.id, order);
+            const startTime = performance.now();
             const { sequence, score } = planBestTurnMCTS(state, unit.id, order, 1000);
+            const endTime = performance.now();
             unit.aiControl.plan = sequence;
             //+log
-            console.log(unit.config.name + " " + order.type + " plan: " + sequence.map(a => a.getName()));
+            console.log(unit.config.name + " " + order.type + " plan: " + sequence.map(a => a.getName()) + " time: " + (endTime - startTime).toFixed(2) + "ms");
             //-
         }
         if(unit.aiControl.action || (unit.aiControl.plan && unit.aiControl.plan.length > 0))
@@ -656,10 +658,10 @@ class AIControl
                     let summonSpells = [];
                     for (let spl of Object.keys(unit.abilities.conjure.config.spells)) if (spellConfigs[spl].type === 'summon' && unit.abilities.conjure.config.spells[spl] != 0) summonSpells.push(spl);
                     //if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['spider'];
-                    //if(unit.player.name === "player 2") unit.aiControl.plannedSpell = spellConfigs['imp'];
+                    if(unit.player.name === "player 2") unit.aiControl.plannedSpell = spellConfigs['imp'];
                     //else if(unit.player.name === "player 3") unit.aiControl.plannedSpell = spellConfigs['muddy'];
-                    //else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
-                    if(summonSpells.length > 0) unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
+                    //if(summonSpells.length > 0) unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
                 }
             }
             if(unit.aiControl.plannedSpell != null)
