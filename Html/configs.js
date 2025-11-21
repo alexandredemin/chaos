@@ -98,6 +98,7 @@ const unitConfigs = {
             attackPoints: 1,
             attackCost: 2,
             mana: 4,
+            manaIncome: 1,
         },
         abilities: {
             conjure: {

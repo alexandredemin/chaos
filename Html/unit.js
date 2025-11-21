@@ -307,7 +307,7 @@ class Unit extends BaseUnit
         this.features.attackPoints = this.config.features.attackPoints;
         if(this.config.abilities != null)if(Object.keys(this.config.abilities).indexOf('conjure') >=0 )
         {
-            this.features.mana = this.features.mana + 1;
+            this.features.mana = this.features.mana + this.config.abilities['conjure'].manaIncome;
         }
         this.states.forEach(item => item.processed=false);
         this.recovered = true;

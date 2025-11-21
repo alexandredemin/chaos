@@ -50,6 +50,10 @@ class GameState {
         return this.entitiesData.find(e => e.mapX === x && e.mapY === y);
     }
 
+    getEntitiesAt(x, y) {
+        return this.entitiesData.filter(e => e.mapX === x && e.mapY === y);
+    }
+
     static hasState(unit, stateName) {
         if (!unit || !unit.states) return false;
         return unit.states.some(s => s.name === stateName);
@@ -61,6 +65,46 @@ class GameState {
             const ability = unit.abilities[abilityName];
             if(ability.config.range) return ability;
         }
+    }
+
+    getManaIncome(playerName) {
+        const wizard = this.unitsData.find(u => u.playerName === player && u.configName === "wizard");
+        if (!wizard) return 0;
+        let manaIncome = (wizard.abilities['conjure']?.manaIncome) || 0;
+        const entities = this.getEntitiesAt(wizard.mapX, wizard.mapY);
+        for (const ent of entities) {
+            if (ent.configName === "pentagram") {
+                if (ent.features.time >= ent.features.rewardFrequency) {
+                    manaIncome += ent.features.mana;
+                }
+            }
+        }
+        return manaIncome;
+    }
+
+    getAvgManaIncome(player) {
+        const wizard = this.unitsData.find(u => u.playerName === player && u.configName === "wizard");
+        if (!wizard) return 0;
+        let manaIncome = (wizard.abilities['conjure']?.manaIncome) || 0;
+        const entities = this.getEntitiesAt(wizard.mapX, wizard.mapY);
+        for (const ent of entities) {
+            if (ent.configName === "pentagram") {
+                if (ent.features.time >= ent.features.rewardFrequency) {
+                    manaIncome += ent.features.mana / ent.features.rewardFrequency;
+                }
+            }
+        }
+        return manaIncome;
+    }
+
+    getManaUpkeep(playerName){
+        let total = 0;
+        for (const u of this.unitsData) {
+            if (u.playerName === playerName && u.features.manaUpkeep) {
+                total += u.features.manaUpkeep;
+            }
+        }
+        return total;
     }
 
     getAvailableActionsForUnit(unit) {

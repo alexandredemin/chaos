@@ -629,6 +629,104 @@ class AIControl
 
     stepWizard(unit)
     {
+        if (unit.features.abilityPoints <= 0) {
+            this.pass();
+            return;
+        }
+
+        if (!unit.aiControl) {
+            unit.aiControl = {
+                pentagramCreated: false,
+                spell: null,
+                plannedSpell: null,
+                spellFailed: false
+            };
+        }
+
+        unit.aiControl.spell = null;
+
+        if (unit.aiControl.spellFailed) {
+            unit.aiControl.spellFailed = false;
+            this.pass();
+            return;
+        }
+
+        let state = GameState.createFrom(units, entities, wallsLayer); 
+        const expectedIncome = state.getAvgManaIncome(unit.player.name);
+        const currentUpkeep = state.getManaUpkeep(unit.player.name);
+
+        //function checks "can we afford summon?"
+        const canAffordSummon = (spellCfg) => {
+            if (spellCfg.type !== 'summon') return true;
+            const creatureCfg = unitConfigs[spellCfg.id];
+            if (!creatureCfg || !creatureCfg.features) return true;
+            const upkeep = creatureCfg.features.manaUpkeep || 0;
+            if (upkeep === 0) return true;
+            return (currentUpkeep + upkeep) <= expectedIncome;
+        };
+        
+        let dmap = this.getDistanceMap(unit, unit.mapX, unit.mapY);
+        let enemies = this.getAvailableEnemies(dmap, unit, 3);
+
+        // List of allowed summon spells with correct upkeep
+        const getAffordableSummonSpells = () => {
+            const list = [];
+            for (let spl of Object.keys(unit.abilities.conjure.config.spells)) {
+                if(!spellConfigs[spl]) continue;
+                if(spellConfigs[spl].type !== 'summon') continue;
+                if(unit.abilities.conjure.config.spells[spl] === 0) continue;
+                if(spellConfigs[spl].cost > unit.features.mana) continue;
+
+                // NEW: check upkeep feasibility
+                if (!canAffordSummon(spellConfigs[spl])) continue;
+
+                list.push(spl);
+            }
+            return list;
+        };
+
+        let affordableSummons = getAffordableSummonSpells();
+
+        // 1) если рядом враги — выбираем боевое существо
+        if (enemies.length > 0 && affordableSummons.length > 0) {
+            const chosen = affordableSummons[randomInt(0, affordableSummons.length - 1)];
+            unit.aiControl.plannedSpell = spellConfigs[chosen];
+        }
+
+        // 2) если плана пока нет — шанс поставить пентаграмму
+        if (!unit.aiControl.plannedSpell) {
+            if (!unit.aiControl.pentagramCreated &&
+                unit.abilities.conjure.config.spells['pentagram'] != 0 &&
+                randomInt(0, 1) === 1) {
+
+                unit.aiControl.plannedSpell = spellConfigs['pentagram'];
+            }
+            else {
+                // вызвать любое существо, которое мы можем себе позволить
+                if (affordableSummons.length > 0) {
+                    const chosen = affordableSummons[randomInt(0, affordableSummons.length - 1)];
+                    unit.aiControl.plannedSpell = spellConfigs[chosen];
+                }
+            }
+        }
+
+        // 3) Проверяем ману
+        if (unit.aiControl.plannedSpell) {
+
+            if (unit.features.mana >= unit.aiControl.plannedSpell.cost) {
+                unit.aiControl.spell = unit.aiControl.plannedSpell;
+                unit.startAbility();
+            }
+            else {
+                this.pass();
+            }
+        }
+        else {
+            // нет подходящего заклинания
+            if (!this.stepCommonUnit(unit)) this.pass();
+        }
+
+        // old code
         if(unit.features.abilityPoints > 0)
         {
             if(!unit.aiControl)
