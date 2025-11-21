@@ -662,7 +662,7 @@ class AIControl
             if (!creatureCfg || !creatureCfg.features) return true;
             const upkeep = creatureCfg.features.manaUpkeep || 0;
             if (upkeep === 0) return true;
-            return (currentUpkeep + upkeep) <= expectedIncome;
+            return (currentUpkeep + upkeep) + 0.5 <= expectedIncome;
         };
         
         let dmap = this.getDistanceMap(unit, unit.mapX, unit.mapY);
@@ -675,42 +675,49 @@ class AIControl
                 if(!spellConfigs[spl]) continue;
                 if(spellConfigs[spl].type !== 'summon') continue;
                 if(unit.abilities.conjure.config.spells[spl] === 0) continue;
-                if(spellConfigs[spl].cost > unit.features.mana) continue;
-
-                // NEW: check upkeep feasibility
                 if (!canAffordSummon(spellConfigs[spl])) continue;
-
                 list.push(spl);
             }
             return list;
         };
 
         let affordableSummons = getAffordableSummonSpells();
-
-        // 1) если рядом враги — выбираем боевое существо
+        // if enemys are near, try to summon something first
         if (enemies.length > 0 && affordableSummons.length > 0) {
-            const chosen = affordableSummons[randomInt(0, affordableSummons.length - 1)];
-            unit.aiControl.plannedSpell = spellConfigs[chosen];
+            const affordableNow = affordableSummons.filter(spl => spellConfigs[spl].cost < unit.features.mana);
+            if (affordableNow.length > 0) {
+                const chosen = affordableNow[randomInt(0, affordableNow.length - 1)];
+                unit.aiControl.plannedSpell = spellConfigs[chosen];
+            }
         }
-
-        // 2) если плана пока нет — шанс поставить пентаграмму
-        if (!unit.aiControl.plannedSpell) {
-            if (!unit.aiControl.pentagramCreated &&
-                unit.abilities.conjure.config.spells['pentagram'] != 0 &&
-                randomInt(0, 1) === 1) {
-
+        // if no plan yet, try to plan pentagram or something else
+        if (!unit.aiControl.plannedSpeыll) {
+            if (!unit.aiControl.pentagramCreated && unit.abilities.conjure.config.spells['pentagram'] != 0 && randomInt(0, 1) === 1) {
                 unit.aiControl.plannedSpell = spellConfigs['pentagram'];
             }
             else {
-                // вызвать любое существо, которое мы можем себе позволить
+                // summon something random
                 if (affordableSummons.length > 0) {
+                    /*
+                    if(unit.player.name === "player 1") {
+                        if(affordableSummons.includes('demon')) unit.aiControl.plannedSpell = spellConfigs['demon'];
+                        else if(unit.abilities.conjure.config.spells['pentagram'] != 0) unit.aiControl.plannedSpell = spellConfigs['pentagram'];
+                        else {
+                            this.pass();
+                            return;
+                        }
+                    }
+                    else {
+                        const chosen = affordableSummons[randomInt(0, affordableSummons.length - 1)];
+                        unit.aiControl.plannedSpell = spellConfigs[chosen];
+                    }
+                    */
                     const chosen = affordableSummons[randomInt(0, affordableSummons.length - 1)];
                     unit.aiControl.plannedSpell = spellConfigs[chosen];
                 }
             }
         }
-
-        // 3) Проверяем ману
+        // check if we can cast planned spell
         if (unit.aiControl.plannedSpell) {
 
             if (unit.features.mana >= unit.aiControl.plannedSpell.cost) {
@@ -722,66 +729,8 @@ class AIControl
             }
         }
         else {
-            // нет подходящего заклинания
+            // no spell planned, proceed as normal unit
             if (!this.stepCommonUnit(unit)) this.pass();
-        }
-
-        // old code
-        if(unit.features.abilityPoints > 0)
-        {
-            if(!unit.aiControl)
-            {
-                unit.aiControl = {pentagramCreated: false, spell: null, plannedSpell: null, spellFailed: false};
-            }
-            unit.aiControl.spell = null;
-            if(unit.aiControl.spellFailed)
-            {
-                unit.aiControl.spellFailed = false;
-                this.pass();
-                return;
-            }
-            let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-            let enemies = this.getAvailableEnemies(dmap,unit,3);
-            if(enemies.length > 0)
-            {
-                let availableSpells = [];
-                for(let spl of Object.keys(unit.abilities.conjure.config.spells)) if (spellConfigs[spl].type === 'summon' && spellConfigs[spl].cost <= unit.features.mana && unit.abilities.conjure.config.spells[spl] != 0) availableSpells.push(spl);
-                if(availableSpells.length > 0) unit.aiControl.plannedSpell = spellConfigs[availableSpells[randomInt(0, availableSpells.length - 1)]];
-            }
-            if(unit.aiControl.plannedSpell == null) {
-                if (!unit.aiControl.pentagramCreated && unit.abilities.conjure.config.spells['pentagram']!=0 && randomInt(0,1) === 1) {
-                    unit.aiControl.plannedSpell = spellConfigs['pentagram'];
-                }
-                else {
-                    let summonSpells = [];
-                    for (let spl of Object.keys(unit.abilities.conjure.config.spells)) if (spellConfigs[spl].type === 'summon' && unit.abilities.conjure.config.spells[spl] != 0) summonSpells.push(spl);
-                    //if(unit.player.name === "Player1") unit.aiControl.plannedSpell = spellConfigs['spider'];
-                    if(unit.player.name === "player 2") unit.aiControl.plannedSpell = spellConfigs['imp'];
-                    //else if(unit.player.name === "player 3") unit.aiControl.plannedSpell = spellConfigs['muddy'];
-                    else unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
-                    //if(summonSpells.length > 0) unit.aiControl.plannedSpell = spellConfigs[summonSpells[randomInt(0, summonSpells.length - 1)]];
-                }
-            }
-            if(unit.aiControl.plannedSpell != null)
-            {
-                if(unit.features.mana >= unit.aiControl.plannedSpell.cost)
-                {
-                    unit.aiControl.spell = unit.aiControl.plannedSpell;
-                    unit.startAbility();
-                }
-                else
-                {
-                    this.pass();
-                }
-            }
-            else
-            {
-                if(!this.stepCommonUnit(unit)) this.pass();  
-            }
-        }
-        else
-        {
-            this.pass();
         }
     }
 

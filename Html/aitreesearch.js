@@ -70,10 +70,11 @@ class GameState {
     getManaIncome(playerName) {
         const wizard = this.unitsData.find(u => u.playerName === player && u.configName === "wizard");
         if (!wizard) return 0;
-        let manaIncome = (wizard.abilities['conjure']?.manaIncome) || 0;
+        let manaIncome = (wizard.features.manaIncome) || 0;
         const entities = this.getEntitiesAt(wizard.mapX, wizard.mapY);
         for (const ent of entities) {
             if (ent.configName === "pentagram") {
+                // time не бывает больше 1 !!!!
                 if (ent.features.time >= ent.features.rewardFrequency) {
                     manaIncome += ent.features.mana;
                 }
@@ -85,13 +86,11 @@ class GameState {
     getAvgManaIncome(player) {
         const wizard = this.unitsData.find(u => u.playerName === player && u.configName === "wizard");
         if (!wizard) return 0;
-        let manaIncome = (wizard.abilities['conjure']?.manaIncome) || 0;
+        let manaIncome = (wizard.features.manaIncome) || 0;
         const entities = this.getEntitiesAt(wizard.mapX, wizard.mapY);
         for (const ent of entities) {
             if (ent.configName === "pentagram") {
-                if (ent.features.time >= ent.features.rewardFrequency) {
                     manaIncome += ent.features.mana / ent.features.rewardFrequency;
-                }
             }
         }
         return manaIncome;
