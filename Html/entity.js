@@ -39,6 +39,10 @@ class Entity extends BaseUnit
         return null;
     }
 
+    static getEntitiesAtMap(x, y) {
+        return entities.filter(e => e.mapX === x && e.mapY === y);
+    }
+
     start(showStart=true)
     {
         if(showStart){

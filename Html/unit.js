@@ -127,10 +127,14 @@ class Unit extends BaseUnit
     checkEntityStepOut()
     {
         let canStep = true;
-        let ent = Entity.getEntityAtMap(this.mapX,this.mapY);
-        if(ent != null)
-        {
-            canStep = ent.onStepOut(this);
+        const ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
+        if (ents && ents.length > 0) {
+            for (const ent of ents) {
+                if (!ent.onStepOut(this)) {
+                    canStep = false;
+                    break;
+                }
+            }
         }
         return canStep;
     }

@@ -390,7 +390,7 @@ class Action {
         return `${this.typeName} ${JSON.stringify(this.params)}`;
     }
 
-    static stepOutFromEntity(unit, entity) {
+    static stepOutFromEntity(unit, entity, evaluator) {
         if(entity.configName == "web"){
             if(unit.features.webImmunity === true)
             {
@@ -399,17 +399,34 @@ class Action {
             else
             {
                 unit.features.move = 0;
+                if(evaluator) evaluator.addEntityKilled();
                 return false;
             }
         }
         else if(entity.configName == "glue_blob"){
             unit.features.move = 0;
+            if(evaluator) evaluator.addEntityKilled();
             return false;
         }
         else if(entity.configName == "pentagram"){
             return true;
         }
         else return true;
+    }
+
+    static checkEntityStepOut(state, unit, evaluator)
+    {
+        let canStep = true;
+        const ents = state.getEntitiesAt(unit.mapX, unit.mapY);
+        if (ents && ents.length > 0) {
+            for (const ent of ents) {
+                if(!Action.stepOutFromEntity(unit, ent, evaluator)){
+                    canStep = false;
+                    break;
+                }
+            }
+        }
+        return canStep;
     }
 
     static stepIntoEntity(unit, entity) {
@@ -539,13 +556,7 @@ class MoveActionType extends ActionType {
     apply(state, action, evaluator = null) {
         const unit = state.unitsData.find(u => u.id === action.params.unitId);
         if (unit) {
-            let canStep = true; 
-            let entity = state.getEntityAt(unit.mapX, unit.mapY);
-            if(entity != null){
-                canStep = Action.stepOutFromEntity(unit, entity);
-                evaluator.addEntityKilled();
-            }
-            if(canStep){
+            if(Action.checkEntityStepOut(state, unit, evaluator)){
                 unit.mapX = action.params.endPosition.x;
                 unit.mapY = action.params.endPosition.y;
                 unit.features.move -= 1;
@@ -655,13 +666,7 @@ class MoveActionType extends ActionType {
         let steps = Math.min(unit.features.move, path.length - 1);
         for (let i = 1; i <= steps; i++) {
             const pos = path[i];
-            let canStep = true; 
-            let entity = state.getEntityAt(unit.mapX, unit.mapY);
-            if(entity != null){
-                canStep = Action.stepOutFromEntity(unit, entity);
-                evaluator.addEntityKilled();
-            }
-            if(canStep){
+            if(Action.checkEntityStepOut(state, unit, evaluator)){
                 unit.mapX = pos.x;;
                 unit.mapY = pos.y;
                 unit.features.move -= 1;
@@ -724,13 +729,7 @@ class AttackActionType extends ActionType {
     apply(state, action, evaluator = null) {
         const unit = state.unitsData.find(u => u.id === action.params.unitId);
         if (unit) {
-            let canStep = true; 
-            let entity = state.getEntityAt(unit.mapX, unit.mapY);
-            if(entity != null){
-                canStep = Action.stepOutFromEntity(unit, entity);
-                evaluator.addEntityKilled();
-            }
-            if(canStep){
+            if(Action.checkEntityStepOut(state, unit, evaluator)){
                 unit.features.move = unit.features.move - unit.features.attackCost;
                 if(unit.features.move < 0)unit.features.move = 0;
                 unit.features.attackPoints--;
