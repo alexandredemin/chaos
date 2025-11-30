@@ -33,6 +33,213 @@
 
 <body>
 <script>
+    // ---------- Global Error + Debug Console Overlay ----------
+    (function() {
+
+        // ---------- ERROR BOX ----------
+        const box = document.createElement("div");
+        box.style.position = "fixed";
+        box.style.bottom = "0";
+        box.style.left = "0";
+        box.style.right = "0";
+        box.style.maxHeight = "50%";
+        box.style.overflowY = "auto";
+        box.style.background = "rgba(0, 0, 0, 0.7)";
+        box.style.color = "#ff8080";
+        box.style.fontSize = "13px";
+        box.style.padding = "10px";
+        box.style.zIndex = "999999";
+        box.style.whiteSpace = "pre-wrap";
+        box.style.fontFamily = "monospace";
+        box.style.display = "none";
+
+        document.body.appendChild(box);
+
+        function logToBox(msg) {
+            box.style.display = "block";
+            box.textContent += msg + "\n";
+        }
+
+        // ---------- ERROR HOOKS ----------
+        window.onerror = function(msg, url, line, col, error) {
+            logToBox(
+                "ERROR: " + msg +
+                "\nURL: " + url +
+                "\nLine: " + line + ", Col: " + col +
+                "\nStack:\n" + (error && error.stack ? error.stack : "no stack")
+            );
+        };
+
+        window.addEventListener("unhandledrejection", function(event) {
+            logToBox(
+                "PROMISE ERROR:\n" +
+                (event.reason && event.reason.stack ? event.reason.stack : JSON.stringify(event.reason))
+            );
+        });
+
+        // ---------- DEBUG PANEL WITH JS INPUT + SAVE EDITOR ----------
+        const panel = document.createElement("div");
+        panel.style.position = "fixed";
+        panel.style.bottom = "50%";
+        panel.style.left = "0";
+        panel.style.right = "0";
+        panel.style.background = "rgba(0,0,0,0.95)";
+        panel.style.color = "#fff";
+        panel.style.padding = "10px";
+        panel.style.fontFamily = "monospace";
+        panel.style.display = "none";
+        panel.style.zIndex = "1000000";
+
+        panel.innerHTML = `
+            <div style="margin-bottom:5px; font-weight:bold;">Debug Console</div>
+
+            <textarea id="debugCmd" style="width:100%; height:60px; background:#111; color:#0f0; font-family:monospace;"></textarea>
+            <button id="debugRun">Run JS</button>
+            <button id="openSaveEditor">Edit Save</button>
+            <button id="toggleConsoleLogs">Console Log: OFF</button>
+            <button id="debugClear">Clear Log</button>
+        `;
+
+        document.body.appendChild(panel);
+
+        // ---------- JS COMMAND EXECUTION ----------
+        document.getElementById("debugRun").onclick = function() {
+            const code = document.getElementById("debugCmd").value;
+            try {
+                let result = eval(code);
+                let out;
+                if (result === undefined) {
+                    out = "undefined";
+                } else if (typeof result === "object") {
+                    try {
+                        out = JSON.stringify(result, null, 2);
+                    } catch (e) {
+                        out = "[object]";
+                    }
+                } else {
+                    out = String(result);
+                }
+                logToBox("> " + code + "\n" + out + "\n");
+            } catch (e) {
+                logToBox("EVAL ERROR: " + e);
+            }
+        };
+
+        document.getElementById("debugClear").onclick = function() {
+            box.textContent = "";
+        };
+
+        // ---------- SAVE EDITOR POPUP ----------
+        document.getElementById("openSaveEditor").onclick = function() {
+            const popup = document.createElement("div");
+            popup.style.position = "fixed";
+            popup.style.top = "0";
+            popup.style.left = "0";
+            popup.style.width = "100%";
+            popup.style.height = "100%";
+            popup.style.background = "rgba(0,0,0,0.85)";
+            popup.style.zIndex = "2000000";
+            popup.style.color = "#fff";
+            popup.style.padding = "10px";
+            popup.style.fontFamily = "monospace";
+
+            const current = localStorage.getItem("savedGame") || "";
+
+            popup.innerHTML = `
+                <div style="margin-bottom:5px; font-weight:bold;">Save Editor</div>
+                <textarea id="saveEditBox" style="width:100%; height:80%; background:#111; color:#0f0;">${current}</textarea><br>
+                <button id="applySave">Apply</button>
+                <button id="resetSave">Reset</button>
+                <button id="closeSaveEditor">Close</button>
+            `;
+
+            document.body.appendChild(popup);
+
+            document.getElementById("applySave").onclick = function() {
+                const text = document.getElementById("saveEditBox").value;
+                try {
+                    JSON.parse(text); // Проверка корректности JSON
+                    localStorage.setItem("savedGame", text);
+                    location.reload();
+                } catch (e) {
+                    alert("JSON Error: " + e);
+                }
+            };
+
+            document.getElementById("resetSave").onclick = function() {
+                localStorage.removeItem("savedGame");
+                location.reload();
+            };
+
+            document.getElementById("closeSaveEditor").onclick = function() {
+                document.body.removeChild(popup);
+            };
+        };
+
+        // ---------- CONSOLE.LOG HOOK ----------
+        let forwardConsoleLogs = false;
+
+        // Save originals
+        const origLog = console.log;
+        const origWarn = console.warn;
+        const origErr = console.error;
+        const origInfo = console.info;
+
+        function hook(type, original) {
+            return function(...args) {
+                if (forwardConsoleLogs) {
+                    try {
+                        const msg = args.map(a => {
+                            if (typeof a === "object") {
+                                try { return JSON.stringify(a); }
+                                catch { return "[object]"; }
+                            }
+                            return String(a);
+                        }).join(" ");
+
+                        logToBox(`console.${type}: ${msg}`);
+                    } catch (e) {}
+                }
+                original.apply(console, args);
+            };
+        }
+
+        console.log = hook("log", origLog);
+        console.warn = hook("warn", origWarn);
+        console.error = hook("error", origErr);
+        console.info = hook("info", origInfo);
+
+        // Button toggle
+        document.getElementById("toggleConsoleLogs").onclick = function() {
+            forwardConsoleLogs = !forwardConsoleLogs;
+            this.textContent = "Console Log: " + (forwardConsoleLogs ? "ON" : "OFF");
+            logToBox("Console log forwarding: " + (forwardConsoleLogs ? "ENABLED" : "DISABLED"));
+        };
+
+        // ---------- TOGGLE CONSOLE BY 5 TAPS IN TOP-LEFT ----------
+        let tapCount = 0;
+
+        function toggleConsole(ev) {
+            const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
+            const y = ev.touches ? ev.touches[0].clientY : ev.clientY;
+
+            if (x < 80 && y < 80) {
+                tapCount++;
+                if (tapCount >= 5) {
+                    const visible = (box.style.display !== "none");
+                    box.style.display = visible ? "none" : "block";
+                    panel.style.display = visible ? "none" : "block";
+                    tapCount = 0;
+                }
+            } else {
+                tapCount = 0;
+            }
+        }
+
+        document.addEventListener("touchstart", toggleConsole);
+        document.addEventListener("mousedown", toggleConsole);
+
+    })();
 
     //---------------------------- Global functions ----------------------------
     function clone(obj, visited = new WeakMap()) {
