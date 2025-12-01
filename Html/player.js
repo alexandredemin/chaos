@@ -35,9 +35,12 @@ class Player
         }
     }
 
-    killUnits(diedUnits)
+    killUnits(diedUnits, callbackFunction = null)
     {
-        if(diedUnits.length === 0) return;
+        if(diedUnits.length === 0) {
+            if(callbackFunction) callbackFunction();
+            return;
+        }
         let unit = diedUnits.pop();
         if(gameSettings.showEnemyMoves == true || this.control === PlayerControl.human)
         {
@@ -51,32 +54,6 @@ class Player
             this.killUnits(diedUnits);
         }
     
-    }
-
-    processRecover()
-    {
-        for(let i=0; i<this.units.length; i++)
-        {
-            if(this.units[i].recovered===false)
-            {
-                this.units[i].recover();
-                return;
-            }
-        }
-        if(this.control === PlayerControl.human) {
-            if (this.units.length > 0)
-            {
-                if(this.wizard != null) selectUnit(this.wizard);
-                else selectUnit(this.units[0]);
-            }
-            else
-            {
-                setTimeout(endTurn,1);
-            }
-        }
-        else{
-            this.aiControl.startTurn();
-        }
     }
 
     consumeResources()
@@ -99,11 +76,46 @@ class Player
         {
             if(gameSettings.showEnemyMoves == true || this.control === PlayerControl.human)
             {
-                this.killUnits(diedUnits);
+                this.killUnits(diedUnits, this.startControl.bind(this));
             }
             else {
                 diedUnits.forEach(unit => unit.die());
+                this.startControl();
             }
+        }
+        else {
+            this.startControl();
+        }
+    }
+
+    processRecover()
+    {
+        for(let i=0; i<this.units.length; i++)
+        {
+            if(this.units[i].recovered===false)
+            {
+                this.units[i].recover();
+                return;
+            }
+        }
+        if(gameSettings.rules === "advanced") this.consumeResources();
+    }
+
+    startControl()
+    {
+        if(this.control === PlayerControl.human) {
+            if (this.units.length > 0)
+            {
+                if(this.wizard != null) selectUnit(this.wizard);
+                else selectUnit(this.units[0]);
+            }
+            else
+            {
+                setTimeout(endTurn,1);
+            }
+        }
+        else{
+            this.aiControl.startTurn();
         }
     }
 
@@ -115,6 +127,5 @@ class Player
         }
         this.units.forEach(item => item.recovered = false);
         this.processRecover();
-        if(gameSettings.rules === "advanced") this.consumeResources();
     }
 }
