@@ -99,6 +99,7 @@ class Player
             }
         }
         if(gameSettings.rules === "advanced") this.consumeResources();
+        else this.startControl();
     }
 
     startControl()
