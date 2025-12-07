@@ -19,13 +19,19 @@ var GameScene = new Phaser.Class({
     {
         const savedGame = data?.savedState;
         
-        map = this.make.tilemap({ key: gameSettings.selectedMap, tileWidth: 16, tileHeight: 16 });
-        this.tileset = map.addTilesetImage('dungeon-tiles','tiles');
-        groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
-        wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);          
-        objectLayer = map.getObjectLayer('Objects');
-        wallsLayer.setCollisionByProperty({ collides: true });
-        this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
+        if(gameSettings.selectedMap === "random"){
+            const cfg = gameSettings.randomMapConfig || { width: 20, height: 20 };
+            this.generateMap(cfg);
+        }
+        else{
+            map = this.make.tilemap({ key: gameSettings.selectedMap, tileWidth: 16, tileHeight: 16 });
+            this.tileset = map.addTilesetImage('dungeon-tiles','tiles');
+            groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
+            wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);          
+            objectLayer = map.getObjectLayer('Objects');
+            wallsLayer.setCollisionByProperty({ collides: true });
+            this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
+        }
 
         if (savedGame) {
             this.loadFromSave(savedGame);
@@ -120,8 +126,64 @@ var GameScene = new Phaser.Class({
         }
 
     },
+
+
+    generateMap: function(cfg) {
+        map = this.make.tilemap({
+            width: cfg.width,
+            height: cfg.height,
+            tileWidth: 16,
+            tileHeight: 16
+        });
+
+        const width = cfg.width;
+        const height = cfg.height;
+
+        const groundTileIndex = 129;
+        const wallTileIndex = 34;
+
+        this.tileset = map.addTilesetImage('dungeon-tiles', 'tiles');
+
+        groundLayer = map.createBlankLayer('Ground', this.tileset, 0, 0, width, height);
+        wallsLayer = map.createBlankLayer('Walls', this.tileset, 0, 0, width, height);
+
+        // Fill ground layer
+        groundLayer.fill(groundTileIndex, 0, 0, width, height);
+
+        // Create walls around the edges
+        for (let x = 0; x < width; x++) {
+            let t1 = wallsLayer.putTileAt(wallTileIndex, x, 0);
+            t1.properties = t1.properties || {};
+            t1.properties.collides = true;
+            let t2 = wallsLayer.putTileAt(wallTileIndex, x, height - 1);
+            t2.properties = t2.properties || {};
+            t2.properties.collides = true;
+        }
+        for (let y = 0; y < height; y++) {
+            let t3 = wallsLayer.putTileAt(wallTileIndex, 0, y);
+            t3.properties = t3.properties || {};
+            t3.properties.collides = true;
+            let t4 = wallsLayer.putTileAt(wallTileIndex, width - 1, y);
+            t4.properties = t4.properties || {};
+            t4.properties.collides = true;
+        }
+
+        // Start positions
+        objectLayer = {
+            objects: [
+                { name: "start", x: 16 * 1,          y: 16 * 1          }, // left top
+                { name: "start", x: 16 * (width - 2), y: 16 * 1          }, // right top
+                { name: "start", x: 16 * 1,          y: 16 * (height - 2) }, // left bottom
+                { name: "start", x: 16 * (width - 2), y: 16 * (height - 2) }  // right bottom
+            ]
+        };
+
+        wallsLayer.setCollisionByProperty({ collides: true });
+        this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
+    },
+
   
-    loadFromSave(savedGame) {    
+    loadFromSave: function(savedGame) {    
         playerInd = savedGame.playerInd;
         players = [];
         entities = [];
