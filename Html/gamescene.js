@@ -129,57 +129,48 @@ var GameScene = new Phaser.Class({
 
 
     generateMap: function(cfg) {
+        const generator = new MapGenerator(cfg);
+        const data = generator.generate();
+
+        // Phaser tilemap
         map = this.make.tilemap({
-            width: cfg.width,
-            height: cfg.height,
+            width: data.width,
+            height: data.height,
             tileWidth: 16,
             tileHeight: 16
         });
 
-        const width = cfg.width;
-        const height = cfg.height;
-
-        const groundTileIndex = 129;
-        const wallTileIndex = 34;
-
         this.tileset = map.addTilesetImage('dungeon-tiles', 'tiles');
 
-        groundLayer = map.createBlankLayer('Ground', this.tileset, 0, 0, width, height);
-        wallsLayer = map.createBlankLayer('Walls', this.tileset, 0, 0, width, height);
+        groundLayer = map.createBlankLayer('Ground', this.tileset, 0, 0);
+        wallsLayer = map.createBlankLayer('Walls', this.tileset, 0, 0);
 
-        // Fill ground layer
-        groundLayer.fill(groundTileIndex, 0, 0, width, height);
-
-        // Create walls around the edges
-        for (let x = 0; x < width; x++) {
-            let t1 = wallsLayer.putTileAt(wallTileIndex, x, 0);
-            t1.properties = t1.properties || {};
-            t1.properties.collides = true;
-            let t2 = wallsLayer.putTileAt(wallTileIndex, x, height - 1);
-            t2.properties = t2.properties || {};
-            t2.properties.collides = true;
-        }
-        for (let y = 0; y < height; y++) {
-            let t3 = wallsLayer.putTileAt(wallTileIndex, 0, y);
-            t3.properties = t3.properties || {};
-            t3.properties.collides = true;
-            let t4 = wallsLayer.putTileAt(wallTileIndex, width - 1, y);
-            t4.properties = t4.properties || {};
-            t4.properties.collides = true;
+        // fill ground
+        for (let y = 0; y < data.height; y++) {
+            for (let x = 0; x < data.width; x++) {
+                groundLayer.putTileAt(data.ground[y][x], x, y);
+            }
         }
 
-        // Start positions
-        objectLayer = {
-            objects: [
-                { name: "start", x: 16 * 1,          y: 16 * 1          }, // left top
-                { name: "start", x: 16 * (width - 2), y: 16 * 1          }, // right top
-                { name: "start", x: 16 * 1,          y: 16 * (height - 2) }, // left bottom
-                { name: "start", x: 16 * (width - 2), y: 16 * (height - 2) }  // right bottom
-            ]
-        };
+        // apply walls with collides property
+        for (let y = 0; y < data.height; y++) {
+            for (let x = 0; x < data.width; x++) {
+                const tileIndex = data.walls[y][x];
+                if (tileIndex !== null) {
+                    const tile = wallsLayer.putTileAt(tileIndex, x, y);
+                    tile.properties = tile.properties || {};
+                    tile.properties.collides = true;
+                }
+            }
+        }
 
         wallsLayer.setCollisionByProperty({ collides: true });
-        this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
+        this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+
+        // Save objects layer
+        objectLayer = {
+            objects: data.objects,
+        };
     },
 
   
