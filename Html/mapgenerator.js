@@ -6,8 +6,16 @@ class MapGenerator {
         this.groundTile = cfg.groundTileIndex || 129;
         this.wallTile = cfg.wallTileIndex || 34;
 
-        this.minRoomSize = cfg.minRoomSize || 6;
+        this.minRoomSize = cfg.minRoomSize || 4;
         this.maxRoomSize = cfg.maxRoomSize || 14;
+
+        this.bspMaxDepth = cfg.bspMaxDepth || 8;
+        this.bspSplitChance = cfg.bspSplitChance || 0.85;     // probability to continue splitting
+        this.bspBalancedSplit = cfg.bspBalancedSplit || [0.4, 0.6]; // preferred split ratio
+
+        this.branchChance = cfg.branchChance || 0.1; // basic probability for creating a branch    
+        this.alcoveChance = cfg.alcoveChance || 0.25; // probability to create small alcove at the end of branch
+        this.maxBranchLen = cfg.maxBranchLength || 12; // max length of branch
 
         this.rooms = [];
         this.bspNodes = [];
@@ -30,7 +38,10 @@ class MapGenerator {
         // 3) generate corridors
         this._connectRooms(root, map);
 
-        // 4) auto-tile walls
+        // 4) generate branching corridors
+        this._generateBranchingCorridors(map);
+
+        // 5) auto-tile walls
         this._autoTileWalls(map);
 
         // start positions
@@ -48,6 +59,21 @@ class MapGenerator {
     // --- auxiliary methods ---
     _rand(a, b) {
         return Math.floor(Math.random() * (b - a + 1)) + a;
+    }
+
+    _inBounds(x, y) {
+        return x > 0 && y > 0 && x < this.width - 1 && y < this.height - 1;
+    }
+
+    _isRoom(x, y) {
+        if (!this.rooms || this.rooms.length === 0) return false;
+        for (let i = 0; i < this.rooms.length; i++) {
+            const r = this.rooms[i];
+            if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) {
+                return true;
+            }
+        }
+        return false;
     }
 
     //--- create empty map ---
@@ -74,18 +100,47 @@ class MapGenerator {
             room: null
         };
 
-        const canSplitH = rect.h >= this.minRoomSize * 2 + 2;
-        const canSplitV = rect.w >= this.minRoomSize * 2 + 2;
+        const { minRoomSize, bspSplitChance, bspMaxDepth, bspBalancedSplit } = this;
 
-        if (!canSplitH && !canSplitV) {
+        if (depth >= bspMaxDepth) {
             this.bspNodes.push(node);
             return node;
         }
 
-        const splitVert = canSplitV && (!canSplitH || Math.random() < 0.5);
+        /*
+        const stopChance = Math.min(1.0 - bspSplitChance + depth * 0.1, 0.6);
+        if (Math.random() < stopChance) {
+            this.bspNodes.push(node);
+            return node;
+        }
+        */
+        if (Math.random() > bspSplitChance) {
+            this.bspNodes.push(node);
+            return node;
+        }
 
-        if (splitVert) {
-            const splitX = Math.floor(rect.x + rect.w / 2);
+        const canSplitVert = rect.w >= minRoomSize * 2 + 2;
+        const canSplitHorz = rect.h >= minRoomSize * 2 + 2;
+
+        if (!canSplitVert && !canSplitHorz) {
+            this.bspNodes.push(node);
+            return node;
+        }
+
+        let splitVertically;
+
+        if (canSplitVert && canSplitHorz) {
+            splitVertically = Math.random() < 0.5;
+        } else {
+            splitVertically = canSplitVert;
+        }
+
+        const [minR, maxR] = bspBalancedSplit;
+        const ratio = minR + Math.random() * (maxR - minR);
+
+        if (splitVertically) {
+            const splitX = Math.floor(rect.x + rect.w * ratio);
+
             node.left = this._bspSplit({
                 x: rect.x,
                 y: rect.y,
@@ -99,8 +154,10 @@ class MapGenerator {
                 w: rect.x + rect.w - splitX,
                 h: rect.h
             }, depth + 1);
+
         } else {
-            const splitY = Math.floor(rect.y + rect.h / 2);
+            const splitY = Math.floor(rect.y + rect.h * ratio);
+
             node.left = this._bspSplit({
                 x: rect.x,
                 y: rect.y,
@@ -200,6 +257,79 @@ class MapGenerator {
     _vLine(map, y1, y2, x) {
         for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
             map.walls[y][x] = null;
+        }
+    }
+
+    //--- branching corridors ---
+    _generateBranchingCorridors(map){
+        const width  = this.width;
+        const height = this.height;
+
+        const dirs = [
+            {x: 1,  y: 0},
+            {x: -1, y: 0},
+            {x: 0,  y: 1},
+            {x: 0,  y: -1}
+        ];
+
+        const corridorCells = [];
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                if (map.walls[y][x] === null && this._isCorridor(x, y, map)) {
+                    corridorCells.push({x, y});
+                }
+            }
+        }
+
+        for (let cell of corridorCells) {
+            if (Math.random() > this.branchChance) continue;
+
+            let dir = dirs[Math.floor(Math.random() * dirs.length)];
+
+            let cx = cell.x;
+            let cy = cell.y;
+            let length = 1 + Math.floor(Math.random() * this.maxBranchLen);
+
+            for (let i = 0; i < length; i++) {
+                cx += dir.x;
+                cy += dir.y;
+
+                if (!this._inBounds(cx, cy)) break;
+                if (this._isRoom(cx, cy)) break;
+
+                // dig floor
+                map.walls[cy][cx] = null;
+                map.ground[cy][cx] = this.groundTile + 1;
+            }
+
+            // possibly add alcove at the end
+            if (Math.random() < this.alcoveChance) {
+                this._digMiniRoom(cx, cy, map);
+            }
+        }
+    }
+
+    _isCorridor(x, y, map) {
+        // a floor tile with 2 or fewer neighboring floor tiles
+        let n = 0;
+        const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+        for (let d of dirs) {
+            if (map.walls[y + d[1]][x + d[0]] === null) n++;
+        }
+        return n <= 2;
+    }
+
+    _digMiniRoom(cx, cy, map) {
+        const r = 1; // radius 1 => room size 3x3
+
+        for (let y = -r; y <= r; y++) {
+            for (let x = -r; x <= r; x++) {
+                let nx = cx + x;
+                let ny = cy + y;
+                if (!this._inBounds(nx, ny)) continue;
+                map.walls[ny][nx] = null;
+                map.ground[ny][nx] = this.groundTile + 2;
+            }
         }
     }
 
