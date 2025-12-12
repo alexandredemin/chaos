@@ -261,77 +261,6 @@ class MapGenerator {
     }
 
     //--- branching corridors ---
-    /*
-   _generateBranchingCorridors(map){
-        const width  = this.width;
-        const height = this.height;
-
-        const dirs = [
-            {x: 1,  y: 0},
-            {x: -1, y: 0},
-            {x: 0,  y: 1},
-            {x: 0,  y: -1}
-        ];
-
-        const corridorCells = [];
-        for (let y = 1; y < height - 1; y++) {
-            for (let x = 1; x < width - 1; x++) {
-                if (map.walls[y][x] === null && this._isCorridor(x, y, map)) {
-                    corridorCells.push({x, y});
-                }
-            }
-        }
-
-        for (let cell of corridorCells) {
-            if (Math.random() > this.branchChance) continue;
-
-            // filter only directions that lead into WALL
-            const possibleDirs = dirs.filter(d => {
-                const nx = cell.x + d.x;
-                const ny = cell.y + d.y;
-
-                // must be in bounds
-                if (!this._inBounds(nx, ny)) return false;
-
-                // must NOT be room
-                if (this._isRoom(nx, ny)) return false;
-
-                // must be wall to carve
-                return map.walls[ny][nx] !== null;
-            });
-
-            if (possibleDirs.length === 0) continue;
-
-            // choose a good direction
-            let dir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
-
-            let cx = cell.x;
-            let cy = cell.y;
-            let length = 1 + Math.floor(Math.random() * this.maxBranchLen);
-
-            for (let i = 0; i < length; i++) {
-                cx += dir.x;
-                cy += dir.y;
-
-                if (!this._inBounds(cx, cy)) break;
-                if (this._isRoom(cx, cy)) break;
-
-                // stop if corridor touches an existing corridor (avoid loops unless wanted)
-                if (map.walls[cy][cx] === null) break;
-
-                // carve floor
-                map.walls[cy][cx] = null;
-                map.ground[cy][cx] = this.groundTile + 1; // or custom variant
-            }
-
-            // possibly add alcove at the end
-            if (Math.random() < this.alcoveChance) {
-                this._digMiniRoom(cx, cy, map);
-            }
-        }
-    }
-    */
-
     _generateBranchingCorridors(map) {
         const width  = this.width;
         const height = this.height;
@@ -367,6 +296,8 @@ class MapGenerator {
             let depth;
             if (isAlcove) {
                 depth = 2 + Math.floor(Math.random() * (this.maxBranchLen - 2));
+                const depthToAlcove = this._depthToAlcove(cell.x, cell.y, map, dir, depth);
+                if(depthToAlcove >= 3) depth = depthToAlcove
             } else {
                 depth = 1 + Math.floor(Math.random() * this.maxBranchLen);
             }
@@ -387,10 +318,11 @@ class MapGenerator {
                 map.ground[cy][cx] = this.groundTile + 1;
             }
 
-            if (isAlcove) {
-                if (this._isValidAlcove(cx, cy, map)) {
-                    this._digMiniRoom(cx, cy, map);
-                }
+            if (isAlcove && depth >= 3) {
+                this._digMiniRoom(cx, cy, map);
+                //if (this._isValidAlcove(cx, cy, map)) {
+                //    this._digMiniRoom(cx, cy, map);
+                //}
             }
         }
     }
@@ -442,20 +374,56 @@ class MapGenerator {
         return null;
     }
 
+    _depthToAlcove(cx, cy, map, dir, maxDepth) {
+        let depth = 0;
+        let i;
+        for (i = 0; i < maxDepth; i++) {
+            cx += dir.x;
+            cy += dir.y;
+            depth++;
+            if (!this._inBounds(cx, cy)) break;
+            if (this._isRoom(cx, cy)) break;
+            if (map.walls[cy][cx] === null) break;
+        }
+        for (i = depth; i > 2; i--) {
+            if (this._isSuitableForAlcove(cx, cy, map)) return depth;
+            cx -= dir.x;
+            cy -= dir.y;
+        }
+        return depth;
+    }
+
+    _isSuitableForAlcove(cx, cy, map) {
+        const r = 2;
+        for (let dy = -r; dy <= r; dy++) {
+            for (let dx = -r; dx <= r; dx++) {
+                const nx = cx + dx;
+                const ny = cy + dy;
+                if (!this._inBounds(nx, ny)) return false;
+                if (map.walls[ny][nx] === null) return false;
+            }
+        }
+        return true;
+    }
+
+    /*
     _isValidAlcove(cx, cy, map) {
-        const r = 1;
+        const r = 2;
+        let emptyCount = 0;
         for (let dy = -r; dy <= r; dy++) {
             for (let dx = -r; dx <= r; dx++) {
                 if (dx === 0 && dy === 0) continue;
                 const nx = cx + dx;
                 const ny = cy + dy;
                 if (!this._inBounds(nx, ny)) return false;
-                if (map.walls[ny][nx] === null) return false;
+                if (map.walls[ny][nx] === null) emptyCount++;
+                if(emptyCount > r+1) return false;
                 //if (this._isRoom(nx, ny)) return false;
             }
         }
         return true;
     }
+    */
 
     _digMiniRoom(cx, cy, map) {
         const r = 1; // radius 1 => room size 3x3
