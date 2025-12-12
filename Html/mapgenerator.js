@@ -14,7 +14,7 @@ class MapGenerator {
         this.bspBalancedSplit = cfg.bspBalancedSplit || [0.4, 0.6]; // preferred split ratio
 
         this.branchChance = cfg.branchChance || 0.1; // basic probability for creating a branch    
-        this.alcoveChance = cfg.alcoveChance || 0.25; // probability to create small alcove at the end of branch
+        this.alcoveChance = cfg.alcoveChance || 1.0; // probability to create small alcove at the end of branch
         this.maxBranchLen = cfg.maxBranchLength || 12; // max length of branch
 
         this.rooms = [];
@@ -261,7 +261,8 @@ class MapGenerator {
     }
 
     //--- branching corridors ---
-    _generateBranchingCorridors(map){
+    /*
+   _generateBranchingCorridors(map){
         const width  = this.width;
         const height = this.height;
 
@@ -284,7 +285,25 @@ class MapGenerator {
         for (let cell of corridorCells) {
             if (Math.random() > this.branchChance) continue;
 
-            let dir = dirs[Math.floor(Math.random() * dirs.length)];
+            // filter only directions that lead into WALL
+            const possibleDirs = dirs.filter(d => {
+                const nx = cell.x + d.x;
+                const ny = cell.y + d.y;
+
+                // must be in bounds
+                if (!this._inBounds(nx, ny)) return false;
+
+                // must NOT be room
+                if (this._isRoom(nx, ny)) return false;
+
+                // must be wall to carve
+                return map.walls[ny][nx] !== null;
+            });
+
+            if (possibleDirs.length === 0) continue;
+
+            // choose a good direction
+            let dir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
 
             let cx = cell.x;
             let cy = cell.y;
@@ -297,14 +316,81 @@ class MapGenerator {
                 if (!this._inBounds(cx, cy)) break;
                 if (this._isRoom(cx, cy)) break;
 
-                // dig floor
+                // stop if corridor touches an existing corridor (avoid loops unless wanted)
+                if (map.walls[cy][cx] === null) break;
+
+                // carve floor
                 map.walls[cy][cx] = null;
-                map.ground[cy][cx] = this.groundTile + 1;
+                map.ground[cy][cx] = this.groundTile + 1; // or custom variant
             }
 
             // possibly add alcove at the end
             if (Math.random() < this.alcoveChance) {
                 this._digMiniRoom(cx, cy, map);
+            }
+        }
+    }
+    */
+
+    _generateBranchingCorridors(map) {
+        const width  = this.width;
+        const height = this.height;
+
+        const dirs = [
+            {x: 1,  y: 0,  name: "E"},
+            {x: -1, y: 0,  name: "W"},
+            {x: 0,  y: 1,  name: "S"},
+            {x: 0,  y: -1, name: "N"}
+        ];
+
+        // collect corridor cells
+        const corridorCells = [];
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                if (map.walls[y][x] === null && this._isCorridor(x, y, map)) {
+                    corridorCells.push({x, y});
+                }
+            }
+        }
+
+        for (let cell of corridorCells) {
+            if (Math.random() > this.branchChance) continue;
+            const orientation = this._corridorOrientation(cell.x, cell.y, map);
+
+            // choose direction perpendicular to corridor orientation
+            const dir = this._choosePerpendicularDir(orientation, dirs, map, cell.x, cell.y);
+            if (!dir) continue;
+
+            let isAlcove = Math.random() < this.alcoveChance;
+
+            // determine branch depth
+            let depth;
+            if (isAlcove) {
+                depth = 2 + Math.floor(Math.random() * (this.maxBranchLen - 2));
+            } else {
+                depth = 1 + Math.floor(Math.random() * this.maxBranchLen);
+            }
+
+            let cx = cell.x;
+            let cy = cell.y;
+
+            let i;
+            for (i = 0; i < depth; i++) {
+                cx += dir.x;
+                cy += dir.y;
+
+                if (!this._inBounds(cx, cy)) break;
+                if (this._isRoom(cx, cy)) break;
+                if (map.walls[cy][cx] === null) break;
+
+                map.walls[cy][cx] = null;
+                map.ground[cy][cx] = this.groundTile + 1;
+            }
+
+            if (isAlcove) {
+                if (this._isValidAlcove(cx, cy, map)) {
+                    this._digMiniRoom(cx, cy, map);
+                }
             }
         }
     }
@@ -317,6 +403,58 @@ class MapGenerator {
             if (map.walls[y + d[1]][x + d[0]] === null) n++;
         }
         return n <= 2;
+    }
+
+    _corridorOrientation(x, y, map) {
+        const left  = map.walls[y][x-1] === null;
+        const right = map.walls[y][x+1] === null;
+        const up    = map.walls[y-1][x] === null;
+        const down  = map.walls[y+1][x] === null;
+
+        if ((left || right) && !(up || down)) return "horizontal";
+        if ((up || down) && !(left || right)) return "vertical";
+
+        return "unknown";
+    }
+
+    _choosePerpendicularDir(orientation, dirs, map, x, y) {
+        const perp = [];
+        const all = [];
+
+        for (let d of dirs) {
+            const nx = x + d.x;
+            const ny = y + d.y;
+
+            if (!this._inBounds(nx, ny)) continue;
+            if (map.walls[ny][nx] !== this.wallTile) continue;
+
+            const isPerp =
+                (orientation === "horizontal" && (d.name === "N" || d.name === "S")) ||
+                (orientation === "vertical"   && (d.name === "E" || d.name === "W"));
+
+            if (isPerp) perp.push(d);
+            all.push(d);
+        }
+
+        if (perp.length > 0) return perp[Math.floor(Math.random() * perp.length)];
+        if (all.length > 0)  return all[Math.floor(Math.random() * all.length)];
+
+        return null;
+    }
+
+    _isValidAlcove(cx, cy, map) {
+        const r = 1;
+        for (let dy = -r; dy <= r; dy++) {
+            for (let dx = -r; dx <= r; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = cx + dx;
+                const ny = cy + dy;
+                if (!this._inBounds(nx, ny)) return false;
+                if (map.walls[ny][nx] === null) return false;
+                //if (this._isRoom(nx, ny)) return false;
+            }
+        }
+        return true;
     }
 
     _digMiniRoom(cx, cy, map) {
