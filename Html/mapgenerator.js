@@ -297,7 +297,7 @@ class MapGenerator {
             if (isAlcove) {
                 depth = 2 + Math.floor(Math.random() * (this.maxBranchLen - 2));
                 const depthToAlcove = this._depthToAlcove(cell.x, cell.y, map, dir, depth);
-                if(depthToAlcove >= 3) depth = depthToAlcove
+                if(depthToAlcove >= 3) depth = depthToAlcove;
             } else {
                 depth = 1 + Math.floor(Math.random() * this.maxBranchLen);
             }
@@ -389,6 +389,7 @@ class MapGenerator {
             if (this._isSuitableForAlcove(cx, cy, map)) return depth;
             cx -= dir.x;
             cy -= dir.y;
+            depth--;
         }
         return depth;
     }
