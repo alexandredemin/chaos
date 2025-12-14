@@ -298,6 +298,7 @@ class MapGenerator {
                 depth = 2 + Math.floor(Math.random() * (this.maxBranchLen - 2));
                 const depthToAlcove = this._depthToAlcove(cell.x, cell.y, map, dir, depth);
                 if(depthToAlcove >= 3) depth = depthToAlcove;
+                else isAlcove = false; // cannot make alcove here
             } else {
                 depth = 1 + Math.floor(Math.random() * this.maxBranchLen);
             }
@@ -320,9 +321,6 @@ class MapGenerator {
 
             if (isAlcove && depth >= 3) {
                 this._digMiniRoom(cx, cy, map);
-                //if (this._isValidAlcove(cx, cy, map)) {
-                //    this._digMiniRoom(cx, cy, map);
-                //}
             }
         }
     }
@@ -406,25 +404,6 @@ class MapGenerator {
         }
         return true;
     }
-
-    /*
-    _isValidAlcove(cx, cy, map) {
-        const r = 2;
-        let emptyCount = 0;
-        for (let dy = -r; dy <= r; dy++) {
-            for (let dx = -r; dx <= r; dx++) {
-                if (dx === 0 && dy === 0) continue;
-                const nx = cx + dx;
-                const ny = cy + dy;
-                if (!this._inBounds(nx, ny)) return false;
-                if (map.walls[ny][nx] === null) emptyCount++;
-                if(emptyCount > r+1) return false;
-                //if (this._isRoom(nx, ny)) return false;
-            }
-        }
-        return true;
-    }
-    */
 
     _digMiniRoom(cx, cy, map) {
         const r = 1; // radius 1 => room size 3x3
