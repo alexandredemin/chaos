@@ -265,13 +265,6 @@ class MapGenerator {
         const width  = this.width;
         const height = this.height;
 
-        const dirs = [
-            {x: 1,  y: 0,  name: "E"},
-            {x: -1, y: 0,  name: "W"},
-            {x: 0,  y: 1,  name: "S"},
-            {x: 0,  y: -1, name: "N"}
-        ];
-
         // collect corridor cells
         const corridorCells = [];
         for (let y = 1; y < height - 1; y++) {
@@ -284,10 +277,8 @@ class MapGenerator {
 
         for (let cell of corridorCells) {
             if (Math.random() > this.branchChance) continue;
-            const orientation = this._corridorOrientation(cell.x, cell.y, map);
 
-            // choose direction perpendicular to corridor orientation
-            const dir = this._choosePerpendicularDir(orientation, dirs, map, cell.x, cell.y);
+            const dir = this._chooseDirection(cell.x, cell.y, map);
             if (!dir) continue;
 
             let isAlcove = Math.random() < this.alcoveChance;
@@ -335,40 +326,23 @@ class MapGenerator {
         return n <= 2;
     }
 
-    _corridorOrientation(x, y, map) {
-        const left  = map.walls[y][x-1] === null;
-        const right = map.walls[y][x+1] === null;
-        const up    = map.walls[y-1][x] === null;
-        const down  = map.walls[y+1][x] === null;
-
-        if ((left || right) && !(up || down)) return "horizontal";
-        if ((up || down) && !(left || right)) return "vertical";
-
-        return "unknown";
-    }
-
-    _choosePerpendicularDir(orientation, dirs, map, x, y) {
-        const perp = [];
-        const all = [];
-
+    _chooseDirection(x, y, map) {
+        const dirs = [
+            {x: 1,  y: 0},
+            {x: -1, y: 0},
+            {x: 0,  y: 1},
+            {x: 0,  y: -1}
+        ];
+        let possibleDirs = [];
         for (let d of dirs) {
             const nx = x + d.x;
             const ny = y + d.y;
-
             if (!this._inBounds(nx, ny)) continue;
-            if (map.walls[ny][nx] !== this.wallTile) continue;
-
-            const isPerp =
-                (orientation === "horizontal" && (d.name === "N" || d.name === "S")) ||
-                (orientation === "vertical"   && (d.name === "E" || d.name === "W"));
-
-            if (isPerp) perp.push(d);
-            all.push(d);
+            if(d.x === 0 && (map.walls[ny][nx-1] !== this.wallTile || map.walls[ny][nx] !== this.wallTile || map.walls[ny][nx+1] !== this.wallTile)) continue;
+            if(d.y === 0 && (map.walls[ny-1][nx] !== this.wallTile || map.walls[ny][nx] !== this.wallTile || map.walls[ny+1][nx] !== this.wallTile)) continue;
+            possibleDirs.push(d);
         }
-
-        if (perp.length > 0) return perp[Math.floor(Math.random() * perp.length)];
-        if (all.length > 0)  return all[Math.floor(Math.random() * all.length)];
-
+        if (possibleDirs.length > 0) return possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
         return null;
     }
 

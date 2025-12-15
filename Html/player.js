@@ -71,7 +71,7 @@ class Player
                 }
             }
         }
-        this.wizard.features.mana = availableMana;
+        if(this.wizard) this.wizard.features.mana = availableMana;
         if(diedUnits.length > 0)
         {
             if(gameSettings.showEnemyMoves == true || this.control === PlayerControl.human)
