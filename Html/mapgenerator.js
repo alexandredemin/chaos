@@ -296,7 +296,7 @@ class MapGenerator {
 
             let cx = cell.x;
             let cy = cell.y;
-
+            let achivedGround = false;
             let i;
             for (i = 0; i < depth; i++) {
                 cx += dir.x;
@@ -308,8 +308,27 @@ class MapGenerator {
 
                 map.walls[cy][cx] = null;
                 map.ground[cy][cx] = this.groundTile + 1;
-            }
+                if(achivedGround) map.ground[cy][cx] = this.groundTile + 3;
 
+                // check for not right angle connections
+                let notRightAngle = false;
+                if(dir.x === 0 && map.walls[cy+dir.y][cx+dir.x] !== null && (
+                    (map.walls[cy+dir.y][cx-1] !== this.wallTile && map.walls[cy][cx-1] !== null) || 
+                    (map.walls[cy+dir.y][cx+1] !== this.wallTile && map.walls[cy][cx+1] !== null)
+                    )) notRightAngle = true;
+                if(dir.y === 0 && map.walls[cy+dir.y][cx+dir.x] !== null && (
+                    (map.walls[cy-1][cx+dir.x] !== this.wallTile && map.walls[cy-1][cx] !== null) ||
+                    (map.walls[cy+1][cx+dir.x] !== this.wallTile && map.walls[cy+1][cx] !== null)
+                    )) notRightAngle = true;
+
+                if(notRightAngle){
+                    achivedGround = true;
+                    depth++; // extend corridor to fix angle
+                    continue;
+                }
+                if(achivedGround) break;
+            }
+            // create alcove room at the end of branch
             if (isAlcove && depth >= 3) {
                 this._digMiniRoom(cx, cy, map);
             }
