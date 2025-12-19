@@ -92,6 +92,7 @@ class MapGenerator {
     }
 
     //--- BSP split ---
+    /*
     _bspSplit(rect, depth = 0) {
         const node = {
             rect,
@@ -107,13 +108,6 @@ class MapGenerator {
             return node;
         }
 
-        /*
-        const stopChance = Math.min(1.0 - bspSplitChance + depth * 0.1, 0.6);
-        if (Math.random() < stopChance) {
-            this.bspNodes.push(node);
-            return node;
-        }
-        */
         if (Math.random() > bspSplitChance) {
             this.bspNodes.push(node);
             return node;
@@ -174,6 +168,102 @@ class MapGenerator {
         }
 
         return node;
+    }
+    */
+    _bspSplit(rootRect){
+        const {
+            minRoomSize,
+            bspSplitChance,
+            bspMaxDepth,
+            bspBalancedSplit
+        } = this;
+
+        this.bspNodes = [];
+
+        const queue = [];
+
+        const root_node = {
+            rect: rootRect,
+            depth: 0,
+            left: null,
+            right: null,
+            room: null
+        };
+
+        queue.push(root_node);
+
+        while (queue.length > 0) {
+            const node = queue.shift();
+            const { rect, depth } = node;
+
+            const canSplitVert = rect.w >= minRoomSize * 2 + 2;
+            const canSplitHorz = rect.h >= minRoomSize * 2 + 2;
+
+            const canSplit = canSplitVert || canSplitHorz;
+            const allowSplit = depth < bspMaxDepth && canSplit && Math.random() < bspSplitChance;
+
+            if (!allowSplit) {
+                this.bspNodes.push(node);
+                continue;
+            }
+
+            // choose split direction
+            let splitVertically;
+            if (canSplitVert && canSplitHorz) {
+                splitVertically = Math.random() < 0.5;
+            } else {
+                splitVertically = canSplitVert;
+            }
+
+            const [minR, maxR] = bspBalancedSplit;
+            const ratio = minR + Math.random() * (maxR - minR);
+
+            if (splitVertically) {
+                const splitX = Math.floor(rect.x + rect.w * ratio);
+
+                const leftRect = {
+                    x: rect.x,
+                    y: rect.y,
+                    w: splitX - rect.x,
+                    h: rect.h
+                };
+
+                const rightRect = {
+                    x: splitX,
+                    y: rect.y,
+                    w: rect.x + rect.w - splitX,
+                    h: rect.h
+                };
+
+                node.left = { rect: leftRect, depth: depth + 1, left: null, right: null, room: null };
+                node.right = { rect: rightRect, depth: depth + 1, left: null, right: null, room: null };
+
+            } else {
+                const splitY = Math.floor(rect.y + rect.h * ratio);
+
+                const leftRect = {
+                    x: rect.x,
+                    y: rect.y,
+                    w: rect.w,
+                    h: splitY - rect.y
+                };
+
+                const rightRect = {
+                    x: rect.x,
+                    y: splitY,
+                    w: rect.w,
+                    h: rect.y + rect.h - splitY
+                };
+
+                node.left = { rect: leftRect, depth: depth + 1, left: null, right: null, room: null };
+                node.right = { rect: rightRect, depth: depth + 1, left: null, right: null, room: null };
+            }
+
+            queue.push(node.left);
+            queue.push(node.right);
+        }
+
+        return root_node;
     }
 
     //--- generate rooms ---
