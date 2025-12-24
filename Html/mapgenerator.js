@@ -9,6 +9,9 @@ class MapGenerator {
         this.minRoomSize = cfg.minRoomSize || 4;
         this.maxRoomSize = cfg.maxRoomSize || 14;
 
+        this.minRooms = cfg.minRooms || 8;
+        this.maxRooms = cfg.maxRooms || 32;
+
         this.bspMaxDepth = cfg.bspMaxDepth || 8;
         this.bspSplitChance = cfg.bspSplitChance || 0.85;     // probability to continue splitting
         this.bspBalancedSplit = cfg.bspBalancedSplit || [0.4, 0.6]; // preferred split ratio
@@ -175,7 +178,9 @@ class MapGenerator {
             minRoomSize,
             bspSplitChance,
             bspMaxDepth,
-            bspBalancedSplit
+            bspBalancedSplit,
+            minRooms,
+            maxRooms
         } = this;
 
         this.bspNodes = [];
@@ -200,7 +205,12 @@ class MapGenerator {
             const canSplitHorz = rect.h >= minRoomSize * 2 + 2;
 
             const canSplit = canSplitVert || canSplitHorz;
-            const allowSplit = depth < bspMaxDepth && canSplit && Math.random() < bspSplitChance;
+
+            const currentRooms = this.bspNodes.length + queue.length;
+            const needMoreRooms = currentRooms < minRooms;
+            const reachedMaxRooms = currentRooms >= maxRooms;
+
+            const allowSplit = canSplit && depth < bspMaxDepth && !reachedMaxRooms && (needMoreRooms || Math.random() < bspSplitChance);
 
             if (!allowSplit) {
                 this.bspNodes.push(node);
