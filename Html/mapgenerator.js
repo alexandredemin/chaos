@@ -27,22 +27,30 @@ class MapGenerator {
     generate() {
         const map = this._createEmptyMap();
 
+        this.bspNodes = [];
+
         // 1) BSP split
-        const root = this._bspSplit({
+        const rootRect = {
             x: 1,
             y: 1,
             w: this.width - 2,
             h: this.height - 2
-        });
+        }
+
+        const initialNodes = this._buildInitialLayout(rootRect);
+
+        for (let node of initialNodes) {
+            this._bspSplit(node);
+        }
 
         // 2) generate rooms
-        this._generateRooms(root, map);
+        this._generateRooms(initialNodes, map)
 
         // 3) generate corridors
-        this._connectRooms(root, map);
+        this._connectRooms(initialNodes, map);
 
         // 4) generate branching corridors
-        this._generateBranchingCorridors(map);
+        //this._generateBranchingCorridors(map);
 
         // 5) auto-tile walls
         this._autoTileWalls(map);
@@ -94,86 +102,130 @@ class MapGenerator {
         return { ground, walls };
     }
 
-    //--- BSP split ---
-    /*
-    _bspSplit(rect, depth = 0) {
-        const node = {
-            rect,
+    //--- build initial layout ---
+    _buildInitialLayout(rootRect) {
+        const nodes = [];
+
+        const rootNode = {
+            rect: rootRect,
+            depth: 0,
             left: null,
             right: null,
-            room: null
+            room: null,
+            reserved: false,
+            allowSplit: true
+        };
+        nodes.push(rootNode);
+
+        return nodes
+
+        const arenaW = Math.floor(rootRect.w * 0.5);
+        const arenaH = Math.floor(rootRect.h * 0.5);
+
+        const arenaRect = {
+            x: rootRect.x + Math.floor((rootRect.w - arenaW) / 2),
+            y: rootRect.y + Math.floor((rootRect.h - arenaH) / 2),
+            w: arenaW,
+            h: arenaH
         };
 
-        const { minRoomSize, bspSplitChance, bspMaxDepth, bspBalancedSplit } = this;
+        const arenaRoom = {x: arenaRect.x + 1, y: arenaRect.y + 1, w: arenaRect.w - 2, h: arenaRect.h - 2};
 
-        if (depth >= bspMaxDepth) {
-            this.bspNodes.push(node);
-            return node;
+        const arenaNode = {
+            rect: arenaRect,
+            depth: 0,
+            left: null,
+            right: null,
+            room: arenaRoom,
+            reserved: true,
+            roomType: "arena",
+            allowSplit: false
+        };
+
+        nodes.push(arenaNode);
+
+        // regions around arena
+        const regions = this._subtractRect(rootRect, arenaRect);
+
+        for (let r of regions) {
+            nodes.push({
+                rect: r,
+                depth: 0,
+                left: null,
+                right: null,
+                room: null,
+                reserved: false,
+                allowSplit: true
+            });
         }
 
-        if (Math.random() > bspSplitChance) {
-            this.bspNodes.push(node);
-            return node;
-        }
-
-        const canSplitVert = rect.w >= minRoomSize * 2 + 2;
-        const canSplitHorz = rect.h >= minRoomSize * 2 + 2;
-
-        if (!canSplitVert && !canSplitHorz) {
-            this.bspNodes.push(node);
-            return node;
-        }
-
-        let splitVertically;
-
-        if (canSplitVert && canSplitHorz) {
-            splitVertically = Math.random() < 0.5;
-        } else {
-            splitVertically = canSplitVert;
-        }
-
-        const [minR, maxR] = bspBalancedSplit;
-        const ratio = minR + Math.random() * (maxR - minR);
-
-        if (splitVertically) {
-            const splitX = Math.floor(rect.x + rect.w * ratio);
-
-            node.left = this._bspSplit({
-                x: rect.x,
-                y: rect.y,
-                w: splitX - rect.x,
-                h: rect.h
-            }, depth + 1);
-
-            node.right = this._bspSplit({
-                x: splitX,
-                y: rect.y,
-                w: rect.x + rect.w - splitX,
-                h: rect.h
-            }, depth + 1);
-
-        } else {
-            const splitY = Math.floor(rect.y + rect.h * ratio);
-
-            node.left = this._bspSplit({
-                x: rect.x,
-                y: rect.y,
-                w: rect.w,
-                h: splitY - rect.y
-            }, depth + 1);
-
-            node.right = this._bspSplit({
-                x: rect.x,
-                y: splitY,
-                w: rect.w,
-                h: rect.y + rect.h - splitY
-            }, depth + 1);
-        }
-
-        return node;
+        return nodes;
     }
-    */
-    _bspSplit(rootRect){
+
+    _subtractRect(outer, inner) {
+        const result = [];
+
+        const ox = outer.x;
+        const oy = outer.y;
+        const ow = outer.w;
+        const oh = outer.h;
+
+        const ix = inner.x;
+        const iy = inner.y;
+        const iw = inner.w;
+        const ih = inner.h;
+
+        // --- TOP ---
+        const topH = iy - oy;
+        if (topH > 0) {
+            result.push({
+                x: ox,
+                y: oy,
+                w: ow,
+                h: topH
+            });
+        }
+        /*
+        // --- BOTTOM ---
+        const bottomY = iy + ih;
+        const bottomH = (oy + oh) - bottomY;
+        if (bottomH > 0) {
+            result.push({
+                x: ox,
+                y: bottomY,
+                w: ow,
+                h: bottomH
+            });
+        }
+
+        // --- LEFT ---
+        const leftW = ix - ox;
+        if (leftW > 0) {
+            result.push({
+                x: ox,
+                y: iy,
+                w: leftW,
+                h: ih
+            });
+        }
+
+        // --- RIGHT ---
+        const rightX = ix + iw;
+        const rightW = (ox + ow) - rightX;
+        if (rightW > 0) {
+            result.push({
+                x: rightX,
+                y: iy,
+                w: rightW,
+                h: ih
+            });
+        }
+        */
+        return result;
+    }
+
+    //--- BSP split ---
+    _bspSplit(rootNode) {
         const {
             minRoomSize,
             bspSplitChance,
@@ -183,41 +235,49 @@ class MapGenerator {
             maxRooms
         } = this;
 
-        this.bspNodes = [];
-
         const queue = [];
-
-        const root_node = {
-            rect: rootRect,
-            depth: 0,
-            left: null,
-            right: null,
-            room: null
-        };
-
-        queue.push(root_node);
+        queue.push(rootNode);
 
         while (queue.length > 0) {
             const node = queue.shift();
-            const { rect, depth } = node;
+            const { rect, depth, reserved, allowSplit } = node;
 
-            const canSplitVert = rect.w >= minRoomSize * 2 + 2;
-            const canSplitHorz = rect.h >= minRoomSize * 2 + 2;
-
-            const canSplit = canSplitVert || canSplitHorz;
-
-            const currentRooms = this.bspNodes.length + queue.length;
-            const needMoreRooms = currentRooms < minRooms;
-            const reachedMaxRooms = currentRooms >= maxRooms;
-
-            const allowSplit = canSplit && depth < bspMaxDepth && !reachedMaxRooms && (needMoreRooms || Math.random() < bspSplitChance);
-
-            if (!allowSplit) {
+            // --- hard stop conditions ---
+            if (reserved === true || allowSplit === false) {
                 this.bspNodes.push(node);
                 continue;
             }
 
-            // choose split direction
+            if (depth >= bspMaxDepth) {
+                this.bspNodes.push(node);
+                continue;
+            }
+
+            const canSplitVert = rect.w >= minRoomSize * 2 + 2;
+            const canSplitHorz = rect.h >= minRoomSize * 2 + 2;
+            const canSplit = canSplitVert || canSplitHorz;
+
+            if (!canSplit) {
+                this.bspNodes.push(node);
+                continue;
+            }
+
+            // --- room count control ---
+            const currentRooms = this.bspNodes.length + queue.length;
+            const needMoreRooms = currentRooms < minRooms;
+            const reachedMaxRooms = currentRooms >= maxRooms;
+
+            if (reachedMaxRooms) {
+                this.bspNodes.push(node);
+                continue;
+            }
+
+            if (!needMoreRooms && Math.random() > bspSplitChance) {
+                this.bspNodes.push(node);
+                continue;
+            }
+
+            // --- choose split direction ---
             let splitVertically;
             if (canSplitVert && canSplitHorz) {
                 splitVertically = Math.random() < 0.5;
@@ -228,6 +288,7 @@ class MapGenerator {
             const [minR, maxR] = bspBalancedSplit;
             const ratio = minR + Math.random() * (maxR - minR);
 
+            // --- perform split ---
             if (splitVertically) {
                 const splitX = Math.floor(rect.x + rect.w * ratio);
 
@@ -245,8 +306,25 @@ class MapGenerator {
                     h: rect.h
                 };
 
-                node.left = { rect: leftRect, depth: depth + 1, left: null, right: null, room: null };
-                node.right = { rect: rightRect, depth: depth + 1, left: null, right: null, room: null };
+                node.left = {
+                    rect: leftRect,
+                    depth: depth + 1,
+                    left: null,
+                    right: null,
+                    room: null,
+                    reserved: false,
+                    allowSplit: true
+                };
+
+                node.right = {
+                    rect: rightRect,
+                    depth: depth + 1,
+                    left: null,
+                    right: null,
+                    room: null,
+                    reserved: false,
+                    allowSplit: true
+                };
 
             } else {
                 const splitY = Math.floor(rect.y + rect.h * ratio);
@@ -265,18 +343,34 @@ class MapGenerator {
                     h: rect.y + rect.h - splitY
                 };
 
-                node.left = { rect: leftRect, depth: depth + 1, left: null, right: null, room: null };
-                node.right = { rect: rightRect, depth: depth + 1, left: null, right: null, room: null };
+                node.left = {
+                    rect: leftRect,
+                    depth: depth + 1,
+                    left: null,
+                    right: null,
+                    room: null,
+                    reserved: false,
+                    allowSplit: true
+                };
+
+                node.right = {
+                    rect: rightRect,
+                    depth: depth + 1,
+                    left: null,
+                    right: null,
+                    room: null,
+                    reserved: false,
+                    allowSplit: true
+                };
             }
 
             queue.push(node.left);
             queue.push(node.right);
         }
-
-        return root_node;
     }
 
     //--- generate rooms ---
+    /*
     _generateRooms(node, map) {
         if (!node.left && !node.right) {
             const margin = 1; // to avoid rooms touching walls
@@ -301,24 +395,92 @@ class MapGenerator {
             if (node.right) this._generateRooms(node.right, map);
         }
     }
+    */
+    _generateRooms(nodes, map) {
+        for (const node of nodes) {
+            this._generateRoomsFromNode(node, map);
+        }
+    }
+
+    _generateRoomsFromNode(node, map) {
+        if (!node.left && !node.right) {
+
+            if (node.reserved && node.room) {
+                this.rooms.push(node.room);
+
+                for (let y = node.room.y; y < node.room.y + node.room.h; y++) {
+                    for (let x = node.room.x; x < node.room.x + node.room.w; x++) {
+                        map.walls[y][x] = null;
+                        map.ground[y][x] = 161; //this.groundTile;
+                    }
+                }
+                return;
+            }
+
+            const margin = 1; //to avoid rooms touching walls
+
+            const maxW = Math.min(node.rect.w - margin * 2, this.maxRoomSize);
+            const maxH = Math.min(node.rect.h - margin * 2, this.maxRoomSize);
+
+            if (maxW < this.minRoomSize || maxH < this.minRoomSize) {
+                return;
+            }
+
+            const roomW = this._rand(this.minRoomSize, maxW);
+            const roomH = this._rand(this.minRoomSize, maxH);
+
+            const roomX = this._rand(
+                node.rect.x + margin,
+                node.rect.x + node.rect.w - roomW - margin
+            );
+
+            const roomY = this._rand(
+                node.rect.y + margin,
+                node.rect.y + node.rect.h - roomH - margin
+            );
+
+            node.room = { x: roomX, y: roomY, w: roomW, h: roomH };
+            this.rooms.push(node.room);
+
+            for (let y = roomY; y < roomY + roomH; y++) {
+                for (let x = roomX; x < roomX + roomW; x++) {
+                    map.walls[y][x] = null;
+                }
+            }
+
+            return;
+        }
+
+        if (node.left) this._generateRoomsFromNode(node.left, map);
+        if (node.right) this._generateRoomsFromNode(node.right, map);
+    }
+
 
     //--- connect rooms ---
-   _connectRooms(node, map) {
+    _connectRooms(nodes, map) {
+        for (const node of nodes) {
+            this._connectRoomsFromNode(node, map);
+        }
+    }
+
+    _connectRoomsFromNode(node, map) {
         if (!node.left || !node.right) return;
 
         const roomA = this._getRoom(node.left);
         const roomB = this._getRoom(node.right);
 
-        // main corridor
-        this._connectTwoRooms(roomA, roomB, map);
-
-        // additional corridors with some probability
-        if (Math.random() < 0.3) {
+        if (roomA && roomB) {
+            // main corridor
             this._connectTwoRooms(roomA, roomB, map);
+
+            // additional corridors with some probability
+            if (Math.random() < 0.3) {
+                this._connectTwoRooms(roomA, roomB, map);
+            }
         }
 
-        this._connectRooms(node.left, map);
-        this._connectRooms(node.right, map);
+        this._connectRoomsFromNode(node.left, map);
+        this._connectRoomsFromNode(node.right, map);
     }
 
     _connectTwoRooms(roomA, roomB, map) {
