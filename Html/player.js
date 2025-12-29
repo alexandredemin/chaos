@@ -47,7 +47,7 @@ class Player
             const config = {hit: false, damaged: false, killed: true};
             cam.startFollow(unit);
             let lm = new LossesAnimationManager(unit.scene, 200, 200);
-            lm.playAt(unit.x,unit.y,unit,this,"killUnits",config,[diedUnits]);
+            lm.playAt(unit.x,unit.y,unit,this,"killUnits",config,[diedUnits, callbackFunction]);
         }
         else {
             unit.die();
