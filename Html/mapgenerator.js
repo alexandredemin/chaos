@@ -106,6 +106,7 @@ class MapGenerator {
     _buildInitialLayout(rootRect) {
         const nodes = [];
 
+        /*
         const rootNode = {
             rect: rootRect,
             depth: 0,
@@ -118,6 +119,7 @@ class MapGenerator {
         nodes.push(rootNode);
 
         return nodes
+        */
 
         const arenaW = Math.floor(rootRect.w * 0.5);
         const arenaH = Math.floor(rootRect.h * 0.5);
@@ -185,7 +187,7 @@ class MapGenerator {
                 h: topH
             });
         }
-        /*
+
         // --- BOTTOM ---
         const bottomY = iy + ih;
         const bottomH = (oy + oh) - bottomY;
@@ -220,7 +222,7 @@ class MapGenerator {
                 h: ih
             });
         }
-        */
+
         return result;
     }
 
@@ -370,32 +372,6 @@ class MapGenerator {
     }
 
     //--- generate rooms ---
-    /*
-    _generateRooms(node, map) {
-        if (!node.left && !node.right) {
-            const margin = 1; // to avoid rooms touching walls
-
-            const roomW = this._rand(this.minRoomSize, Math.min(node.rect.w - margin * 2, this.maxRoomSize));
-            const roomH = this._rand(this.minRoomSize, Math.min(node.rect.h - margin * 2, this.maxRoomSize));
-
-            const roomX = this._rand(node.rect.x + margin, node.rect.x + node.rect.w - roomW - margin);
-            const roomY = this._rand(node.rect.y + margin, node.rect.y + node.rect.h - roomH - margin);
-
-            node.room = { x: roomX, y: roomY, w: roomW, h: roomH };
-            this.rooms.push(node.room);
-
-            // carve ground
-            for (let y = roomY; y < roomY + roomH; y++) {
-                for (let x = roomX; x < roomX + roomW; x++) {
-                    map.walls[y][x] = null;
-                }
-            }
-        } else {
-            if (node.left) this._generateRooms(node.left, map);
-            if (node.right) this._generateRooms(node.right, map);
-        }
-    }
-    */
     _generateRooms(nodes, map) {
         for (const node of nodes) {
             this._generateRoomsFromNode(node, map);
@@ -421,10 +397,6 @@ class MapGenerator {
 
             const maxW = Math.min(node.rect.w - margin * 2, this.maxRoomSize);
             const maxH = Math.min(node.rect.h - margin * 2, this.maxRoomSize);
-
-            if (maxW < this.minRoomSize || maxH < this.minRoomSize) {
-                return;
-            }
 
             const roomW = this._rand(this.minRoomSize, maxW);
             const roomH = this._rand(this.minRoomSize, maxH);
