@@ -151,17 +151,11 @@ class Unit extends BaseUnit
         else this.onCallback();
     }
 
-    endStep()
+    processEntityStepIn(entities)
     {
-        this.body.reset(this.target.x, this.target.y);
-        this.isMoving = false;
-        this.anims.play(this.config.sprite+'stop', true);
-        if(gameSettings.showEnemyMoves == false && this.player.control === PlayerControl.human) checkUnitVisibility(this);
-        this.states.forEach(item => item.onStep());
-        let ent = Entity.getEntityAtMap(this.mapX,this.mapY);
-        if(ent != null)
-        {
-            let result = ent.onStepIn(this);
+        while(entities.length > 0){
+            const ent = entities.pop();
+            const result = ent.onStepIn(this);
             if(result != null)
             {
                 let config = {hit: false, damaged: false, killed: false};
@@ -174,16 +168,40 @@ class Unit extends BaseUnit
                     {
                         cam.startFollow(this);
                         let lm = new LossesAnimationManager(this.scene, 200, 200);
-                        lm.playAt(this.x,this.y,this,this,null,config);
+                        if(config.killed){
+                            lm.playAt(this.x,this.y,this,this,null,config);
+                        }
+                        else
+                        {
+                            lm.playAt(this.x,this.y,this,this,"processEntityStepIn",config,[entities]);
+                        } 
+                        return;
                     }
                     else
                     {
-                        if(config.killed) this.die();
-                        this.player.aiControl.step(this);
+                        if(config.killed){
+                            this.die();
+                            this.player.aiControl.step(this);
+                            return;
+                        }
                     }
-                    return;
                 }
             }
+        }
+        this.onCallback();
+    }
+
+    endStep()
+    {
+        this.body.reset(this.target.x, this.target.y);
+        this.isMoving = false;
+        this.anims.play(this.config.sprite+'stop', true);
+        if(gameSettings.showEnemyMoves == false && this.player.control === PlayerControl.human) checkUnitVisibility(this);
+        this.states.forEach(item => item.onStep());
+        const ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
+        if (ents && ents.length > 0) {
+            this.processEntityStepIn(ents);
+            return;
         }
         showArrows(this);
         cam.stopFollow(this);
