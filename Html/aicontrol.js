@@ -691,7 +691,7 @@ class AIControl
             }
         }
         // if no plan yet, try to plan pentagram or something else
-        if (!unit.aiControl.plannedSpeыll) {
+        if (!unit.aiControl.plannedSpell) {
             if (!unit.aiControl.pentagramCreated && unit.abilities.conjure.config.spells['pentagram'] != 0 && randomInt(0, 1) === 1) {
                 unit.aiControl.plannedSpell = spellConfigs['pentagram'];
             }
