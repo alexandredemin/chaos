@@ -402,7 +402,7 @@ class EntitySpell extends Spell
         switch (this.step) {
             case 0:
                 setInteractionScenario(userInteractionScenario.placeSelection);
-                let places = selectPlacesOnLineOfSight(this.wizard.mapX, this.wizard.mapY, this.spellConfig.range, true);
+                let places = selectPlacesOnLineOfSight(this.wizard.mapX, this.wizard.mapY, this.spellConfig.range, true, true);
                 placeSelector.show(places,this);
                 this.step++;
                 break;
@@ -629,7 +629,7 @@ class AtackPlaceSpell extends Spell
         switch (this.step) {
             case 0:
                 setInteractionScenario(userInteractionScenario.placeSelection);
-                let places = selectPlacesOnLineOfSight(this.wizard.mapX, this.wizard.mapY, this.spellConfig.range, true);
+                let places = selectPlacesOnLineOfSight(this.wizard.mapX, this.wizard.mapY, this.spellConfig.range, true, true);
                 placeSelector.show(places,this);
                 this.step++;
                 break;

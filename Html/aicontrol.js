@@ -234,7 +234,7 @@ class AIControl
             } 
             if(mainGoal == null){
                 if(unit.player.wizard && !unit.player.wizard.died){
-                    if(this.threats.length > 0){
+                    if(this.threats && this.threats.length > 0){
                         this.chooseTargetThreat(unit,this.threats);
                     }
                     if(unit.aiControl.mainTarget){
