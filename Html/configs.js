@@ -6,6 +6,7 @@ const entityConfigs = {
         scale: 0.32,
         features: {
             health: 2,
+            blocksLOS: true,
             strength: 2,
             survival: 0.25,
             propagation: 0.5,
@@ -22,6 +23,7 @@ const entityConfigs = {
         scale: 0.15,
         features: {
             health: 1,
+            blocksLOS: true,
             strength: 3,
             tfStrength: 0.5,
             tfDefense: 0.5
@@ -35,6 +37,7 @@ const entityConfigs = {
         scale: 0.15,
         features: {
             health: 2,
+            blocksLOS: true,
             strength: 3,
             survival: 1.0,
             propagation: 0.125,
@@ -51,6 +54,7 @@ const entityConfigs = {
         scale: 0.15,
         features: {
             health: 1,
+            blocksLOS: false,
             time: 0,
             rewardFrequency: 2,
             mana: 1,
@@ -64,6 +68,7 @@ const entityConfigs = {
         scale: 1.0,
         features: {
             health: 5,
+            blocksLOS: true,
             alpha: 0.5,
             central: false,
             showtween: false,
@@ -77,6 +82,7 @@ const entityConfigs = {
         scale: 0.75,
         features: {
             health: 1,
+            blocksLOS: false,
             state: 0,
         },
         createFunction: (scene,x,y,visible=true) => MushroomEntity.create(scene,x,y,visible)

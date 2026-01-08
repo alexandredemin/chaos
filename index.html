@@ -500,18 +500,22 @@
                 resX = y;
                 resY = x;
             }
+            // check units
             let unit = getUnitAtMap(resX, resY);
             if (unit != null) {
                 if (onUnit) {
                     if (onUnit(unit) === false) return false;
                 } else return false;
             }
-            let entity = Entity.getEntityAtMap(resX, resY);
-            if (entity != null) {
-                if (onEntity) {
-                    if (onEntity(entity) === false) return false;
-                } else return false;
+            // check entities
+            const entities = Entity.getEntitiesAtMap(resX, resY);
+            if(entities && entities.length > 0){
+                if(onEntity){
+                    for(const ent of entities) if(onEntity(ent) === false) return false;
+                }
+                else if(entities.some(ent => ent.config.features.blocksLOS !== false)) return false;
             }
+            // check walls
             let wallTile = wallsLayer.getTileAt(resX, resY);
             if (wallTile != null) {
                 //if(wallTile.properties['collides'] == true)

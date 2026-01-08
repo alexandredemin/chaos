@@ -304,11 +304,26 @@ class FireEntity extends Entity
         }
     }
 
+    burnEntities(ents = null)
+    {
+        if(!ents) ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
+        if (ents && ents.length > 0) {
+            for (let ent of ents) {
+                if(ent.config.name !== 'fire' && ent.config.name !== 'glue_blob' && ent.config.name !== 'pentagram' && ent.config.name !== 'frog')
+                {
+                    ent.die();
+                    break;
+                }
+            }
+        }
+    }
+
     propagation()
     {
         this.atackQueue = [];
         let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
         if(unitAtPos!=null) this.atackQueue.push(unitAtPos);
+        this.burnEntities()
         for(let y=this.mapY-1;y<=this.mapY+1;y++)
             for(let x=this.mapX-1;x<=this.mapX+1;x++)
             {
@@ -321,19 +336,8 @@ class FireEntity extends Entity
                         //if(wallTile.properties['collides'] == true)
                         continue;
                     }
-                    let entity = Entity.getEntityAtMap(x,y);
-                    if(entity != null)
-                    {
-                        if(entity.config.name === 'fire')
-                        {
-                            continue;
-                        }
-                        else
-                        {
-                            entity.die();
-                            console.log('die '+entity.config.name);
-                        }
-                    }
+                    const ents = Entity.getEntitiesAtMap(x, y) || [];
+                    if(ents.some(ent => ent.config.name === 'fire')) continue;
                     let fire = new FireEntity(this.scene,0,0,(gameSettings.showEnemyMoves == true));
                     fire.moved = true;
                     fire.setPositionFromMap(x, y);
@@ -342,6 +346,7 @@ class FireEntity extends Entity
                     entities.push(fire);
                     unitAtPos = getUnitAtMap(x,y);
                     if(unitAtPos!=null) this.atackQueue.push(unitAtPos);
+                    fire.burnEntities(ents);
                 }
             }
     }

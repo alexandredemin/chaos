@@ -194,11 +194,12 @@ class GameState {
                 } else return false;
             }
             // check entity
-            let entity = this.entitiesData.find(e => e.mapX === resX && e.mapY === resY);
-            if (entity != null) {
-                if (onEntity) {
-                    if (onEntity(entity) === false) return false;
-                } else return false;
+            const entities = this.getEntitiesAt(resX, resY);
+            if(entities && entities.length > 0){
+                if(onEntity){
+                    for(const ent of entities) if(onEntity(ent) === false) return false;
+                }
+                else if(entities.some(ent => ent.features.blocksLOS !== false)) return false;
             }
             // check wall
             if (this.wallsLayer) {
