@@ -37,22 +37,25 @@ class MapGenerator {
             h: this.height - 2
         }
 
-        const initialNodes = this._buildInitialLayout(rootRect);
+        const { zones, connections }  = this._buildInitialLayout(rootRect);
 
-        for (let node of initialNodes) {
+        for (let node of zones) {
             this._bspSplit(node);
         }
 
         // 2) generate rooms
-        this._generateRooms(initialNodes, map)
+        this._generateRooms(zones, map)
 
         // 3) generate corridors
-        this._connectRooms(initialNodes, map);
+        this._connectRooms(zones, map);
 
-        // 4) generate branching corridors
+        // 4) connect zones
+        this._connectZones(connections, map);
+
+        // 5) generate branching corridors
         //this._generateBranchingCorridors(map);
 
-        // 5) auto-tile walls
+        // 6) auto-tile walls
         this._autoTileWalls(map);
 
         // start positions
@@ -104,7 +107,8 @@ class MapGenerator {
 
     //--- build initial layout ---
     _buildInitialLayout(rootRect) {
-        const nodes = [];
+        const zones = [];
+        const connections = [];
 
         /*
         const rootNode = {
@@ -116,11 +120,12 @@ class MapGenerator {
             reserved: false,
             allowSplit: true
         };
-        nodes.push(rootNode);
+        zones.push(rootNode);
 
-        return nodes
+        return { zones, connections };
         */
 
+        // --- central arena ---
         const arenaW = Math.floor(rootRect.w * 0.5);
         const arenaH = Math.floor(rootRect.h * 0.5);
 
@@ -131,9 +136,15 @@ class MapGenerator {
             h: arenaH
         };
 
-        const arenaRoom = {x: arenaRect.x + 1, y: arenaRect.y + 1, w: arenaRect.w - 2, h: arenaRect.h - 2};
+        const arenaRoom = {
+            x: arenaRect.x + 1,
+            y: arenaRect.y + 1,
+            w: arenaRect.w - 2,
+            h: arenaRect.h - 2
+        };
 
         const arenaNode = {
+            id: "arena",
             rect: arenaRect,
             depth: 0,
             left: null,
@@ -144,14 +155,15 @@ class MapGenerator {
             allowSplit: false
         };
 
-        nodes.push(arenaNode);
+        zones.push(arenaNode);
 
-        // regions around arena
+        // surrounding regions
         const regions = this._subtractRect(rootRect, arenaRect);
 
-        for (let r of regions) {
-            nodes.push({
-                rect: r,
+        for (let i = 0; i < regions.length; i++) {
+            zones.push({
+                id: `zone_${i}`,
+                rect: regions[i],
                 depth: 0,
                 left: null,
                 right: null,
@@ -161,7 +173,16 @@ class MapGenerator {
             });
         }
 
-        return nodes;
+        // auto-generate connections
+        for (const zone of zones) {
+            if (zone === arenaNode) continue;
+
+            if (this._rectsTouch(arenaNode.rect, zone.rect)) {
+                connections.push([arenaNode, zone]);
+            }
+        }
+
+        return { zones, connections };
     }
 
     _subtractRect(outer, inner) {
@@ -224,6 +245,22 @@ class MapGenerator {
         }
 
         return result;
+    }
+
+    _rectsTouch(a, b) {
+        const ax2 = a.x + a.w;
+        const ay2 = a.y + a.h;
+        const bx2 = b.x + b.w;
+        const by2 = b.y + b.h;
+
+        const overlapX = a.x < bx2 && ax2 > b.x;
+        const overlapY = a.y < by2 && ay2 > b.y;
+
+        const touchVert = (ax2 === b.x || bx2 === a.x) && overlapY;
+
+        const touchHorz = (ay2 === b.y || by2 === a.y) && overlapX;
+
+        return touchVert || touchHorz;
     }
 
     //--- BSP split ---
@@ -492,6 +529,57 @@ class MapGenerator {
         for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
             map.walls[y][x] = null;
         }
+    }
+
+    //--- connect zones ---
+    _connectZones(connections, map) {
+        for (const [zoneA, zoneB] of connections) {
+
+            const roomsA = this._getRoomsFromNode(zoneA);
+            const roomsB = this._getRoomsFromNode(zoneB);
+
+            if (roomsA.length === 0 || roomsB.length === 0) continue; // nothing to connect
+
+            let bestPair = null;
+            let bestDist = Infinity;
+
+            for (const roomA of roomsA) {
+                const ca = this._roomCenter(roomA);
+
+                for (const roomB of roomsB) {
+                    const cb = this._roomCenter(roomB);
+
+                    const dx = ca.x - cb.x;
+                    const dy = ca.y - cb.y;
+                    const dist = dx * dx + dy * dy; // squared distance
+
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestPair = { roomA, roomB };
+                    }
+                }
+            }
+
+            if (!bestPair) continue;
+
+            // carve corridor between chosen rooms
+            this._connectTwoRooms(bestPair.roomA, bestPair.roomB, map);
+        }
+    }
+
+    _getRoomsFromNode(node, result = []) {
+        if (!node) return result;
+        if (node.room) result.push(node.room);
+        if (node.left) this._getRoomsFromNode(node.left, result);
+        if (node.right) this._getRoomsFromNode(node.right, result);
+        return result;
+    }
+
+    _roomCenter(room) {
+        return {
+            x: room.x + Math.floor(room.w / 2),
+            y: room.y + Math.floor(room.h / 2)
+        };
     }
 
     //--- branching corridors ---
