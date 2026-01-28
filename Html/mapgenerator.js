@@ -1,5 +1,11 @@
 class MapGenerator {
     constructor(cfg) {
+        this.TILE = {
+            FLOOR: 0,
+            WALL: 1,
+            ROCK: 2
+        };
+
         this.width = cfg.width;
         this.height = cfg.height;
 
@@ -22,6 +28,10 @@ class MapGenerator {
 
         this.rooms = [];
         this.bspNodes = [];
+
+        this.wallAutotileRules = WALL_AUTOTILE_RULES.slice().sort((a, b) =>
+            this._countWildcards(a.pattern) - this._countWildcards(b.pattern)
+        );
     }
 
     generate() {
@@ -56,7 +66,7 @@ class MapGenerator {
         //this._generateBranchingCorridors(map);
 
         // 6) auto-tile walls
-        this._autoTileWalls(map);
+        this._autoTile(map);
 
         // start positions
         const objects = this._generateStartPositions();
@@ -88,6 +98,10 @@ class MapGenerator {
             }
         }
         return false;
+    }
+
+    _countWildcards(pattern) {
+        return (pattern.match(/\*/g) || []).length;
     }
 
     //--- create empty map ---
@@ -735,17 +749,104 @@ class MapGenerator {
     }
 
     //--- auto-tiling ---
-    _autoTileWalls(map) {
-        for (let y = 1; y < this.height - 1; y++) {
-            for (let x = 1; x < this.width - 1; x++) {
-                if (map.walls[y][x] !== null) {
-                    // If below is floor but this tile is wall -> use wall-top tile
-                    if (map.walls[y + 1][x] === null) {
-                        map.walls[y][x] = this.wallTile + 1; // just example variant
+    _autoTile(map) {
+        const tileTypeMap = this._buildTileTypeMap(map);
+        this._markWallsFromRock(tileTypeMap);
+        this._autoTileWalls(tileTypeMap,map);
+    }
+
+    _buildTileTypeMap(map) {
+        const types = [];
+
+        for (let y = 0; y < this.height; y++) {
+            types[y] = [];
+            for (let x = 0; x < this.width; x++) {
+                if (map.walls[y][x] === null) {
+                    types[y][x] = this.TILE.FLOOR;
+                } else {
+                    types[y][x] = this.TILE.ROCK;
+                }
+            }
+        }
+
+        return types;
+    }
+
+    _markWallsFromRock(tileTypeMap) {
+        const w = this.width;
+        const h = this.height;
+
+        const dirs = [
+            { x: 1,  y: 0 },
+            { x: -1, y: 0 },
+            { x: 0,  y: 1 },
+            { x: 0,  y: -1 }
+        ];
+
+        for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+                if (tileTypeMap[y][x] !== this.TILE.ROCK) continue;
+                for (const d of dirs) {
+                    const nx = x + d.x;
+                    const ny = y + d.y;
+                    if (tileTypeMap[ny][nx] === this.TILE.FLOOR) {
+                        tileTypeMap[y][x] = this.TILE.WALL;
+                        break;
                     }
                 }
             }
         }
+    }
+
+    _autoTileWalls(tileTypeMap,map) {
+        for (let y = 1; y < this.height - 1; y++) {
+            for (let x = 1; x < this.width - 1; x++) {
+                if (tileTypeMap[y][x] !== this.TILE.WALL) continue;
+                const pattern = this._buildPattern(x, y, tileTypeMap);
+                const rule = this._findMatchingRule(pattern);
+                if (rule) {
+                    map.walls[y][x] = rule.tile;
+                }
+            }
+        }
+    }
+
+    _buildPattern(cx, cy, tileTypeMap) {
+        let result = "";
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                const x = cx + dx;
+                const y = cy + dy;
+                result += this._tileToSymbol(tileTypeMap, x, y);
+            }
+        }
+        return result;
+    }
+
+    _tileToSymbol(tileTypeMap, x, y) {
+        if (!this._inBounds(x, y)) return "R";
+        if (tileTypeMap[y][x] === this.TILE.FLOOR) return "F";
+        if (tileTypeMap[y][x] === this.TILE.WALL) return "W";
+        if (tileTypeMap[y][x] === this.TILE.ROCK) return "R";
+        return "R";
+    }
+
+
+    _findMatchingRule(pattern) {
+        for (const rule of this.wallAutotileRules) {
+            if (this._matchPattern(pattern, rule.pattern)) {
+                return rule;
+            }
+        }
+        return null;
+    }
+
+    _matchPattern(actual, rule) {
+        for (let i = 0; i < 9; i++) {
+            if (rule[i] === "*") continue;
+            if (actual[i] !== rule[i]) return false;
+        }
+        return true;
     }
 
     //--- start positions ---
