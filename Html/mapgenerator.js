@@ -10,7 +10,7 @@ class MapGenerator {
         this.height = cfg.height;
 
         this.groundTile = cfg.groundTileIndex || 129;
-        this.wallTile = cfg.wallTileIndex || 34;
+        this.wallTile = cfg.wallTileIndex || 353;
 
         this.minRoomSize = cfg.minRoomSize || 4;
         this.maxRoomSize = cfg.maxRoomSize || 14;
@@ -29,9 +29,12 @@ class MapGenerator {
         this.rooms = [];
         this.bspNodes = [];
 
+        /*
         this.wallAutotileRules = WALL_AUTOTILE_RULES.slice().sort((a, b) =>
             this._countWildcards(a.pattern) - this._countWildcards(b.pattern)
         );
+        */
+        this.wallAutotileRules = WALL_AUTOTILE_RULES.slice();
     }
 
     generate() {
@@ -87,6 +90,10 @@ class MapGenerator {
 
     _inBounds(x, y) {
         return x > 0 && y > 0 && x < this.width - 1 && y < this.height - 1;
+    }
+
+    _inMapRect(x, y) {
+        return x >= 0 && y >= 0 && x < this.width && y < this.height;
     }
 
     _isRoom(x, y) {
@@ -438,7 +445,7 @@ class MapGenerator {
                 for (let y = node.room.y; y < node.room.y + node.room.h; y++) {
                     for (let x = node.room.x; x < node.room.x + node.room.w; x++) {
                         map.walls[y][x] = null;
-                        map.ground[y][x] = 161; //this.groundTile;
+                        map.ground[y][x] = this.groundTile;
                     }
                 }
                 return;
@@ -780,15 +787,20 @@ class MapGenerator {
             { x: 1,  y: 0 },
             { x: -1, y: 0 },
             { x: 0,  y: 1 },
-            { x: 0,  y: -1 }
+            { x: 0,  y: -1 },
+            { x: 1,  y: 1 },
+            { x: -1,  y: -1 },
+            { x: 1,  y: -1 },
+            { x: -1,  y: 1 }
         ];
 
-        for (let y = 1; y < h - 1; y++) {
-            for (let x = 1; x < w - 1; x++) {
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
                 if (tileTypeMap[y][x] !== this.TILE.ROCK) continue;
                 for (const d of dirs) {
                     const nx = x + d.x;
                     const ny = y + d.y;
+                    if (!this._inMapRect(nx, ny)) continue;
                     if (tileTypeMap[ny][nx] === this.TILE.FLOOR) {
                         tileTypeMap[y][x] = this.TILE.WALL;
                         break;
@@ -799,8 +811,8 @@ class MapGenerator {
     }
 
     _autoTileWalls(tileTypeMap,map) {
-        for (let y = 1; y < this.height - 1; y++) {
-            for (let x = 1; x < this.width - 1; x++) {
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
                 if (tileTypeMap[y][x] !== this.TILE.WALL) continue;
                 const pattern = this._buildPattern(x, y, tileTypeMap);
                 const rule = this._findMatchingRule(pattern);
@@ -824,21 +836,27 @@ class MapGenerator {
     }
 
     _tileToSymbol(tileTypeMap, x, y) {
-        if (!this._inBounds(x, y)) return "R";
+        if (!this._inMapRect(x, y)) return "R";
         if (tileTypeMap[y][x] === this.TILE.FLOOR) return "F";
         if (tileTypeMap[y][x] === this.TILE.WALL) return "W";
         if (tileTypeMap[y][x] === this.TILE.ROCK) return "R";
         return "R";
     }
 
-
     _findMatchingRule(pattern) {
+        let bestRule = null;
+        let bestScore = -Infinity;
+
         for (const rule of this.wallAutotileRules) {
-            if (this._matchPattern(pattern, rule.pattern)) {
-                return rule;
+            if (!this._matchPattern(pattern, rule.pattern)) continue;
+            const score = rule.score ?? 0;
+            if (score > bestScore) {
+                bestScore = score;
+                bestRule = rule;
             }
         }
-        return null;
+
+        return bestRule;
     }
 
     _matchPattern(actual, rule) {
