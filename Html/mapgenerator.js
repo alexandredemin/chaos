@@ -863,19 +863,80 @@ class MapGenerator {
     }
 
     //--- start positions ---
-    _generateStartPositions() {
-        // just place in first 4 rooms
+    _generateStartPositions(count = 8) {
         const objects = [];
 
-        for (let i = 0; i < Math.min(4, this.rooms.length); i++) {
-            const r = this.rooms[i];
+        // 1) collect candidate rooms (only normal rooms)
+        const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
+        if (candidateRooms.length === 0) return objects;
+
+        const maxCount = Math.min(count, candidateRooms.length);
+        const candidates = candidateRooms.map(r => ({
+            room: r,
+            center: this._roomCenter(r)
+        }));
+        const selected = [];
+
+        // 2) choose first point — farthest from map center (more stable than random)
+        const mapCenter = {
+            x: Math.floor(this.width / 2),
+            y: Math.floor(this.height / 2)
+        };
+
+        let first = candidates[0];
+        let bestD = -Infinity;
+        for (const c of candidates) {
+            const d = this._dist2(c.center, mapCenter);
+            if (d > bestD) {
+                bestD = d;
+                first = c;
+            }
+        }
+        selected.push(first);
+        candidates.splice(candidates.indexOf(first), 1);
+
+        // 3) farthest point sampling
+        while (selected.length < maxCount) {
+            let bestCandidate = null;
+            let bestMinDist = -Infinity;
+            for (const c of candidates) {
+                let minDist = Infinity;
+                for (const s of selected) {
+                    const d = this._dist2(c.center, s.center);
+                    if (d < minDist) minDist = d;
+                }
+                if (minDist > bestMinDist) {
+                    bestMinDist = minDist;
+                    bestCandidate = c;
+                }
+            }
+            if (!bestCandidate) break;
+            selected.push(bestCandidate);
+            candidates.splice(candidates.indexOf(bestCandidate), 1);
+        }
+
+        // 4) convert to objects
+        for (const s of selected) {
             objects.push({
                 name: "start",
-                x: (16 * (r.x + Math.floor(r.w / 2))),
-                y: (16 * (r.y + Math.floor(r.h / 2)))
+                x: s.center.x * 16,
+                y: s.center.y * 16
             });
         }
         return objects;
+    }
+
+    _roomCenter(room) {
+        return {
+            x: room.x + Math.floor(room.w / 2),
+            y: room.y + Math.floor(room.h / 2)
+        };
+    }
+
+    _dist2(a, b) {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        return dx * dx + dy * dy;
     }
 
 }
