@@ -35,49 +35,7 @@ const WALL_AUTOTILE_RULES = [
         tile: 15,
         score: 2
     },
-    /*
-    {
-        pattern: "*R*WWW***",
-        tile: 34,
-        score: 2
-    },
-    {
-        pattern: "***WWW*R*",
-        tile: 2,
-        score: 2
-    },
-    {
-        pattern: "*W*RW**W*",
-        tile: 257,
-        score: 2
-    },
-    {
-        pattern: "*W**WR*W*",
-        tile: 256,
-        score: 2
-    },
-    
-    {
-        pattern: "*W*WWW***",
-        tile: 34,
-        score: 2
-    },
-    {
-        pattern: "***WWW*W*",
-        tile: 2,
-        score: 2
-    },
-    {
-        pattern: "*W*WW**W*",
-        tile: 257,
-        score: 2
-    },
-    {
-        pattern: "*W**WW*W*",
-        tile: 256,
-        score: 2
-    },
-    */
+
     // --- thin straight walls ---
     {
         pattern: "*W*FWF*W*",
@@ -88,7 +46,7 @@ const WALL_AUTOTILE_RULES = [
     // --- isolated wall ---
     {
         pattern: "*F*FWF*F*",
-        tile: 11,
+        tile: 19,
         score: 3
     },
 
@@ -114,7 +72,6 @@ const WALL_AUTOTILE_RULES = [
         score: 3
     },
     
-    
     // --- outer corners ---
     {
         pattern: "*F*FWW*W*",
@@ -139,54 +96,172 @@ const WALL_AUTOTILE_RULES = [
 
     // --- inner corners ---
     {
-        pattern: "FW*WW****",
+        pattern: "FW*WWR***",
         tile: 25,
-        score: 3
+        score: 5
     },
     {
-        pattern: "*WF*WW***",
+        pattern: "*WFRWW***",
         tile: 24,
-        score: 3
+        score: 5
     },
     {
-        pattern: "***WW*FW*",
+        pattern: "***WWRFW*",
         tile: 26,
-        score: 3
+        score: 5
     },
     {
-        pattern: "****WW*WF",
+        pattern: "***RWW*WF",
         tile: 27,
-        score: 3
+        score: 5
+    },
+    // ---
+    {
+        pattern: "FWWWWW***",
+        tile: 25,
+        score: 5
+    },
+    {
+        pattern: "WWFWWW***",
+        tile: 24,
+        score: 5
+    },
+    {
+        pattern: "***WWWFWW",
+        tile: 26,
+        score: 5
+    },
+    {
+        pattern: "***WWWWWF",
+        tile: 27,
+        score: 5
     },
 
     // --- T-junctions ---
+    /*
     {
-        pattern: "*W*WWW***",
+        pattern: "FWFWWW***",
         tile: 30,
         score: 4
     },
     {
-        pattern: "***WWW*W*",
+        pattern: "***WWWFWF",
         tile: 31,
         score: 4
     },
     {
-        pattern: "*W**WW*W*",
+        pattern: "*WF*WW*WF",
         tile: 32,
         score: 4
     },
     {
-        pattern: "*W*WW**W*",
+        pattern: "FW*WW*FW*",
         tile: 33,
         score: 4
-    }
-    /*
+    },
+    */
+    // ---
+    {
+        pattern: "*WFWWW***",
+        tile: 30,
+        score: 4
+    },
+    {
+        pattern: "***WWW*WF",
+        tile: 31,
+        score: 4
+    },
+    {
+        pattern: "*W**WW*WF",
+        tile: 32,
+        score: 4
+    },
+    {
+        pattern: "*W*WW*FW*",
+        tile: 33,
+        score: 4
+    },
+
+    {
+        pattern: "FW*WWW***",
+        tile: 30,
+        score: 4
+    },
+    {
+        pattern: "***WWWFW*",
+        tile: 31,
+        score: 4
+    },
+    {
+        pattern: "*WF*WW*W*",
+        tile: 32,
+        score: 4
+    },
+    {
+        pattern: "FW*WW**W*",
+        tile: 33,
+        score: 4
+    },
+    // ---
+    {
+        pattern: "*WFWWW*F*",
+        tile: 30,
+        score: 6
+    },
+    {
+        pattern: "*F*WWW*WF",
+        tile: 31,
+        score: 6
+    },
+    {
+        pattern: "*W*FWW*WF",
+        tile: 32,
+        score: 6
+    },
+    {
+        pattern: "*W*WWFFW*",
+        tile: 33,
+        score: 6
+    },
+
+    {
+        pattern: "FW*WWW*F*",
+        tile: 30,
+        score: 6
+    },
+    {
+        pattern: "*F*WWWFW*",
+        tile: 31,
+        score: 6
+    },
+    {
+        pattern: "*WFFWW*W*",
+        tile: 32,
+        score: 6
+    },
+    {
+        pattern: "FW*WWF*W*",
+        tile: 33,
+        score: 6
+    },
+
     // --- cross ---
     {
-        pattern: "*W*WWW*W*",
-        tile: 293,
-        score: 4
+        pattern: "FWFWWWFWF",
+        tile: 36,
+        score: 7
+    },
+
+    {
+        pattern: "FW*WWW*WF",
+        tile: 36,
+        score: 7
+    },
+
+    {
+        pattern: "*WFWWWFW*",
+        tile: 36,
+        score: 7
     }
-        */
 
 ];
