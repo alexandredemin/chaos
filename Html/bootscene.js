@@ -10,7 +10,8 @@ var BootScene = new Phaser.Class({
 
     preload: function ()
     {
-        this.load.image('tiles', 'img/dungeon-16-16.png');
+        this.load.image('tiles2', 'img/dungeon-16-16.png');
+        this.load.image('tiles', 'img/dungeon.png');
         this.load.image('arrow','img/arrow4.png');
         this.load.image('flash','img/flash.png');
         this.load.spritesheet('explosion', 'img/explosion.png', { frameWidth: 128, frameHeight: 128 } );

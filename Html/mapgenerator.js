@@ -9,8 +9,8 @@ class MapGenerator {
         this.width = cfg.width;
         this.height = cfg.height;
 
-        this.groundTile = cfg.groundTileIndex || 129;
-        this.wallTile = cfg.wallTileIndex || 353;
+        this.groundTile = cfg.groundTileIndex || 2;
+        this.wallTile = cfg.wallTileIndex || 1;
 
         this.minRoomSize = cfg.minRoomSize || 4;
         this.maxRoomSize = cfg.maxRoomSize || 14;
@@ -29,11 +29,6 @@ class MapGenerator {
         this.rooms = [];
         this.bspNodes = [];
 
-        /*
-        this.wallAutotileRules = WALL_AUTOTILE_RULES.slice().sort((a, b) =>
-            this._countWildcards(a.pattern) - this._countWildcards(b.pattern)
-        );
-        */
         this.wallAutotileRules = WALL_AUTOTILE_RULES.slice();
     }
 

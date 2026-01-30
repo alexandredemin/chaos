@@ -11,7 +11,6 @@ var GameScene = new Phaser.Class({
 
     preload: function()
     {
-        //this.load.image('tiles', 'img/dungeon-16-16.png');
         this.load.tilemapTiledJSON(gameSettings.selectedMap, 'maps/'+gameSettings.selectedMap+'.json');
     },
   
@@ -25,7 +24,7 @@ var GameScene = new Phaser.Class({
         }
         else{
             map = this.make.tilemap({ key: gameSettings.selectedMap, tileWidth: 16, tileHeight: 16 });
-            this.tileset = map.addTilesetImage('dungeon-tiles','tiles');
+            this.tileset = map.addTilesetImage('dungeon-tiles','tiles2');
             groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
             wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);          
             objectLayer = map.getObjectLayer('Objects');
