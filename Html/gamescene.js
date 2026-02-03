@@ -16,9 +16,21 @@ var GameScene = new Phaser.Class({
   
     create: function (data)
     {
+        /*
         const savedGame = data?.savedState;
         
         if(gameSettings.selectedMap === "random"){
+            const cfg = gameSettings.randomMapConfig || { width: 20, height: 20 };
+            this.generateMap(cfg);
+        }
+        */
+
+        const savedGame = data?.savedState;
+
+        if (savedGame && savedGame.savedMap) {
+            this.loadMapFromSave(savedGame.savedMap);
+        }
+        else if (gameSettings.selectedMap === "random") {
             const cfg = gameSettings.randomMapConfig || { width: 20, height: 20 };
             this.generateMap(cfg);
         }
@@ -192,6 +204,47 @@ var GameScene = new Phaser.Class({
         for (let ud of savedGame.units) Unit.deserialize(ud, this, playersMap);
         for (let ed of savedGame.entities) Entity.deserialize(ed, this);
         if(gameSettings.showEnemyMoves) for(let ent of entities) if(ent.active)ent.visible = true;
+    },
+
+
+    loadMapFromSave: function(savedMap) {
+        map = this.make.tilemap({
+            width: savedMap.width,
+            height: savedMap.height,
+            tileWidth: 16,
+            tileHeight: 16
+        });
+
+        this.tileset = map.addTilesetImage('dungeon-tiles', 'tiles');
+
+        groundLayer = map.createBlankLayer('Ground', this.tileset, 0, 0);
+        wallsLayer = map.createBlankLayer('Walls', this.tileset, 0, 0);
+
+        // ground
+        for (let y = 0; y < savedMap.height; y++) {
+            for (let x = 0; x < savedMap.width; x++) {
+                groundLayer.putTileAt(savedMap.ground[y][x], x, y);
+            }
+        }
+
+        // walls
+        for (let y = 0; y < savedMap.height; y++) {
+            for (let x = 0; x < savedMap.width; x++) {
+                const tileIndex = savedMap.walls[y][x];
+                if (tileIndex !== null) {
+                    const tile = wallsLayer.putTileAt(tileIndex, x, y);
+                    tile.properties = tile.properties || {};
+                    tile.properties.collides = true;
+                }
+            }
+        }
+
+        wallsLayer.setCollisionByProperty({ collides: true });
+        this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+
+        objectLayer = {
+            objects: savedMap.objects
+        };
     },
 
   

@@ -710,6 +710,7 @@
         scrollMsg.show();
     }
   
+    /*
     function saveGame() {
         const data = {
             selectedMap: gameSettings.selectedMap,
@@ -724,6 +725,39 @@
             })),
             units: units.map(u => u.serialize()),
             entities: entities.map(e => e.serialize()),
+        };
+
+        localStorage.setItem("savedGame", JSON.stringify(data));
+    }
+    */
+
+    function saveGame() {
+        let savedMap = null;
+
+        if (gameSettings.selectedMap === "random") {
+            savedMap = {
+                width: map.width,
+                height: map.height,
+                ground: groundLayer.layer.data.map(row => row.map(t => t.index)),
+                walls: wallsLayer.layer.data.map(row => row.map(t => t ? t.index : null)),
+                objects: objectLayer.objects
+            };
+        }
+
+        const data = {
+            selectedMap: gameSettings.selectedMap,
+            spellDistrib: gameSettings.spellDistrib,
+            magicPoints: gameSettings.magicPoints,
+            showEnemyMoves: gameSettings.showEnemyMoves,
+            rules: gameSettings.rules,
+            playerInd,
+            players: players.map(p => ({
+                name: p.name,
+                control: p.control,
+            })),
+            units: units.map(u => u.serialize()),
+            entities: entities.map(e => e.serialize()),
+            savedMap
         };
 
         localStorage.setItem("savedGame", JSON.stringify(data));
