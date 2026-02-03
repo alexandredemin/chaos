@@ -16,15 +16,6 @@ var GameScene = new Phaser.Class({
   
     create: function (data)
     {
-        /*
-        const savedGame = data?.savedState;
-        
-        if(gameSettings.selectedMap === "random"){
-            const cfg = gameSettings.randomMapConfig || { width: 20, height: 20 };
-            this.generateMap(cfg);
-        }
-        */
-
         const savedGame = data?.savedState;
 
         if (savedGame && savedGame.savedMap) {
@@ -138,7 +129,6 @@ var GameScene = new Phaser.Class({
 
     },
 
-
     generateMap: function(cfg) {
         const generator = new MapGenerator(cfg);
         const data = generator.generate();
@@ -183,7 +173,6 @@ var GameScene = new Phaser.Class({
             objects: data.objects,
         };
     },
-
   
     loadFromSave: function(savedGame) {    
         playerInd = savedGame.playerInd;
@@ -205,7 +194,6 @@ var GameScene = new Phaser.Class({
         for (let ed of savedGame.entities) Entity.deserialize(ed, this);
         if(gameSettings.showEnemyMoves) for(let ent of entities) if(ent.active)ent.visible = true;
     },
-
 
     loadMapFromSave: function(savedMap) {
         map = this.make.tilemap({
@@ -246,33 +234,32 @@ var GameScene = new Phaser.Class({
             objects: savedMap.objects
         };
     },
-
   
     initNewGame: function(){
         playerInd = 0;
+        // select all start positions
         let startPos = [];
-        for(let i=0; i < objectLayer.objects.length; i++){
-            let obj = objectLayer.objects[i];
-            let objPos = map.worldToTileXY(obj.x,obj.y);
-            startPos.push({x:objPos.x,y:objPos.y});
+        for (let i = 0; i < objectLayer.objects.length; i++) {
+            const obj = objectLayer.objects[i];
+            const objPos = map.worldToTileXY(obj.x, obj.y);
+            startPos.push({ x: objPos.x, y: objPos.y });
         }
-        let playerCount = playersSettings.length;
-        if(playerCount > startPos.length)playerCount = startPos.length;
-        for(let i=0;i<playerCount;i++)
-        {
-            if(i === startPos.length-1)break;
-            let j = randomInt(i,startPos.length-1);
-            let x = startPos[i];
-            startPos[i] = startPos[j];
-            startPos[j] = x;
+        let playerCount = 0;
+        for (let i = 0; i < playersSettings.length; i++) {
+            if (playersSettings[i].control == null) continue;
+            playerCount++;
         }
-        for(let i=0;i<playerCount;i++)
-        {
-            if(playersSettings[i].control == null)continue;
-            let player = new Player(playersSettings[i].name);
+        if (playerCount > startPos.length) {
+            playerCount = startPos.length;
+        }
+        // choose spread positions
+        const chosenPositions = this._pickSpreadPositions(startPos, playerCount);
+        for (let i = 0; i < playerCount; i++) {
+            if (playersSettings[i].control == null) continue;
+            const player = new Player(playersSettings[i].name);
             players.push(player);
-            let wiz = new Unit(unitConfigs['wizard'], this, 0, 0);
-            wiz.setPositionFromMap(startPos[i].x, startPos[i].y);
+            const wiz = new Unit(unitConfigs['wizard'], this, 0, 0);
+            wiz.setPositionFromMap(chosenPositions[i].x, chosenPositions[i].y);
             player.addWizard(wiz);
             units.push(wiz);
             player.control = playersSettings[i].control;
@@ -281,7 +268,39 @@ var GameScene = new Phaser.Class({
             player.aiControl = new AIControl(player);
             //-
             this.initSpells(wiz);
-        }      
+        }
+    },
+
+    _pickSpreadPositions: function(allPositions, count) {
+        if (count <= 0) return [];
+        if (count >= allPositions.length) return allPositions.slice();
+        const selected = [];
+        // 1) random first point
+        const first = allPositions[randomInt(0, allPositions.length - 1)];
+        selected.push(first);
+        // 2) choose next points maximizing minimum distance to existing points
+        while (selected.length < count) {
+            let bestPos = null;
+            let bestDist = -1;
+            for (const p of allPositions) {
+                if (selected.includes(p)) continue;
+                let minDist = Infinity;
+                for (const s of selected) {
+                    const dx = p.x - s.x;
+                    const dy = p.y - s.y;
+                    const dist = dx * dx + dy * dy; // distance
+                    if (dist < minDist) minDist = dist;
+                }
+                if (minDist > bestDist) {
+                    bestDist = minDist;
+                    bestPos = p;
+                }
+            }
+
+            if (!bestPos) break;
+            selected.push(bestPos);
+        }
+        return selected;
     },
   
     initSpells: function(unit){
