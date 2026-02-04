@@ -253,7 +253,14 @@ var GameScene = new Phaser.Class({
             playerCount = startPos.length;
         }
         // choose spread positions
-        const chosenPositions = this._pickSpreadPositions(startPos, playerCount);
+        const chosenPositions = this._pickSpreadPositions(startPos, playerCount, map.width, map.height);
+        // shuffle chosen positions
+        for (let i = chosenPositions.length - 1; i > 0; i--) {
+            const j = randomInt(0, i);
+            const tmp = chosenPositions[i];
+            chosenPositions[i] = chosenPositions[j];
+            chosenPositions[j] = tmp;
+        }
         for (let i = 0; i < playerCount; i++) {
             if (playersSettings[i].control == null) continue;
             const player = new Player(playersSettings[i].name);
@@ -271,14 +278,29 @@ var GameScene = new Phaser.Class({
         }
     },
 
-    _pickSpreadPositions: function(allPositions, count) {
+    _pickSpreadPositions: function(allPositions, count, mapWidth, mapHeight) {
         if (count <= 0) return [];
         if (count >= allPositions.length) return allPositions.slice();
         const selected = [];
-        // 1) random first point
-        const first = allPositions[randomInt(0, allPositions.length - 1)];
+        // 1) first point: farthest from center ---
+        const cx = mapWidth / 2;
+        const cy = mapHeight / 2;
+        let maxDist = -1;
+        let candidates = [];
+        for (const p of allPositions) {
+            const dx = p.x - cx;
+            const dy = p.y - cy;
+            const dist = dx * dx + dy * dy;
+            if (dist > maxDist) {
+                maxDist = dist;
+                candidates = [p];
+            } else if (dist === maxDist) {
+                candidates.push(p);
+            }
+        }
+        const first = candidates[randomInt(0, candidates.length - 1)];
         selected.push(first);
-        // 2) choose next points maximizing minimum distance to existing points
+        // --- 2) farthest-point sampling ---
         while (selected.length < count) {
             let bestPos = null;
             let bestDist = -1;
@@ -288,7 +310,7 @@ var GameScene = new Phaser.Class({
                 for (const s of selected) {
                     const dx = p.x - s.x;
                     const dy = p.y - s.y;
-                    const dist = dx * dx + dy * dy; // distance
+                    const dist = dx * dx + dy * dy;
                     if (dist < minDist) minDist = dist;
                 }
                 if (minDist > bestDist) {
@@ -296,7 +318,6 @@ var GameScene = new Phaser.Class({
                     bestPos = p;
                 }
             }
-
             if (!bestPos) break;
             selected.push(bestPos);
         }

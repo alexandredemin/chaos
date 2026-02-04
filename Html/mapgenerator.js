@@ -923,6 +923,7 @@ class MapGenerator {
                 y: s.center.y * 16
             });
         }
+
         return objects;
     }
 
