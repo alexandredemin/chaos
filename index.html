@@ -583,6 +583,76 @@
         targets.forEach(ent => {
             ent.visible = true;
         }); 
+
+        //update fog
+        computeFOV(unit.player, unit.mapX, unit.mapY, 20);
+        unit.scene.renderFog(unit.player);
+    }
+
+    function computeFOV(player, originX, originY, radius = 20) {
+        const visible = player.fogVisible;
+        const explored = player.fogExplored;
+        // clear visible
+        for (let y = 0; y < map.height; y++)
+            for (let x = 0; x < map.width; x++)
+                visible[y][x] = false;
+
+        function blocksLight(x, y) {
+            return wallsLayer.getTileAt(x, y) != null;
+        }
+
+        function setVisible(x, y) {
+            if (x < 0 || y < 0 || x >= map.width || y >= map.height) return;
+            visible[y][x] = true;
+            explored[y][x] = true;
+        }
+
+        setVisible(originX, originY);
+
+        const mult = [
+            [1, 0, 0, 1], [0, 1, 1, 0], [-1, 0, 0, 1], [0, -1, 1, 0],
+            [-1, 0, 0, -1], [0, -1, -1, 0], [1, 0, 0, -1], [0, 1, -1, 0]
+        ];
+
+        function castLight(cx, cy, row, start, end, radius, xx, xy, yx, yy) {
+            if (start < end) return;
+            let newStart = start;
+            for (let i = row; i <= radius; i++) {
+                let blocked = false;
+                for (let dx = -i, dy = -i; dx <= 0; dx++) {
+                    const X = cx + dx * xx + dy * xy;
+                    const Y = cy + dx * yx + dy * yy;
+                    const lSlope = (dx - 0.5) / (dy + 0.5);
+                    const rSlope = (dx + 0.5) / (dy - 0.5);
+                    if (rSlope > start) continue;
+                    if (lSlope < end) break;
+                    if ((dx * dx + dy * dy) <= radius * radius) {
+                        setVisible(X, Y);
+                    }
+                    if (blocked) {
+                        if (blocksLight(X, Y)) {
+                            newStart = rSlope;
+                            continue;
+                        } else {
+                            blocked = false;
+                            start = newStart;
+                        }
+                    } else {
+                        if (blocksLight(X, Y) && i < radius) {
+                            blocked = true;
+                            castLight(cx, cy, i + 1, start, lSlope, radius, xx, xy, yx, yy);
+                            newStart = rSlope;
+                        }
+                    }
+                }
+                if (blocked) break;
+            }
+        }
+
+        for (let i = 0; i < 8; i++) {
+            castLight(originX, originY, 1, 1.0, 0.0, radius,
+                mult[i][0], mult[i][1], mult[i][2], mult[i][3]);
+        }
     }
 
     function startTurn() {

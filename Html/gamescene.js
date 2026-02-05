@@ -278,8 +278,8 @@ var GameScene = new Phaser.Class({
             //-
             this.initSpells(wiz);
             //+ init fogs
-            player.fogExplored = Array.from({ length: map.heigh }, () => Array(map.width).fill(false));
-            player.fogVisible  = Array.from({ length: map.heigh }, () => Array(map.width).fill(false))
+            player.fogExplored = Array.from({ length: map.height }, () => Array(map.width).fill(false));
+            player.fogVisible  = Array.from({ length: map.height }, () => Array(map.width).fill(false))
             //-
         }
     },
@@ -355,32 +355,65 @@ var GameScene = new Phaser.Class({
     },
     
     initFog: function () {
-        const w = map.width * 16;
-        const h = map.height * 16;
-        this.fogRT = this.add.renderTexture(0, 0, w, h).setOrigin(0).setDepth(1000).setScrollFactor(1);
-        this.fogRT.setBlendMode(Phaser.BlendModes.MULTIPLY);
-        this._createFogGradients();
-        this.fogExplored = Array.from({ length: map.height }, () =>
-            Array(map.width).fill(false)
+        this.fogRT = new Phaser.GameObjects.RenderTexture(
+            this,
+            groundLayer.x,
+            groundLayer.y,
+            groundLayer.width,
+            groundLayer.height
         );
+        this.add.existing(this.fogRT);
+        this.fogRT.setDepth(1000);
+
+        this._createFogGradient();
     },
 
-    _createFogGradients: function () {
-        const makeGradient = (key, innerAlpha, outerAlpha, radius) => {
-            const g = this.make.graphics({ x: 0, y: 0, add: false });
-            const steps = 32;
-            for (let i = steps; i > 0; i--) {
-                const t = i / steps;
-                const a = Phaser.Math.Linear(innerAlpha, outerAlpha, 1 - t);
-                g.fillStyle(0x000000, a);
-                g.fillCircle(radius, radius, radius * t);
+    _createFogGradient: function () {
+        const radius = 32;           // радиус обзора в пикселях
+        const steps = 16;
+
+        const g = this.make.graphics({ x: 0, y: 0, add: false });
+
+        for (let i = steps; i > 0; i--) {
+            const t = i / steps;
+
+            // центр — полностью прозрачный
+            // край — почти непрозрачный
+            const alpha = Phaser.Math.Linear(1.0, 0.0, t);
+
+            g.fillStyle(0x000000, alpha);
+            g.fillCircle(radius, radius, radius * t);
+        }
+
+        g.generateTexture('fogGradient', radius * 2, radius * 2);
+        g.destroy();
+
+        this.fogRadius = radius;
+    },
+
+    renderFog: function (player) {
+        return;
+        const rt = this.fogRT;
+        const tile = 16;
+        const r = this.fogRadius;
+
+        rt.clear();
+
+        // 1) Полный fog of war
+        rt.fill(0x000000, 1);
+
+        // 2) Вырезаем текущую видимость (градиент!)
+        for (let y = 0; y < map.height; y++) {
+            for (let x = 0; x < map.width; x++) {
+                if (!player.fogExplored[y][x]) continue;
+
+                const px = x * tile + tile / 2 - r;
+                const py = y * tile + tile / 2 - r;
+
+                rt.erase('fogGradient', px, py);
             }
-            g.generateTexture(key, radius * 2, radius * 2);
-            g.destroy();
-        };
-
-        makeGradient('fogVision', 0.0, 0.55, 120);   // visible now
-        makeGradient('fogMemory', 0.55, 1.0, 140);   // visible before
+        }
     },
+
 
 });
