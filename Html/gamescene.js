@@ -69,6 +69,8 @@ var GameScene = new Phaser.Class({
         rangeRenderer = new RangeRenderer(this);
         placeSelector = new PlaceSelector(this);
 
+        this.initFog();
+
         window.addEventListener('resize', resize);
       
         cam = this.cameras.main;
@@ -275,6 +277,10 @@ var GameScene = new Phaser.Class({
             player.aiControl = new AIControl(player);
             //-
             this.initSpells(wiz);
+            //+ init fogs
+            player.fogExplored = Array.from({ length: map.heigh }, () => Array(map.width).fill(false));
+            player.fogVisible  = Array.from({ length: map.heigh }, () => Array(map.width).fill(false))
+            //-
         }
     },
 
@@ -346,6 +352,35 @@ var GameScene = new Phaser.Class({
         {
             for(let spl of Object.keys(unit.abilities.conjure.config.spells)) unit.abilities.conjure.config.spells[spl] = -1;
         }
-    },  
+    },
+    
+    initFog: function () {
+        const w = map.width * 16;
+        const h = map.height * 16;
+        this.fogRT = this.add.renderTexture(0, 0, w, h).setOrigin(0).setDepth(1000).setScrollFactor(1);
+        this.fogRT.setBlendMode(Phaser.BlendModes.MULTIPLY);
+        this._createFogGradients();
+        this.fogExplored = Array.from({ length: map.height }, () =>
+            Array(map.width).fill(false)
+        );
+    },
+
+    _createFogGradients: function () {
+        const makeGradient = (key, innerAlpha, outerAlpha, radius) => {
+            const g = this.make.graphics({ x: 0, y: 0, add: false });
+            const steps = 32;
+            for (let i = steps; i > 0; i--) {
+                const t = i / steps;
+                const a = Phaser.Math.Linear(innerAlpha, outerAlpha, 1 - t);
+                g.fillStyle(0x000000, a);
+                g.fillCircle(radius, radius, radius * t);
+            }
+            g.generateTexture(key, radius * 2, radius * 2);
+            g.destroy();
+        };
+
+        makeGradient('fogVision', 0.0, 0.55, 120);   // visible now
+        makeGradient('fogMemory', 0.55, 1.0, 140);   // visible before
+    },
 
 });

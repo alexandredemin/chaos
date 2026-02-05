@@ -7,6 +7,9 @@ class Player
     control = PlayerControl.human;
     aiControl = null;
 
+    fogExplored = [];
+    fogVisible = [];
+
     constructor(name)
     {
         this.name = name;
