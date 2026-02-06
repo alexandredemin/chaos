@@ -541,7 +541,6 @@ class FogLayer {
         for (let y = 0; y < fogExplored.length; y++) {
             for (let x = 0; x < fogExplored[y].length; x++) {
                 if (!fogExplored[y][x]) continue;
-
                 this.rt.erase(
                     this.gradientKey,
                     x * t + t / 2 - r,
