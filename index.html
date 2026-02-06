@@ -865,6 +865,12 @@
             if (rangeRenderer.visible === true) rangeRenderer.redraw();
         }
 
+        if(gameSettings.fogOfWar){
+            for(player of players){
+                player.fogLayer.rt.setPosition(groundLayer.x, groundLayer.y);
+            }
+        }
+
         //const cam = game.scene.scenes[0].cameras.main;
 
         console.log('game.scene.scenes[0] ' + game.scene.scenes[0]);
