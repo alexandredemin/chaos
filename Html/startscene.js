@@ -45,6 +45,7 @@ const StartScene = new Phaser.Class({
         gameSettings.spellDistrib = gameState.spellDistrib;
         gameSettings.magicPoints = gameState.magicPoints;
         gameSettings.showEnemyMoves = gameState.showEnemyMoves;
+        gameSettings.fogOfWar = gameState.fogOfWar;
         gameSettings.rules = gameState.rules;
         //playersSettings = gameState.players;
         //currentTurn = gameState.turn;
@@ -107,6 +108,7 @@ const StartScene = new Phaser.Class({
             menuItems.push({label: "spells: unlimited",action: ()=>startScene.showMagicPoints(),options:spellOptions});
             menuItems.push({label: "magic points: 100",action: null,options:magicPoints});
             menuItems.push({label: "show enemy moves off",action: null,options:[{text:"show enemy moves on",value:true},{text:"show enemy moves off",value:false},]});
+            menuItems.push({label: "fog of war off",action: null,options:[{text:"fog of war on",value:true},{text:"fog of war off",value:false},]});
             menuItems.push({
                 label: "rules: standard",
                 action: null,
@@ -118,7 +120,7 @@ const StartScene = new Phaser.Class({
                 text: "rules: standard",
                 visible: true
             });
-            menuItems.push({label: "",action:null});
+            //menuItems.push({label: "",action:null});
             // add random map parameters
             menuItems.push({
                 label: "map width: 40",
@@ -156,6 +158,8 @@ const StartScene = new Phaser.Class({
             this.settingsMenu.items[1].text = this.settingsMenu.items[1].options[this.settingsMenu.items[1].optionInd].text;
             this.settingsMenu.items[2].optionInd = 0;
             this.settingsMenu.items[2].text = this.settingsMenu.items[2].options[this.settingsMenu.items[2].optionInd].text;
+            this.settingsMenu.items[3].optionInd = 1;
+            this.settingsMenu.items[3].text = this.settingsMenu.items[3].options[this.settingsMenu.items[3].optionInd].text;
             this.showMagicPoints();
         }
         this.resize();
@@ -256,7 +260,8 @@ const StartScene = new Phaser.Class({
             gameSettings.spellDistrib = this.settingsMenu.items[0].options[this.settingsMenu.items[0].optionInd].value;
             gameSettings.magicPoints = this.settingsMenu.items[1].options[this.settingsMenu.items[1].optionInd].value;
             gameSettings.showEnemyMoves = this.settingsMenu.items[2].options[this.settingsMenu.items[2].optionInd].value;
-            gameSettings.rules = this.settingsMenu.items[3].options[this.settingsMenu.items[3].optionInd].value;
+            gameSettings.fogOfWar = this.settingsMenu.items[3].options[this.settingsMenu.items[3].optionInd].value;
+            gameSettings.rules = this.settingsMenu.items[4].options[this.settingsMenu.items[4].optionInd].value;
         }
 
         this.deleteAllMenu();

@@ -7,12 +7,27 @@ class Player
     control = PlayerControl.human;
     aiControl = null;
 
-    fogExplored = [];
-    fogVisible = [];
+    fogExplored = null;
+    fogVisible = null;
+    fogLayer = null;
 
     constructor(name)
     {
         this.name = name;
+    }
+
+    initializeFog(scene, map)
+    {
+        this.fogLayer = new FogLayer(
+            scene,                // scene
+            map.width,
+            map.height,
+            16,                  // tile size
+            'fogGradient',
+            scene.fogRadius
+        );
+
+        this.fogLayer.redrawAll(this.fogExplored);
     }
 
     addWizard(unit)
@@ -125,6 +140,11 @@ class Player
 
     startTurn()
     {
+        if(gameSettings.fogOfWar && this.control === PlayerControl.human)
+        {
+            players.forEach(p => p.fogLayer.setVisible(false));
+            this.fogLayer.setVisible(true);
+        }
         if(gameSettings.showEnemyMoves == false && this.control === PlayerControl.human)
         {
             this.units.forEach(item => {item.visible=true; checkUnitVisibility(item);});

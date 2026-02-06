@@ -508,3 +508,65 @@ class Arrow extends Phaser.GameObjects.Image
     }
 }
 
+//----------------------------- Fog of War class -----------------------------
+class FogLayer {
+    constructor(scene, width, height, tileSize, gradientKey, radius) {
+        this.scene = scene;
+        this.tileSize = tileSize;
+        this.radius = radius;
+        this.gradientKey = gradientKey;
+
+        this.rt = new Phaser.GameObjects.RenderTexture(
+            scene,
+            groundLayer.x,
+            groundLayer.y,
+            width * tileSize,
+            height * tileSize
+        );
+        scene.add.existing(this.rt);
+        this.rt.setDepth(1000);
+    }
+
+    clearAll() {
+        this.rt.clear();
+        this.rt.fill(0x000000, 1);
+    }
+
+    redrawAll(fogExplored) {
+        this.clearAll();
+
+        const t = this.tileSize;
+        const r = this.radius;
+
+        for (let y = 0; y < fogExplored.length; y++) {
+            for (let x = 0; x < fogExplored[y].length; x++) {
+                if (!fogExplored[y][x]) continue;
+
+                this.rt.erase(
+                    this.gradientKey,
+                    x * t + t / 2 - r,
+                    y * t + t / 2 - r
+                );
+            }
+        }
+    }
+
+    revealTiles(tiles) {
+        const t = this.tileSize;
+        const r = this.radius;
+
+        for (const { x, y } of tiles) {
+            this.rt.erase(
+                this.gradientKey,
+                x * t + t / 2 - r,
+                y * t + t / 2 - r
+            );
+        }
+    }
+
+    setVisible(v) {
+        this.rt.visible = v;
+    }
+}
+
+

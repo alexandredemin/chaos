@@ -583,15 +583,18 @@
         targets.forEach(ent => {
             ent.visible = true;
         }); 
+    }
 
-        //update fog
-        computeFOV(unit.player, unit.mapX, unit.mapY, 20);
-        unit.scene.renderFog(unit.player);
+    function updateFog(unit){
+        const newTiles = computeFOV(unit.player, unit.mapX, unit.mapY, 20);
+        if (newTiles.length > 0) unit.player.fogLayer.revealTiles(newTiles);
     }
 
     function computeFOV(player, originX, originY, radius = 20) {
         const visible = player.fogVisible;
         const explored = player.fogExplored;
+        const newlyExplored = [];
+
         // clear visible
         for (let y = 0; y < map.height; y++)
             for (let x = 0; x < map.width; x++)
@@ -604,7 +607,10 @@
         function setVisible(x, y) {
             if (x < 0 || y < 0 || x >= map.width || y >= map.height) return;
             visible[y][x] = true;
-            explored[y][x] = true;
+            if (!explored[y][x]) {
+                explored[y][x] = true;
+                newlyExplored.push({ x, y });
+            }
         }
 
         setVisible(originX, originY);
@@ -626,7 +632,7 @@
                     const rSlope = (dx + 0.5) / (dy - 0.5);
                     if (rSlope > start) continue;
                     if (lSlope < end) break;
-                    if ((dx * dx + dy * dy) <= radius * radius) {
+                    if (dx * dx + dy * dy <= radius * radius) {
                         setVisible(X, Y);
                     }
                     if (blocked) {
@@ -637,12 +643,10 @@
                             blocked = false;
                             start = newStart;
                         }
-                    } else {
-                        if (blocksLight(X, Y) && i < radius) {
-                            blocked = true;
-                            castLight(cx, cy, i + 1, start, lSlope, radius, xx, xy, yx, yy);
-                            newStart = rSlope;
-                        }
+                    } else if (blocksLight(X, Y) && i < radius) {
+                        blocked = true;
+                        castLight(cx, cy, i + 1, start, lSlope, radius, xx, xy, yx, yy);
+                        newStart = rSlope;
                     }
                 }
                 if (blocked) break;
@@ -650,9 +654,13 @@
         }
 
         for (let i = 0; i < 8; i++) {
-            castLight(originX, originY, 1, 1.0, 0.0, radius,
-                mult[i][0], mult[i][1], mult[i][2], mult[i][3]);
+            castLight(
+                originX, originY, 1, 1.0, 0.0, radius,
+                mult[i][0], mult[i][1], mult[i][2], mult[i][3]
+            );
         }
+
+        return newlyExplored;
     }
 
     function startTurn() {
@@ -798,11 +806,19 @@
             spellDistrib: gameSettings.spellDistrib,
             magicPoints: gameSettings.magicPoints,
             showEnemyMoves: gameSettings.showEnemyMoves,
+            fogOfWar: gameSettings.fogOfWar,
             rules: gameSettings.rules,
             playerInd,
             players: players.map(p => ({
                 name: p.name,
                 control: p.control,
+                fogExplored: p.fogExplored
+                    ? p.fogExplored.map(row => row.map(v => v ? 1 : 0))
+                    : null,
+
+                fogVisible: p.fogVisible
+                    ? p.fogVisible.map(row => row.map(v => v ? 1 : 0))
+                    : null
             })),
             units: units.map(u => u.serialize()),
             entities: entities.map(e => e.serialize()),
@@ -962,6 +978,7 @@
         magicPoints: 25,
         selectedMap: '',
         showEnemyMoves: true,
+        fogOfWar: false,
         rules: 'standard',
         randomMapConfig: { width: 40, height: 30 },
     };

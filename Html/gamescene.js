@@ -35,6 +35,8 @@ var GameScene = new Phaser.Class({
             this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
         }
 
+        this._createFogGradient();
+
         if (savedGame) {
             this.loadFromSave(savedGame);
         } else {
@@ -69,7 +71,14 @@ var GameScene = new Phaser.Class({
         rangeRenderer = new RangeRenderer(this);
         placeSelector = new PlaceSelector(this);
 
-        this.initFog();
+        //+ init fogs
+        if(gameSettings.fogOfWar){
+            for(let unit of units) computeFOV(unit.player, unit.mapX, unit.mapY, 20);
+            for(let player of players){
+                player.initializeFog(this, map);
+            }
+        }
+        //-
 
         window.addEventListener('resize', resize);
       
@@ -181,7 +190,6 @@ var GameScene = new Phaser.Class({
         players = [];
         entities = [];
         units = [];
-        
         const playersMap = {};
         for (let p of savedGame.players) {
             let player = new Player(p.name);
@@ -189,6 +197,12 @@ var GameScene = new Phaser.Class({
             //if (player.control === PlayerControl.computer) {
                 player.aiControl = new AIControl(player);
             //}
+            if (p.fogExplored) {
+                player.fogExplored = p.fogExplored.map(row => row.map(v => !!v));
+            }
+            if (p.fogVisible) {
+                player.fogVisible = p.fogVisible.map(row => row.map(v => !!v));
+            }
             players.push(player);
             playersMap[player.name] = player;
         }
@@ -276,11 +290,9 @@ var GameScene = new Phaser.Class({
             //+debug
             player.aiControl = new AIControl(player);
             //-
-            this.initSpells(wiz);
-            //+ init fogs
             player.fogExplored = Array.from({ length: map.height }, () => Array(map.width).fill(false));
-            player.fogVisible  = Array.from({ length: map.height }, () => Array(map.width).fill(false))
-            //-
+            player.fogVisible = Array.from({ length: map.height }, () => Array(map.width).fill(false));
+            this.initSpells(wiz);
         }
     },
 
@@ -353,67 +365,22 @@ var GameScene = new Phaser.Class({
             for(let spl of Object.keys(unit.abilities.conjure.config.spells)) unit.abilities.conjure.config.spells[spl] = -1;
         }
     },
-    
-    initFog: function () {
-        this.fogRT = new Phaser.GameObjects.RenderTexture(
-            this,
-            groundLayer.x,
-            groundLayer.y,
-            groundLayer.width,
-            groundLayer.height
-        );
-        this.add.existing(this.fogRT);
-        this.fogRT.setDepth(1000);
-
-        this._createFogGradient();
-    },
 
     _createFogGradient: function () {
-        const radius = 32;           // радиус обзора в пикселях
-        const steps = 16;
+        const radius = 32;      // radius of vision in pixels
+        const steps = 16;       // number of steps in gradient
 
+        if (this.textures.exists('fogGradient')) return;
         const g = this.make.graphics({ x: 0, y: 0, add: false });
-
         for (let i = steps; i > 0; i--) {
             const t = i / steps;
-
-            // центр — полностью прозрачный
-            // край — почти непрозрачный
             const alpha = Phaser.Math.Linear(1.0, 0.0, t);
-
             g.fillStyle(0x000000, alpha);
             g.fillCircle(radius, radius, radius * t);
         }
-
         g.generateTexture('fogGradient', radius * 2, radius * 2);
         g.destroy();
-
         this.fogRadius = radius;
-    },
-
-    renderFog: function (player) {
-        return;
-        const rt = this.fogRT;
-        const tile = 16;
-        const r = this.fogRadius;
-
-        rt.clear();
-
-        // 1) Полный fog of war
-        rt.fill(0x000000, 1);
-
-        // 2) Вырезаем текущую видимость (градиент!)
-        for (let y = 0; y < map.height; y++) {
-            for (let x = 0; x < map.width; x++) {
-                if (!player.fogExplored[y][x]) continue;
-
-                const px = x * tile + tile / 2 - r;
-                const py = y * tile + tile / 2 - r;
-
-                rt.erase('fogGradient', px, py);
-            }
-        }
-    },
-
+    }
 
 });
