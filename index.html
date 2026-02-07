@@ -894,6 +894,10 @@
         uiElements.forEach(elm => {
             if (elm.visible === true) elm.resize();
         });
+
+        if(uiScene && uiScene.smokeContainer && uiScene.smokeContainer.visible === true){
+            uiScene.resizeSmokeContainer();
+        }   
     }
 
     var collideCallback = function (gameObject1, gameObject2) {

@@ -33,6 +33,7 @@ const UIScene = new Phaser.Class({
         this.smokeContainer.setVisible(false);
 
         this.smokeTweens = [];
+        this.smokeMeta = [];
 
         const cols = 8;
         const rows = 6;
@@ -52,6 +53,11 @@ const UIScene = new Phaser.Class({
                 const scale = 5 + Math.random() * 2;
                 smoke.setScale(scale);
 
+                const relativeScale = (smoke.displayWidth) / Math.max(w, h);
+                this.smokeMeta.push({
+                    relativeScale,
+                });
+
                 this.smokeContainer.add(smoke);
 
                 const tween = this.tweens.add({
@@ -68,7 +74,7 @@ const UIScene = new Phaser.Class({
         }
     },
 
-    showTurnTransition: function (text) {
+    showTurnTransition: function () {
         this.smokeContainer.setVisible(true);
 
         for (let t of this.smokeTweens) {
@@ -98,6 +104,30 @@ const UIScene = new Phaser.Class({
                 }
             }
         });
+    },
+
+    resizeSmokeContainer: function () {
+        if (!this.smokeContainer) return;
+        const w = this.scale.width;
+        const h = this.scale.height;
+
+        const cols = 8;
+        const rows = 6;
+
+        let i = 0;
+        for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+                const smoke = this.smokeContainer.list[i];
+                const meta = this.smokeMeta[i];
+                i++;
+                if (!smoke || !meta) continue;
+                smoke.x = (x + 0.5) * (w / cols);
+                smoke.y = (y + 0.5) * (h / rows);
+                const targetSize = meta.relativeScale * Math.max(w, h);
+                const scale = targetSize / smoke.width;
+                smoke.setScale(scale);
+            }
+        }
     },
 
 });

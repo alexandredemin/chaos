@@ -64,6 +64,7 @@ var GameScene = new Phaser.Class({
         initActionRegistry();
 
         grayScalePipeline = this.renderer.pipelines.get('Gray');
+        grayScalePipeline.set1f('darkness', 0.55);
         customPipeline = this.renderer.pipelines.get('Custom');
         customPipeline.set1f('alpha', 1.0);
         customPipeline.set1f('time', 0.3);
