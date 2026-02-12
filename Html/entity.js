@@ -682,6 +682,81 @@ class FrogEntity extends Entity
 }
 
 
+class DoorEntity extends Entity
+{
+    constructor(scene, x, y, visible=true)
+    {
+        super(entityConfigs['door'], scene, x, y, visible);
+        this.setOrigin(0.5, 0.5);
+        this.updateSprite();
+    }
+
+    static create(scene, x, y, visible=true)
+    {
+        return new DoorEntity(scene, x, y, visible);
+    }
+
+    getFrameIndex()
+    {
+        const dir = this.features.direction;
+        const open = this.features.open;
+        let base = 0;
+        switch(dir)
+        {
+            case 'W': base = 0; break;
+            case 'E': base = 2; break;
+            case 'N': base = 4; break;
+            case 'S': base = 6; break;
+        }
+        return base + (open ? 1 : 0);
+    }
+
+    updateSprite()
+    {
+        this.setFrame(this.getFrameIndex());
+        this.features.blocksLOS = !this.features.open;
+    }
+
+    open()
+    {
+        if(this.features.open) return;
+        this.features.open = true;
+        this.updateSprite();
+    }
+
+    close()
+    {
+        if(!this.features.open) return;
+        this.features.open = false;
+        this.updateSprite();
+    }
+
+    onStepIn(unit)
+    {
+        this.open();
+        return null;
+    }
+
+    onStepOut(unit)
+    {
+        //this.close();
+        return true;
+    }
+
+    transformFeatures(unit, features)
+    {
+        return features;
+    }
+
+    makeMove()
+    {
+        if (getUnitAtMap(this.mapX, this.mapY) != null) this.close();
+        super.makeMove();
+        super.endMove();
+    }
+}
+
+
 class MushroomEntity extends Entity
 {
 

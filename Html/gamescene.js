@@ -298,6 +298,117 @@ var GameScene = new Phaser.Class({
         }
     },
 
+    initNewGame2: function()
+    {
+        playerInd = 0;
+
+        let startPos = [];
+        let entityObjects = [];
+
+        // --- Разделяем объекты ---
+        for (let i = 0; i < objectLayer.objects.length; i++)
+        {
+            const obj = objectLayer.objects[i];
+            const objPos = map.worldToTileXY(obj.x, obj.y);
+
+            if (obj.type === "start")
+            {
+                startPos.push({ x: objPos.x, y: objPos.y });
+            }
+            else if (obj.type === "entity")
+            {
+                entityObjects.push({
+                    configName: obj.name,   // имя в Tiled = ключ в entityConfigs
+                    x: objPos.x,
+                    y: objPos.y,
+                    properties: obj.properties || []
+                });
+            }
+        }
+
+        // --- Создаём сущности ---
+        for (let i = 0; i < entityObjects.length; i++)
+        {
+            const e = entityObjects[i];
+            const cfg = entityConfigs[e.configName];
+            if (!cfg) continue;
+
+            let entity = cfg.createFunction(this, 0, 0, true);
+            entity.setPositionFromMap(e.x, e.y);
+
+            // переносим properties → features
+            for (let p = 0; p < e.properties.length; p++)
+            {
+                const prop = e.properties[p];
+                if (entity.features.hasOwnProperty(prop.name))
+                {
+                    entity.features[prop.name] = prop.value;
+                }
+            }
+
+            entity.start(false);
+            entities.push(entity);
+        }
+
+        // --- Игроки ---
+        let playerCount = 0;
+        for (let i = 0; i < playersSettings.length; i++)
+        {
+            if (playersSettings[i].control == null) continue;
+            playerCount++;
+        }
+
+        if (playerCount > startPos.length)
+            playerCount = startPos.length;
+
+        const chosenPositions =
+            this._pickSpreadPositions(startPos, playerCount, map.width, map.height);
+
+        // shuffle
+        for (let i = chosenPositions.length - 1; i > 0; i--)
+        {
+            const j = randomInt(0, i);
+            const tmp = chosenPositions[i];
+            chosenPositions[i] = chosenPositions[j];
+            chosenPositions[j] = tmp;
+        }
+
+        let posIndex = 0;
+
+        for (let i = 0; i < playersSettings.length; i++)
+        {
+            if (playersSettings[i].control == null) continue;
+            if (posIndex >= chosenPositions.length) break;
+
+            const player = new Player(playersSettings[i].name);
+            players.push(player);
+
+            const wiz = new Unit(unitConfigs['wizard'], this, 0, 0);
+            wiz.setPositionFromMap(
+                chosenPositions[posIndex].x,
+                chosenPositions[posIndex].y
+            );
+
+            player.addWizard(wiz);
+            units.push(wiz);
+
+            player.control = playersSettings[i].control;
+            player.aiControl = new AIControl(player);
+
+            player.fogExplored =
+                Array.from({ length: map.height },
+                () => Array(map.width).fill(false));
+
+            player.fogVisible =
+                Array.from({ length: map.height },
+                () => Array(map.width).fill(false));
+
+            this.initSpells(wiz);
+
+            posIndex++;
+        }
+    },
+
     _pickSpreadPositions: function(allPositions, count, mapWidth, mapHeight) {
         if (count <= 0) return [];
         if (count >= allPositions.length) return allPositions.slice();

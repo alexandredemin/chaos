@@ -63,8 +63,13 @@ class MapGenerator {
         // 5) generate branching corridors
         //this._generateBranchingCorridors(map);
 
-        // 6) auto-tile walls
-        this._autoTile(map);
+        // 6) build tile type map
+        const tileTypeMap = this._buildTileTypeMap(map);
+
+        // 7) auto-tile walls
+        this._autoTile(map,tileTypeMap);
+
+        const doors = this._placeDoors(tileTypeMap);
 
         // start positions
         const objects = this._generateStartPositions();
@@ -750,28 +755,23 @@ class MapGenerator {
         }
     }
 
-    //--- auto-tiling ---
-    _autoTile(map) {
-        const tileTypeMap = this._buildTileTypeMap(map);
-        this._markWallsFromRock(tileTypeMap);
-        this._autoTileWalls(tileTypeMap,map);
-    }
-
+    //--- tile-type map ---
     _buildTileTypeMap(map) {
-        const types = [];
+        const tileTypeMap = [];
 
         for (let y = 0; y < this.height; y++) {
-            types[y] = [];
+            tileTypeMap[y] = [];
             for (let x = 0; x < this.width; x++) {
                 if (map.walls[y][x] === null) {
-                    types[y][x] = this.TILE.FLOOR;
+                    tileTypeMap[y][x] = this.TILE.FLOOR;
                 } else {
-                    types[y][x] = this.TILE.ROCK;
+                    tileTypeMap[y][x] = this.TILE.ROCK;
                 }
             }
         }
+        this._markWallsFromRock(tileTypeMap);
 
-        return types;
+        return tileTypeMap;
     }
 
     _markWallsFromRock(tileTypeMap) {
@@ -803,6 +803,11 @@ class MapGenerator {
                 }
             }
         }
+    }
+
+    //--- auto-tiling ---
+    _autoTile(map, tileTypeMap) {
+        this._autoTileWalls(tileTypeMap,map);
     }
 
     _autoTileWalls(tileTypeMap,map) {
@@ -862,6 +867,84 @@ class MapGenerator {
         return true;
     }
 
+    //--- place doors ---
+    _placeDoors(tileTypeMap) {
+        const doors = [];
+        for (let y = 1; y < this.height - 1; y++) {
+            for (let x = 1; x < this.width - 1; x++) {
+                if (tileTypeMap[y][x] !== this.TILE.FLOOR) continue;
+                const door = this._checkDoorCandidate(x, y, tileTypeMap);
+                if (!door) continue;
+                doors.push({
+                    type: "entity",
+                    name: "door",
+                    x: x * 16,
+                    y: y * 16,
+                    properties: [
+                        { name: "direction", type: "string", value: door.dir },
+                        { name: "open", type: "bool", value: false }
+                    ]
+                });
+            }
+        }
+        return doors;
+    }
+
+    _checkDoorCandidate(x, y, tileTypeMap) {
+        const isFloor = (x, y) => tileTypeMap[y][x] === this.TILE.FLOOR;
+        const isWall  = (x, y) => tileTypeMap[y][x] === this.TILE.WALL;
+
+        // WEST door
+        if (
+            isWall(x, y - 1) &&
+            isWall(x, y + 1) &&
+            isFloor(x - 1, y) &&
+            isFloor(x + 1, y) &&
+            this._isRoom(x + 1, y) &&
+            !this._isRoom(x - 1, y)
+        ) {
+            return { dir: "W" };
+        }
+
+        // EAST door
+        if (
+            isWall(x, y - 1) &&
+            isWall(x, y + 1) &&
+            isFloor(x - 1, y) &&
+            isFloor(x + 1, y) &&
+            this._isRoom(x - 1, y) &&
+            !this._isRoom(x + 1, y)
+        ) {
+            return { dir: "E" };
+        }
+
+        // NORTH door
+        if (
+            isWall(x - 1, y) &&
+            isWall(x + 1, y) &&
+            isFloor(x, y - 1) &&
+            isFloor(x, y + 1) &&
+            this._isRoom(x, y + 1) &&
+            !this._isRoom(x, y - 1)
+        ) {
+            return { dir: "N" };
+        }
+
+        // SOUTH door
+        if (
+            isWall(x - 1, y) &&
+            isWall(x + 1, y) &&
+            isFloor(x, y - 1) &&
+            isFloor(x, y + 1) &&
+            this._isRoom(x, y - 1) &&
+            !this._isRoom(x, y + 1)
+        ) {
+            return { dir: "S" };
+        }
+
+        return null;
+    }
+
     //--- start positions ---
     _generateStartPositions(count = 8) {
         const objects = [];
@@ -918,6 +1001,7 @@ class MapGenerator {
         // 4) convert to objects
         for (const s of selected) {
             objects.push({
+                type: "start",
                 name: "start",
                 x: s.center.x * 16,
                 y: s.center.y * 16

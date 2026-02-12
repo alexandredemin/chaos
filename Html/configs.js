@@ -75,6 +75,19 @@ const entityConfigs = {
         },
         createFunction: (scene,x,y,visible=true) => FrogEntity.create(scene,x,y,visible)
     },
+
+    'door': {
+        name: 'door',
+        sprite: 'door',
+        scale: 1.0,
+        features: {
+            direction: 'W',      // 'W' | 'E' | 'N' | 'S'
+            open: false,
+            blocksLOS: true,
+            health: 3
+        },
+        createFunction: (scene, x, y, visible=true) => DoorEntity.create(scene, x, y, visible)
+    },
   
     'mushroom': {
         name: 'mushroom',
