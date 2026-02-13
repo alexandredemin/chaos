@@ -90,6 +90,11 @@
                  "point":true,
                  "properties":[
                         {
+                         "name":"propagation",
+                         "type":"float",
+                         "value":0
+                        }, 
+                        {
                          "name":"survival",
                          "type":"float",
                          "value":1

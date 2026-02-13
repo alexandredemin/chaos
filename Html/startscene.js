@@ -195,7 +195,7 @@ const StartScene = new Phaser.Class({
         this.resize();
         this.playersMenu.show();
     },
-  
+
     selectPlayers: function()
     {
         this.hideAllMenu();
@@ -222,14 +222,20 @@ const StartScene = new Phaser.Class({
             })
             .then(jsonData => {
                 const objectsLayer = jsonData.layers.find(layer => layer.name === "Objects");
-                const playersCount = objectsLayer && Array.isArray(objectsLayer.objects) ? objectsLayer.objects.length : 0;
-
+                let playersCount = 0;
+                if (objectsLayer && Array.isArray(objectsLayer.objects))
+                {
+                    playersCount = objectsLayer.objects.filter(obj => 
+                    {
+                        const t = obj.type ?? "";
+                        return t === "start" || t === "";
+                    }).length;
+                }
                 if (playersCount === 0) {
-                    console.log("Error map: no player found");
+                    console.log("Error map: no player start positions found");
                     this.selectMap();
                     return;
                 }
-
                 this.createPlayersMenu(playersCount);
             })
             .catch(error => {

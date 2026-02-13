@@ -81,6 +81,7 @@ var GameScene = new Phaser.Class({
             }
         }
         //-
+        if(gameSettings.showEnemyMoves) for(let ent of entities) if(ent.active)ent.visible = true;
 
         window.addEventListener('resize', resize);
       
@@ -210,7 +211,6 @@ var GameScene = new Phaser.Class({
         }
         for (let ud of savedGame.units) Unit.deserialize(ud, this, playersMap);
         for (let ed of savedGame.entities) Entity.deserialize(ed, this);
-        if(gameSettings.showEnemyMoves) for(let ent of entities) if(ent.active)ent.visible = true;
     },
 
     loadMapFromSave: function(savedMap) {
