@@ -554,5 +554,6 @@ const unitStates = {
 const maps = [
   'arena',
   'cellar',
-  'dungeon'
+  'dungeon',
+  'test'
 ];
