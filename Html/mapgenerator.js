@@ -72,7 +72,9 @@ class MapGenerator {
         const doors = this._placeDoors(tileTypeMap);
 
         // start positions
-        const objects = this._generateStartPositions();
+        let objects = this._generateStartPositions();
+
+        objects = objects.concat(doors);
 
         return {
             width: this.width,

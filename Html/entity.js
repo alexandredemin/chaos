@@ -704,8 +704,8 @@ class DoorEntity extends Entity
         switch(dir)
         {
             case 'W': base = 0; break;
-            case 'E': base = 2; break;
-            case 'N': base = 4; break;
+            case 'N': base = 2; break;
+            case 'E': base = 4; break;
             case 'S': base = 6; break;
         }
         return base + (open ? 1 : 0);
