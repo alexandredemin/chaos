@@ -696,6 +696,14 @@ class DoorEntity extends Entity
         return new DoorEntity(scene, x, y, visible);
     }
 
+    start(showStart=true)
+    {
+        this.scale = this.config.scale
+        this.zOffset = 0;
+        this.setDepth(this.mapY);
+        this.updateSprite();
+    }
+
     getFrameIndex()
     {
         const dir = this.features.direction;
@@ -750,7 +758,7 @@ class DoorEntity extends Entity
 
     makeMove()
     {
-        if (getUnitAtMap(this.mapX, this.mapY) != null) this.close();
+        if (this.features.open && getUnitAtMap(this.mapX, this.mapY) == null) this.close();
         super.makeMove();
         super.endMove();
     }

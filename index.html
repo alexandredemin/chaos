@@ -514,7 +514,7 @@
                 if(onEntity){
                     for(const ent of entities) if(onEntity(ent) === false) return false;
                 }
-                else if(entities.some(ent => ent.config.features.blocksLOS !== false)) return false;
+                else if(entities.some(ent => ent.features.blocksLOS !== false)) return false;
             }
             // check walls
             let wallTile = wallsLayer.getTileAt(resX, resY);
