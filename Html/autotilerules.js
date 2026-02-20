@@ -265,3 +265,62 @@ const WALL_AUTOTILE_RULES = [
     }
 
 ];
+
+const DOOR_AUTOTILE_RULES = [
+    {
+        directions: ["N", "S"],
+        offsets: [
+            {
+                dx: -1,
+                dy: 0,
+                replacements: {
+                    12: 11,
+                    19: 11,
+                    13: 32,
+                    14: 34,
+                    16: 20,
+                    17: 22,
+                    21: 31,
+                    23: 30,
+                    33: 36,
+                }
+            },
+            {
+                dx: 1,
+                dy: 0,
+                replacements: {
+                    10: 11,
+                    19: 11,
+                    13: 33,
+                    15: 35,
+                    16: 21,
+                    17: 23,
+                    20: 31,
+                    22: 30,
+                    32: 36,
+                }
+            }
+        ]
+    },
+    {
+        directions: ["W", "E"],
+        offsets: [
+            {
+                dx: 0,
+                dy: -1,
+                replacements: {
+                }
+            },
+            {
+                dx: 0,
+                dy: 1,
+                replacements: {
+                    10: 22,
+                    //11: 30,
+                    12: 23,
+                    //31: 36,
+                }
+            }
+        ]
+    }
+];

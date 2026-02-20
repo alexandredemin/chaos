@@ -69,7 +69,7 @@ class MapGenerator {
         // 7) auto-tile walls
         this._autoTile(map,tileTypeMap);
 
-        const doors = this._placeDoors(tileTypeMap);
+        const doors = this._placeDoors(map,tileTypeMap);
 
         // start positions
         let objects = this._generateStartPositions();
@@ -870,7 +870,7 @@ class MapGenerator {
     }
 
     //--- place doors ---
-    _placeDoors(tileTypeMap) {
+    _placeDoors(map, tileTypeMap) {
         const doors = [];
         for (let y = 1; y < this.height - 1; y++) {
             for (let x = 1; x < this.width - 1; x++) {
@@ -887,6 +887,8 @@ class MapGenerator {
                         { name: "open", type: "bool", value: false }
                     ]
                 });
+                // apply autotiling rules for door
+                this._applyDoorAutotileRules(x, y, door.dir, map);
             }
         }
         return doors;
@@ -945,6 +947,24 @@ class MapGenerator {
         }
 
         return null;
+    }
+
+    _applyDoorAutotileRules(x, y, dir, map){
+        for (const rule of DOOR_AUTOTILE_RULES)
+        {
+            if (!rule.directions.includes(dir)) continue;
+            for (const offset of rule.offsets)
+            {
+                const tx = x + offset.dx;
+                const ty = y + offset.dy;
+                if (tx < 0 || tx >= this.width || ty < 0 || ty >= this.height) continue;
+                const currentTile = map.walls[ty][tx];
+                if (offset.replacements.hasOwnProperty(currentTile))
+                {
+                    map.walls[ty][tx] = offset.replacements[currentTile];
+                }
+            }
+        }
     }
 
     //--- start positions ---
