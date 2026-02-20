@@ -80,6 +80,7 @@ const entityConfigs = {
         name: 'door',
         sprite: 'door',
         scale: 1.0,
+        displayOrigin: {x: 13, y: 18},
         features: {
             direction: 'W',      // 'W' | 'E' | 'N' | 'S'
             open: false,

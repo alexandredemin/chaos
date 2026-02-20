@@ -94,12 +94,12 @@ class Unit extends BaseUnit
         if(x<this.x)
         {
             this.flipX = true;
-            this.body.setOffset(16, 12);
+            //this.body.setOffset(16, 12);
         }
         else
         {
             this.flipX = false;
-            this.body.setOffset(0, 12);
+            //this.body.setOffset(0, 12);
         }
     }
 

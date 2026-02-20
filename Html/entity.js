@@ -687,7 +687,8 @@ class DoorEntity extends Entity
     constructor(scene, x, y, visible=true)
     {
         super(entityConfigs['door'], scene, x, y, visible);
-        this.setOrigin(0.5, 0.5);
+        //this.setOrigin(0.5, 0.5);
+        //this.setDisplayOrigin(13, 18);
         this.updateSprite();
     }
 

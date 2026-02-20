@@ -1,20 +1,4 @@
 //---------------------------- BaseUnit class ----------------------------
-/*
-function clone(obj)
-{
-    let objClone = {};
-    for (let key in obj)
-    {
-        if(typeof obj[key] === 'object'){
-            let subObj = clone(obj[key]);
-            objClone[key] = subObj;
-        }
-        else objClone[key] = obj[key];
-    }
-    return objClone;
-}
-*/
-
 class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
 {
     config = null;
@@ -29,20 +13,27 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
         super(scene, x, y, config.sprite);
         this.visible = visible;
         this.setScale(config.scale);
-        if(this.height*config.scale > 16)
+        if(config.displayOrigin)
         {
-            this.setOrigin(0.5, 1 - (0.5 * 16 / (this.height*config.scale)));
+            this.setDisplayOrigin(config.displayOrigin.x, config.displayOrigin.y);
         }
         else
         {
-            this.setOrigin(0.5,0.5);
+            if(this.height*config.scale > 16)
+            {
+                this.setOrigin(0.5, 1 - (0.5 * 16 / (this.height*config.scale)));
+            }
+            else
+            {
+                this.setOrigin(0.5,0.5);
+            }
         }
         this.setMapPosition(x, y);
         scene.add.existing(this);
         scene.physics.add.existing(this);
         //scene.physics.add.collider(this, wallsLayer,collideCallback);
-        this.body.setSize(16, 16);
-        this.body.setOffset(0, 12);
+        //this.body.setSize(16, 16);
+        //this.body.setOffset(0, 12);
         this.config = config;
         for (let key in config.features) {this.features[key] = config.features[key];}
         this.abilities = clone(config.abilities);
