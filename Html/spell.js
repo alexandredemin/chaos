@@ -187,6 +187,7 @@ class SummonSpell extends Spell
                 unit.setPositionFromMap(this.placeX, this.placeY);
                 this.wizard.player.addUnit(unit);
                 units.push(unit);
+                unit.updateVisability();
                 this.step++;
                 if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
                 {

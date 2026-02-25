@@ -244,6 +244,27 @@ const WALL_AUTOTILE_RULES = [
         tile: 33,
         score: 6
     },
+    // ---
+    {
+        pattern: "FWFWWW*R*",
+        tile: 30,
+        score: 6
+    },
+    {
+        pattern: "*WFRWW*WF",
+        tile: 34,
+        score: 6
+    },
+    {
+        pattern: "*R*WWWFWF",
+        tile: 31,
+        score: 6
+    },
+    {
+        pattern: "FW*WWRFW*",
+        tile: 35,
+        score: 6
+    },
 
     // --- cross ---
     {

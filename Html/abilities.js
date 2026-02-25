@@ -491,6 +491,7 @@ class JumpAbility extends UnitAbility
         this.unit.features.abilityPoints--;
         this.target = getUnitAtMap(this.placeX, this.placeY);
         this.unit.setPositionFromMap(this.placeX,this.placeY);
+        this.unit.updateVisability();
         if(this.target != null)
         {
             this.unit.visible = true;

@@ -191,17 +191,22 @@ class Unit extends BaseUnit
         this.onCallback();
     }
 
-    endStep()
+    updateVisability()
     {
-        this.body.reset(this.target.x, this.target.y);
-        this.isMoving = false;
-        this.anims.play(this.config.sprite+'stop', true);
         if(gameSettings.fogOfWar && this.player.control === PlayerControl.human){
             updateFog(this);
         }
         if(gameSettings.showEnemyMoves == false && this.player.control === PlayerControl.human){
             checkUnitVisibility(this);
         }
+    }
+
+    endStep()
+    {
+        this.body.reset(this.target.x, this.target.y);
+        this.isMoving = false;
+        this.anims.play(this.config.sprite+'stop', true);
+        this.updateVisability();
         this.states.forEach(item => item.onStep());
         const ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
         if (ents && ents.length > 0) {
