@@ -601,7 +601,14 @@
                 visible[y][x] = false;
 
         function blocksLight(x, y) {
-            return wallsLayer.getTileAt(x, y) != null;
+            //check walls
+            if(wallsLayer.getTileAt(x, y) != null) return true;
+            // check entities
+            const entities = Entity.getEntitiesAtMap(x, y);
+            if(entities && entities.length > 0){
+                if(entities.some(ent => ent.features.blocksLOS !== false)) return true;
+            }
+            return false;
         }
 
         function setVisible(x, y) {

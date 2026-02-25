@@ -191,6 +191,15 @@ class Unit extends BaseUnit
         this.onCallback();
     }
 
+    entityStepIn()
+    {
+        const ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
+        if (ents && ents.length > 0) {
+            this.processEntityStepIn(ents);
+            return;
+        }
+    }
+
     updateVisability()
     {
         if(gameSettings.fogOfWar && this.player.control === PlayerControl.human){
@@ -208,11 +217,7 @@ class Unit extends BaseUnit
         this.anims.play(this.config.sprite+'stop', true);
         this.updateVisability();
         this.states.forEach(item => item.onStep());
-        const ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
-        if (ents && ents.length > 0) {
-            this.processEntityStepIn(ents);
-            return;
-        }
+        this.entityStepIn();
         showArrows(this);
         cam.stopFollow(this);
         if(this.player.control === PlayerControl.computer) this.player.aiControl.step(this);
