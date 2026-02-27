@@ -11,7 +11,7 @@ var GameScene = new Phaser.Class({
 
     preload: function()
     {
-        this.load.tilemapTiledJSON(gameSettings.selectedMap, 'maps/'+gameSettings.selectedMap+'.json');
+        if(gameSettings.selectedMap !== "random") this.load.tilemapTiledJSON(gameSettings.selectedMap, 'maps/'+gameSettings.selectedMap+'.json');
     },
   
     create: function (data)
@@ -146,8 +146,10 @@ var GameScene = new Phaser.Class({
     generateMap: function(cfg) {
         const generator = new MapGenerator(cfg);
         const data = generator.generate();
+        this.initMap(data);
+    },
 
-        // Phaser tilemap
+    initMap: function(data) {
         map = this.make.tilemap({
             width: data.width,
             height: data.height,
@@ -156,9 +158,14 @@ var GameScene = new Phaser.Class({
         });
 
         this.tileset = map.addTilesetImage('dungeon-tiles', 'tiles');
+        this.tilesetTop = map.addTilesetImage('walls_top', 'walls_top');
 
         groundLayer = map.createBlankLayer('Ground', this.tileset, 0, 0);
         wallsLayer = map.createBlankLayer('Walls', this.tileset, 0, 0);
+        wallsTopLayer = map.createBlankLayer('WallsTop', this.tilesetTop, 0, 0);
+        //groundLayer.setDepth(0);
+        //wallsLayer.setDepth(10);
+        wallsTopLayer.setDepth(9000);
 
         // fill ground
         for (let y = 0; y < data.height; y++) {
@@ -175,6 +182,7 @@ var GameScene = new Phaser.Class({
                     const tile = wallsLayer.putTileAt(tileIndex, x, y);
                     tile.properties = tile.properties || {};
                     tile.properties.collides = true;
+                    wallsTopLayer.putTileAt(tileIndex, x, y);
                 }
             }
         }
@@ -214,43 +222,7 @@ var GameScene = new Phaser.Class({
     },
 
     loadMapFromSave: function(savedMap) {
-        map = this.make.tilemap({
-            width: savedMap.width,
-            height: savedMap.height,
-            tileWidth: 16,
-            tileHeight: 16
-        });
-
-        this.tileset = map.addTilesetImage('dungeon-tiles', 'tiles');
-
-        groundLayer = map.createBlankLayer('Ground', this.tileset, 0, 0);
-        wallsLayer = map.createBlankLayer('Walls', this.tileset, 0, 0);
-
-        // ground
-        for (let y = 0; y < savedMap.height; y++) {
-            for (let x = 0; x < savedMap.width; x++) {
-                groundLayer.putTileAt(savedMap.ground[y][x], x, y);
-            }
-        }
-
-        // walls
-        for (let y = 0; y < savedMap.height; y++) {
-            for (let x = 0; x < savedMap.width; x++) {
-                const tileIndex = savedMap.walls[y][x];
-                if (tileIndex !== null) {
-                    const tile = wallsLayer.putTileAt(tileIndex, x, y);
-                    tile.properties = tile.properties || {};
-                    tile.properties.collides = true;
-                }
-            }
-        }
-
-        wallsLayer.setCollisionByProperty({ collides: true });
-        this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
-
-        objectLayer = {
-            objects: savedMap.objects
-        };
+        this.initMap(savedMap);
     },
 
     initNewGame: function()

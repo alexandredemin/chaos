@@ -860,6 +860,7 @@
 
         groundLayer.setPosition((game.config.width - map.widthInPixels) / 2, (game.config.height - map.heightInPixels) / 2);
         wallsLayer.setPosition((game.config.width - map.widthInPixels) / 2, (game.config.height - map.heightInPixels) / 2);
+        wallsTopLayer.setPosition((game.config.width - map.widthInPixels) / 2, (game.config.height - map.heightInPixels) / 2);
 
         let offsetX = groundLayer.x - prevGroundPosX;
         let offsetY = groundLayer.y - prevGroundPosY;
@@ -959,6 +960,7 @@
     var map;
     var groundLayer;
     var wallsLayer;
+    var wallsTopLayer;
     var objectLayer;
     var fireballAnimation = null;
     var gasAnimation = null;

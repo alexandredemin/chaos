@@ -524,7 +524,7 @@ class FogLayer {
             height * tileSize
         );
         scene.add.existing(this.rt);
-        this.rt.setDepth(1000);
+        this.rt.setDepth(9999);
     }
 
     clearAll() {
