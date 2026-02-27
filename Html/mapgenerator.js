@@ -958,7 +958,8 @@ class MapGenerator {
                 const tx = x + offset.dx;
                 const ty = y + offset.dy;
                 if (tx < 0 || tx >= this.width || ty < 0 || ty >= this.height) continue;
-                const currentTile = map.walls[ty][tx];
+                let currentTile = map.walls[ty][tx];
+                if(currentTile === null) currentTile = 0;
                 if (offset.replacements.hasOwnProperty(currentTile))
                 {
                     map.walls[ty][tx] = offset.replacements[currentTile];

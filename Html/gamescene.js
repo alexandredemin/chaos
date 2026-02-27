@@ -179,10 +179,11 @@ var GameScene = new Phaser.Class({
             for (let x = 0; x < data.width; x++) {
                 const tileIndex = data.walls[y][x];
                 if (tileIndex !== null) {
+                    wallsTopLayer.putTileAt(tileIndex, x, y);
+                    if(tileIndex === 40) continue;
                     const tile = wallsLayer.putTileAt(tileIndex, x, y);
                     tile.properties = tile.properties || {};
                     tile.properties.collides = true;
-                    wallsTopLayer.putTileAt(tileIndex, x, y);
                 }
             }
         }
