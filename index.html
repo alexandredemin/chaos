@@ -575,13 +575,13 @@
         //entites
         targets = [];
         selectEntities(unit.mapX, unit.mapY, 20).forEach(ent => {
-            if (!ent.visible && ent.active) targets.push(ent);
+            if (!ent.getVisability() && ent.active) targets.push(ent);
         });
         targets = selectOnLineOfSight(unit.mapX, unit.mapY, targets, null, null, () => {
             return true
         });
         targets.forEach(ent => {
-            ent.visible = true;
+            ent.setVisability(true);
         }); 
     }
 
@@ -703,7 +703,7 @@
         */
         //-
         if(!gameSettings.showEnemyMoves) units.forEach(unt => unt.visible = false);
-        if(!gameSettings.showEnemyMoves) entities.forEach(ent => ent.visible = false);
+        if(!gameSettings.showEnemyMoves) entities.forEach(ent => ent.setVisability(false));
         pointerBlocked = true;
         hideArrows();
         if (players[playerInd].control === PlayerControl.human) {

@@ -80,6 +80,16 @@ class Entity extends BaseUnit
         this.destroy();
     }
 
+    setVisability(visible)
+    {
+        this.visible = visible;
+    }
+
+    getVisability()
+    {
+        return this.visible;
+    }
+
     transformFeatures(unit, features)
     {
         features.strength = Math.round(this.features.tfStrength * features.strength);
@@ -705,10 +715,21 @@ class DoorEntity extends Entity
         this.updateSprite();
     }
 
+    setVisability(visible)
+    {
+        this.features.visible = visible;
+        this.updateSprite();
+        this.visible = true;
+    }
+
+    getVisability()
+    {
+        return this.features.visible;
+    }
+
     getFrameIndex()
     {
-        const dir = this.features.direction;
-        const open = this.features.open;
+        const dir = this.features.direction;;
         let base = 0;
         switch(dir)
         {
@@ -717,12 +738,13 @@ class DoorEntity extends Entity
             case 'E': base = 4; break;
             case 'S': base = 6; break;
         }
-        return base + (open ? 1 : 0);
+        return base + (this.features.open && this.features.visible ? 1 : 0);
     }
 
     updateSprite()
     {
         this.setFrame(this.getFrameIndex());
+        this.setAlpha(this.features.visible ? 1 : 0.5);
         this.features.blocksLOS = !this.features.open;
     }
 

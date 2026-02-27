@@ -84,6 +84,7 @@ const entityConfigs = {
         features: {
             direction: 'W',      // 'W' | 'E' | 'N' | 'S'
             open: false,
+            visible: true,
             blocksLOS: true,
             health: 3
         },

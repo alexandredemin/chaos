@@ -81,7 +81,7 @@ var GameScene = new Phaser.Class({
             }
         }
         //-
-        if(gameSettings.showEnemyMoves) for(let ent of entities) if(ent.active)ent.visible = true;
+        if(gameSettings.showEnemyMoves) for(let ent of entities) if(ent.active)ent.setVisability(true);
 
         window.addEventListener('resize', resize);
       
