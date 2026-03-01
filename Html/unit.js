@@ -139,10 +139,21 @@ class Unit extends BaseUnit
         return canStep;
     }
 
+    beforeEntityStepIn(mapX, mapY)
+    {
+        const ents = Entity.getEntitiesAtMap(mapX, mapY);
+        if (ents && ents.length > 0) {
+            for (const ent of ents) {
+                ent.onBeforeStepIn(this);
+            }
+        }
+    }
+
     stepTo(mapX, mapY)
     {
         if(this.checkEntityStepOut())
         {
+            this.beforeEntityStepIn(mapX, mapY);
             this.features.move--;
             let targetXY = map.tileToWorldXY(mapX, mapY);
             this.setDepth(mapY);

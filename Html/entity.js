@@ -104,6 +104,10 @@ class Entity extends BaseUnit
         return 1;
     }
 
+    onBeforeStepIn(unit)
+    {
+    }
+
     onStepIn(unit)
     {
         return null;
@@ -742,6 +746,8 @@ class DoorEntity extends Entity
     updateSprite()
     {
         this.setFrame(this.getFrameIndex());
+        if(this.features.direction === 'W' || this.features.direction === 'E') this.setDepth(this.mapY-1);
+        else this.setDepth(this.mapY);    
         this.setAlpha(this.features.visible ? 1 : 0.5);
         this.features.blocksLOS = !this.features.open;
     }
@@ -760,9 +766,14 @@ class DoorEntity extends Entity
         this.updateSprite();
     }
 
-    onStepIn(unit)
+    onBeforeStepIn(unit)
     {
         this.open();
+    }
+
+    onStepIn(unit)
+    {
+        //this.open();
         return null;
     }
 
