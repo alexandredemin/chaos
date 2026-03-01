@@ -343,8 +343,7 @@ class FireEntity extends Entity
                     let wallTile = wallsLayer.getTileAt(x,y);
                     if(wallTile != null)
                     {
-                        //if(wallTile.properties['collides'] == true)
-                        continue;
+                        if(wallTile.properties['collides'] === true) continue;
                     }
                     const ents = Entity.getEntitiesAtMap(x, y) || [];
                     if(ents.some(ent => ent.config.name === 'fire')) continue;
@@ -473,8 +472,7 @@ class GlueBlobEntity extends Entity
                     var wallTile = wallsLayer.getTileAt(x,y);
                     if(wallTile != null)
                     {
-                        //if(wallTile.properties['collides'] == true)
-                        continue;
+                        if(wallTile.properties['collides'] === true) continue;
                     }
                     var entity = Entity.getEntityAtMap(x,y);
                     if(entity != null) continue;

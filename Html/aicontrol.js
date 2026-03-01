@@ -907,7 +907,7 @@ class AIControl
                         if(cellInd[yy][xx] < -1)continue;
                         let d = 1;
                         let wallTile = wallsLayer.getTileAt(xx,yy);
-                        if(wallTile != null) continue;
+                        if(wallTile != null && wallTile.properties['collides'] === true) continue;
                         let unt = getUnitAtMap(xx, yy, unit.player);
                         if(unt != null && unt.died == false) {
                             if(onUnit) {
@@ -1027,7 +1027,7 @@ class AIControl
                 if((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === wizard.mapX) && (y === wizard.mapY))) continue;
                 if(Entity.getEntityAtMap(x, y) != null) continue;
                 let wallTile = wallsLayer.getTileAt(x, y);
-                if (wallTile != null) continue;
+                if (wallTile != null && wallTile.properties['collides'] === true) continue;
                 let dX = Math.abs(x - wizard.mapX);
                 let dY = Math.abs(y - wizard.mapY);
                 let dr = dX*dX + dY*dY;
@@ -1068,7 +1068,7 @@ class AIControl
                 if((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === wizard.mapX) && (y === wizard.mapY))) continue;
                 if(Entity.getEntityAtMap(x, y) != null) continue;
                 let wallTile = wallsLayer.getTileAt(x, y);
-                if (wallTile != null) continue;
+                if (wallTile != null && wallTile.properties['collides'] === true) continue;
                 let dX = Math.abs(x - wizard.mapX);
                 let dY = Math.abs(y - wizard.mapY);
                 let dr = dX*dX + dY*dY;

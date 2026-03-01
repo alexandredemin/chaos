@@ -416,7 +416,7 @@
         let res = [];
         selectAdjacentPlaces(centerMapX, centerMapY).forEach(x => {
             let wallTile = wallsLayer.getTileAt(x[0], x[1]);
-            if (wallTile == null) {
+            if (wallTile == null || wallTile.properties['collides'] !== true) {
                 let unitAtPos = getUnitAtMap(x[0], x[1]);
                 if (unitAtPos == null) res.push(x);
             }
@@ -519,10 +519,9 @@
             // check walls
             let wallTile = wallsLayer.getTileAt(resX, resY);
             if (wallTile != null) {
-                //if(wallTile.properties['collides'] == true)
                 if (onWall) {
                     if (onWall(wallTile) === false) return false;
-                } else return false;
+                } else if(wallTile.properties['collides'] === true) return false;
             }
         }
         return true;
@@ -544,8 +543,8 @@
                     if ((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === centerX) && (y === centerY))) continue;
                     if ((withUnits === false) && (getUnitAtMap(x, y) != null)) continue;
                     if ((withEntities === false) && (Entity.getEntityAtMap(x, y) != null)) continue;
-                    let wallTile = wallsLayer.getTileAt(x, y);
-                    if (wallTile != null) continue;
+                    const wallTile = wallsLayer.getTileAt(x, y);
+                    if (wallTile != null && wallTile.properties['collides'] === true) continue;
                     let dX = Math.abs(x - centerX);
                     let dY = Math.abs(y - centerY);
                     if (dX * dX + dY * dY > r * r) continue;
@@ -602,7 +601,8 @@
 
         function blocksLight(x, y) {
             //check walls
-            if(wallsLayer.getTileAt(x, y) != null) return true;
+            const wallTile = wallsLayer.getTileAt(x, y);
+            if (wallTile != null && wallTile.properties['collides'] === true) return true;
             // check entities
             const entities = Entity.getEntitiesAtMap(x, y);
             if(entities && entities.length > 0){
@@ -908,6 +908,7 @@
         }   
     }
 
+    /*
     var collideCallback = function (gameObject1, gameObject2) {
         let activeUnit = null;
         let passiveUnit = null;
@@ -928,6 +929,7 @@
             }
         }
     }
+    */
 
     //---------------------------- Global vars ----------------------------
 

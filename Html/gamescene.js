@@ -31,7 +31,7 @@ var GameScene = new Phaser.Class({
             groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
             wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);          
             objectLayer = map.getObjectLayer('Objects');
-            wallsLayer.setCollisionByProperty({ collides: true });
+            //wallsLayer.setCollisionByProperty({ collides: true });
             this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
         }
 
@@ -180,15 +180,15 @@ var GameScene = new Phaser.Class({
                 const tileIndex = data.walls[y][x];
                 if (tileIndex !== null) {
                     wallsTopLayer.putTileAt(tileIndex, x, y);
-                    if(tileIndex === 40) continue;
                     const tile = wallsLayer.putTileAt(tileIndex, x, y);
                     tile.properties = tile.properties || {};
                     tile.properties.collides = true;
+                    if(tileIndex === 40) tile.properties.collides = false;;
                 }
             }
         }
 
-        wallsLayer.setCollisionByProperty({ collides: true });
+        //wallsLayer.setCollisionByProperty({ collides: true });
         this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
 
         // Save objects layer

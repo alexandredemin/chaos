@@ -207,7 +207,7 @@ class GameState {
                 if (wallTile != null) {
                     if (onWall) {
                         if (onWall(wallTile) === false) return false;
-                    } else return false;
+                    } else if(wallTile.properties['collides'] === true) return false;
                 }
             }
         }
@@ -223,7 +223,7 @@ class GameState {
                     if ((withUnits === false) && (this.getUnitAt(x, y) != null)) continue;
                     if ((withEntities === false) && (this.getEntityAt(x, y) != null)) continue;
                     let wallTile = this.wallsLayer ? this.wallsLayer.getTileAt(x, y) : null;
-                    if (wallTile != null) continue;
+                    if (wallTile != null && wallTile.properties['collides'] === true) continue;
                     let dX = Math.abs(x - centerX);
                     let dY = Math.abs(y - centerY);
                     if (dX * dX + dY * dY > r * r) continue;
@@ -274,7 +274,7 @@ class GameState {
                         let d = 1;
                         // walls
                         let wallTile = this.wallsLayer ? this.wallsLayer.getTileAt(xx, yy) : null;
-                        if (wallTile != null) continue;
+                        if (wallTile != null && wallTile.properties['collides'] === true) continue;
                         // units
                         let unt = this.getUnitAt(xx, yy);
                         if (unt != null && !unt.died && unt !== unit) {
