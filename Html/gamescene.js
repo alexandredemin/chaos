@@ -183,7 +183,7 @@ var GameScene = new Phaser.Class({
                     const tile = wallsLayer.putTileAt(tileIndex, x, y);
                     tile.properties = tile.properties || {};
                     tile.properties.collides = true;
-                    if(tileIndex === 40) tile.properties.collides = false;;
+                    if(tileIndex === 40 || tileIndex === 41) tile.properties.collides = false;;
                 }
             }
         }

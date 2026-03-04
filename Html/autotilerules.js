@@ -292,6 +292,13 @@ const DOOR_AUTOTILE_RULES = [
         directions: ["N", "S"],
         offsets: [
             {
+                dx: 0,
+                dy: 0,
+                replacements: {
+                    0: 41
+                }
+            },
+            {
                 dx: -1,
                 dy: 0,
                 replacements: {
@@ -345,6 +352,8 @@ const DOOR_AUTOTILE_RULES = [
                     19: 16,
                     22: 32,
                     23: 33,
+                    28: 20,
+                    29: 21,
                     30: 36,
                 }
             },
@@ -352,9 +361,9 @@ const DOOR_AUTOTILE_RULES = [
                 dx: 0,
                 dy: 1,
                 replacements: {
-                    //10: 22,
+                    10: 28,
                     //11: 30,
-                    //12: 23,
+                    12: 29,
                     //31: 36,
                 }
             }
