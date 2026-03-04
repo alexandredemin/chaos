@@ -370,3 +370,7 @@ const DOOR_AUTOTILE_RULES = [
         ]
     }
 ];
+
+const WALL_OVERLAY_TILES = new Set([10,12,16,18,19,20,21,22,23,28,29,32,33,41]);
+
+const WALL_NO_COLLISION_TILES = new Set([40, 41]);

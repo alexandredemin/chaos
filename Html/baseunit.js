@@ -39,9 +39,17 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
         this.abilities = clone(config.abilities);
     }
 
+    /*
     setDepth(mapY)
     {
         super.setDepth(mapY*10+this.zOffset);
+    }
+    */
+
+    setDepthFromBottom(offset=0)
+    {
+        const bottomY = this.y + this.displayHeight * (1 - this.originY);
+        super.setDepth(bottomY + offset);
     }
 
     setMapPosition(x,y)
@@ -49,7 +57,8 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
         let mapPos = map.worldToTileXY(x,y);
         this.mapX = mapPos.x;
         this.mapY = mapPos.y;
-        this.setDepth(mapPos.y);
+        //this.setDepth(mapPos.y);
+        this.setDepthFromBottom();
     }
 
     setPosition(x, y)
@@ -64,7 +73,8 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
         super.setPosition(pos.x + 8, pos.y + 8);
         this.mapX = mapX;
         this.mapY = mapY;
-        this.setDepth(mapY);
+        //this.setDepth(mapY);
+        this.setDepthFromBottom();
     }
 
     adjastPosition()

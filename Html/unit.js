@@ -156,7 +156,7 @@ class Unit extends BaseUnit
             this.beforeEntityStepIn(mapX, mapY);
             this.features.move--;
             let targetXY = map.tileToWorldXY(mapX, mapY);
-            this.setDepth(mapY);
+            //this.setDepth(mapY);
             this.moveTo(targetXY.x + 8, targetXY.y + 8);
         }
         else this.onCallback();
@@ -421,6 +421,7 @@ class Unit extends BaseUnit
 
         if(this.isMoving)
         {
+            this.setDepthFromBottom();
             let distance = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
             if (distance < 2)
             {

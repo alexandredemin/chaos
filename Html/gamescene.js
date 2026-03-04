@@ -180,10 +180,14 @@ var GameScene = new Phaser.Class({
                 const tileIndex = data.walls[y][x];
                 if (tileIndex !== null) {
                     wallsTopLayer.putTileAt(tileIndex, x, y);
+                    if (WALL_OVERLAY_TILES.has(tileIndex)) {
+                        const sprite = this.add.sprite(x * 16, y * 16,'tiles',tileIndex).setOrigin(0, 0).setDepth((y + 1) * 16);
+                        wallOverlays.push(sprite);
+                    }
                     const tile = wallsLayer.putTileAt(tileIndex, x, y);
                     tile.properties = tile.properties || {};
                     tile.properties.collides = true;
-                    if(tileIndex === 40 || tileIndex === 41) tile.properties.collides = false;;
+                    if(WALL_NO_COLLISION_TILES.has(tileIndex)) tile.properties.collides = false;
                 }
             }
         }

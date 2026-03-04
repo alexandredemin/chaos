@@ -148,7 +148,8 @@ class WebEntity extends Entity
         let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
         if(unitAtPos && unitAtPos.features.webImmunity !== true) this.zOffset = 2;
         else this.zOffset = 0;
-        this.setDepth(this.mapY);
+        //this.setDepth(this.mapY);
+        this.setDepthFromBottom();
     }
 
     onCallback()
@@ -191,7 +192,8 @@ class WebEntity extends Entity
         {
             this.zOffset = 0;
         }
-        this.setDepth(this.mapY);
+        //this.setDepth(this.mapY);
+        this.setDepthFromBottom();
         return null;
     }
 
@@ -225,7 +227,8 @@ class WebEntity extends Entity
         else
         {
             this.zOffset = 0;
-            this.setDepth(this.mapY);
+            //this.setDepth(this.mapY);
+            this.setDepthFromBottom();
         }
         return true;
     }
@@ -713,7 +716,8 @@ class DoorEntity extends Entity
     {
         this.scale = this.config.scale
         this.zOffset = 0;
-        this.setDepth(this.mapY);
+        //this.setDepth(this.mapY);
+        this.setDepthFromBottom(-4.1);
         this.updateSprite();
     }
 
@@ -746,8 +750,8 @@ class DoorEntity extends Entity
     updateSprite()
     {
         this.setFrame(this.getFrameIndex());
-        if(this.features.direction === 'W' || this.features.direction === 'E') this.setDepth(this.mapY-1);
-        else this.setDepth(this.mapY);    
+        if(this.features.direction === 'W' || this.features.direction === 'E') this.setDepthFromBottom(-16.0);
+        else this.setDepthFromBottom(-4.1);    
         this.setAlpha(this.features.visible ? 1 : 0.5);
         this.features.blocksLOS = !this.features.open;
     }
