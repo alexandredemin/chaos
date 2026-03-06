@@ -31,7 +31,6 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
         this.setMapPosition(x, y);
         scene.add.existing(this);
         scene.physics.add.existing(this);
-        //scene.physics.add.collider(this, wallsLayer,collideCallback);
         //this.body.setSize(16, 16);
         //this.body.setOffset(0, 12);
         this.config = config;

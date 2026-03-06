@@ -287,6 +287,12 @@ const WALL_AUTOTILE_RULES = [
 
 ];
 
+const WALL_TOP_AUTOTILE_RULES = {
+    mapping: {
+        40: 50,
+    }
+};
+
 const DOOR_AUTOTILE_RULES = [
     {
         directions: ["N", "S"],
@@ -371,6 +377,7 @@ const DOOR_AUTOTILE_RULES = [
     }
 ];
 
-const WALL_OVERLAY_TILES = new Set([10,12,16,18,19,20,21,22,23,28,29,32,33,41]);
+
+const WALL_OVERLAY_TILES = new Set([41]);
 
 const WALL_NO_COLLISION_TILES = new Set([40, 41]);

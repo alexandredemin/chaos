@@ -31,7 +31,6 @@ var GameScene = new Phaser.Class({
             groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
             wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);          
             objectLayer = map.getObjectLayer('Objects');
-            //wallsLayer.setCollisionByProperty({ collides: true });
             this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
         }
 
@@ -158,11 +157,9 @@ var GameScene = new Phaser.Class({
         });
 
         this.tileset = map.addTilesetImage('dungeon-tiles', 'tiles');
-        this.tilesetTop = map.addTilesetImage('walls_top', 'walls_top');
-
         groundLayer = map.createBlankLayer('Ground', this.tileset, 0, 0);
         wallsLayer = map.createBlankLayer('Walls', this.tileset, 0, 0);
-        wallsTopLayer = map.createBlankLayer('WallsTop', this.tilesetTop, 0, 0);
+        wallsTopLayer = map.createBlankLayer('WallsTop', this.tileset, 0, 0);
         //groundLayer.setDepth(0);
         //wallsLayer.setDepth(10);
         wallsTopLayer.setDepth(9000);
@@ -179,11 +176,6 @@ var GameScene = new Phaser.Class({
             for (let x = 0; x < data.width; x++) {
                 const tileIndex = data.walls[y][x];
                 if (tileIndex !== null) {
-                    wallsTopLayer.putTileAt(tileIndex, x, y);
-                    if (WALL_OVERLAY_TILES.has(tileIndex)) {
-                        const sprite = this.add.sprite(x * 16, y * 16,'tiles',tileIndex).setOrigin(0, 0).setDepth((y + 1) * 16);
-                        wallOverlays.push(sprite);
-                    }
                     const tile = wallsLayer.putTileAt(tileIndex, x, y);
                     tile.properties = tile.properties || {};
                     tile.properties.collides = true;
@@ -192,13 +184,42 @@ var GameScene = new Phaser.Class({
             }
         }
 
-        //wallsLayer.setCollisionByProperty({ collides: true });
-        this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+        // apply overlay rules
+        for (let y = 0; y < data.height; y++) {
+            for (let x = 0; x < data.width; x++) {
+                const tileIndex = data.walls[y][x];
+                if (tileIndex !== null) {
+                    if(WALL_TOP_AUTOTILE_RULES.mapping.hasOwnProperty(tileIndex)){
+                        wallsTopLayer.putTileAt(WALL_TOP_AUTOTILE_RULES.mapping[tileIndex], x, y);
+                    }
+                    if(WALL_OVERLAY_TILES.has(tileIndex) || this._checkDiagonalPassability(x, y))
+                    {
+                        const sprite = this.add.sprite(x * 16, y * 16,'tiles',tileIndex).setOrigin(0, 0).setDepth((y + 1) * 16);
+                        wallOverlays.push(sprite);
+                    }
+                }
+            }
+        }
 
+        this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
         // Save objects layer
         objectLayer = {
             objects: data.objects,
         };
+    },
+
+    
+    _checkDiagonalPassability: function(x, y) {
+        const isCollide = (x, y) => {
+            const tile = wallsLayer.getTileAt(x, y);
+            return tile && tile.properties && tile.properties.collides;
+        };
+
+        return (!isCollide(x, y + 1) && !isCollide(x + 1, y)) ||
+        (!isCollide(x, y + 1) && !isCollide(x - 1, y)) ||
+        (!isCollide(x, y - 1) && !isCollide(x + 1, y)) ||
+        (!isCollide(x, y - 1) && !isCollide(x - 1, y));
+
     },
   
     loadFromSave: function(savedGame) {    

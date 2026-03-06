@@ -908,29 +908,6 @@
         }   
     }
 
-    /*
-    var collideCallback = function (gameObject1, gameObject2) {
-        let activeUnit = null;
-        let passiveUnit = null;
-        if (gameObject2.isMoving === true) {
-            activeUnit = gameObject2;
-            passiveUnit = gameObject1;
-        } else if (gameObject1.isMoving === true) {
-            activeUnit = gameObject1;
-            passiveUnit = gameObject2;
-        }
-        if (activeUnit != null) {
-            if (passiveUnit.constructor.name !== 'Unit') {
-                var targetXY = map.tileToWorldXY(activeUnit.mapX, activeUnit.mapY);
-                activeUnit.body.reset(targetXY.x + 8, targetXY.y + 8);
-                activeUnit.isMoving = false;
-                activeUnit.anims.play('stop', true);
-                showArrows(activeUnit);
-            }
-        }
-    }
-    */
-
     //---------------------------- Global vars ----------------------------
 
     var config = {
