@@ -43,6 +43,13 @@ class Entity extends BaseUnit
         return entities.filter(e => e.mapX === x && e.mapY === y);
     }
 
+    setDepthFromBottom(offset=0)
+    {
+        if(offset != 0) super.setDepthFromBottom(offset);
+        else super.setDepthFromBottom(-16);
+
+    }
+
     start(showStart=true)
     {
         if(showStart){
@@ -145,11 +152,20 @@ class WebEntity extends Entity
     start(showStart=true)
     {
         super.start(showStart);
-        let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
-        if(unitAtPos && unitAtPos.features.webImmunity !== true) this.zOffset = 2;
-        else this.zOffset = 0;
-        //this.setDepth(this.mapY);
         this.setDepthFromBottom();
+    }
+
+    setDepthFromBottom(offset=0)
+    {
+        if(offset != 0){
+            super.setDepthFromBottom(offset);
+        }
+        else{
+            let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
+            if(unitAtPos && unitAtPos.features.webImmunity !== true) super.setDepthFromBottom(2);
+            else super.setDepthFromBottom(-16);
+        }
+
     }
 
     onCallback()
@@ -186,13 +202,7 @@ class WebEntity extends Entity
         if(unit.features.webImmunity !== true)
         {
             unit.features.move = 0;
-            this.zOffset = 2;
         }
-        else
-        {
-            this.zOffset = 0;
-        }
-        //this.setDepth(this.mapY);
         this.setDepthFromBottom();
         return null;
     }
@@ -226,8 +236,6 @@ class WebEntity extends Entity
         }
         else
         {
-            this.zOffset = 0;
-            //this.setDepth(this.mapY);
             this.setDepthFromBottom();
         }
         return true;
@@ -714,9 +722,7 @@ class DoorEntity extends Entity
 
     start(showStart=true)
     {
-        this.scale = this.config.scale
-        this.zOffset = 0;
-        //this.setDepth(this.mapY);
+        this.scale = this.config.scale;
         this.setDepthFromBottom(-4.1);
         this.updateSprite();
     }

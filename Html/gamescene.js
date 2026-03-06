@@ -29,7 +29,11 @@ var GameScene = new Phaser.Class({
             map = this.make.tilemap({ key: gameSettings.selectedMap, tileWidth: 16, tileHeight: 16 });
             this.tileset = map.addTilesetImage('dungeon-tiles','tiles2');
             groundLayer = map.createLayer('Ground', this.tileset, 0, 0);
-            wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);          
+            wallsLayer = map.createLayer('Walls', this.tileset, 0, 0);    
+            wallsTopLayer = map.createBlankLayer('WallsTop', this.tileset, 0, 0);
+            //groundLayer.setDepth(0);
+            //wallsLayer.setDepth(10);
+            wallsTopLayer.setDepth(9000);      
             objectLayer = map.getObjectLayer('Objects');
             this.physics.world.setBounds(0, 0, wallsLayer.width, wallsLayer.height);
         }

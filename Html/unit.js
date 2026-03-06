@@ -156,7 +156,6 @@ class Unit extends BaseUnit
             this.beforeEntityStepIn(mapX, mapY);
             this.features.move--;
             let targetXY = map.tileToWorldXY(mapX, mapY);
-            //this.setDepth(mapY);
             this.moveTo(targetXY.x + 8, targetXY.y + 8);
         }
         else this.onCallback();

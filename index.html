@@ -865,6 +865,7 @@
         let offsetX = groundLayer.x - prevGroundPosX;
         let offsetY = groundLayer.y - prevGroundPosY;
 
+        wallOverlays.forEach(item => item.setPosition(item.x + offsetX, item.y + offsetY));
         entities.forEach(item => item.setPosition(item.x + offsetX, item.y + offsetY));
         units.forEach(item => item.setPosition(item.x + offsetX, item.y + offsetY));
         arrows.forEach(item => item.setPosition(item.x + offsetX, item.y + offsetY));
