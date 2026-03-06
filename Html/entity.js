@@ -733,6 +733,18 @@ class DoorEntity extends Entity
         return this.features.visible;
     }
 
+    setDepthFromBottom(offset=0)
+    {
+        if(offset != 0 || this.hasOwnProperty('features') == false || this.features.hasOwnProperty('direction') == false){
+            super.setDepthFromBottom(offset);
+        }
+        else{
+            if(this.features.direction === 'W' || this.features.direction === 'E') super.setDepthFromBottom(-16.0);
+            else super.setDepthFromBottom(-4.1);  
+        }
+
+    }
+
     getFrameIndex()
     {
         const dir = this.features.direction;;
@@ -750,8 +762,7 @@ class DoorEntity extends Entity
     updateSprite()
     {
         this.setFrame(this.getFrameIndex());
-        if(this.features.direction === 'W' || this.features.direction === 'E') this.setDepthFromBottom(-16.0);
-        else this.setDepthFromBottom(-4.1);    
+        this.setDepthFromBottom(); 
         this.setAlpha(this.features.visible ? 1 : 0.5);
         this.features.blocksLOS = !this.features.open;
     }
