@@ -185,8 +185,8 @@ class MapGenerator {
 
         for (let i = 0; i < regions.length; i++) {
             zones.push({
-                id: `zone_${i}`,
-                rect: regions[i],
+                id: regions[i].id,
+                rect: regions[i].rect,
                 depth: 0,
                 left: null,
                 right: null,
@@ -196,7 +196,7 @@ class MapGenerator {
             });
         }
 
-        // auto-generate connections
+        // auto-generate connections to arena
         for (const zone of zones) {
             if (zone === arenaNode) continue;
 
@@ -204,6 +204,15 @@ class MapGenerator {
                 connections.push([arenaNode, zone]);
             }
         }
+        // generate connections between neighboring zones
+        const zoneTop = zones.find(z => z.id === "top");
+        const zoneBottom = zones.find(z => z.id === "bottom");
+        const zoneLeft = zones.find(z => z.id === "left");
+        const zoneRight = zones.find(z => z.id === "right");
+        connections.push([zoneTop, zoneLeft]);
+        connections.push([zoneTop, zoneRight]);
+        connections.push([zoneBottom, zoneLeft]);
+        connections.push([zoneBottom, zoneRight]);
 
         return { zones, connections };
     }
@@ -225,10 +234,13 @@ class MapGenerator {
         const topH = iy - oy;
         if (topH > 0) {
             result.push({
-                x: ox,
-                y: oy,
-                w: ow,
-                h: topH
+                id: "top",
+                rect: {
+                    x: ox,
+                    y: oy,
+                    w: ow,
+                    h: topH
+                }
             });
         }
 
@@ -237,10 +249,13 @@ class MapGenerator {
         const bottomH = (oy + oh) - bottomY;
         if (bottomH > 0) {
             result.push({
-                x: ox,
-                y: bottomY,
-                w: ow,
-                h: bottomH
+                id: "bottom",
+                rect: {
+                    x: ox,
+                    y: bottomY,
+                    w: ow,
+                    h: bottomH
+                }
             });
         }
 
@@ -248,10 +263,13 @@ class MapGenerator {
         const leftW = ix - ox;
         if (leftW > 0) {
             result.push({
-                x: ox,
-                y: iy,
-                w: leftW,
-                h: ih
+                id: "left",
+                rect: {
+                    x: ox,
+                    y: iy,
+                    w: leftW,
+                    h: ih
+                }
             });
         }
 
@@ -260,10 +278,13 @@ class MapGenerator {
         const rightW = (ox + ow) - rightX;
         if (rightW > 0) {
             result.push({
-                x: rightX,
-                y: iy,
-                w: rightW,
-                h: ih
+                id: "right",
+                rect: {
+                    x: rightX,
+                    y: iy,
+                    w: rightW,
+                    h: ih
+                }
             });
         }
 
