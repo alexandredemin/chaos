@@ -618,6 +618,11 @@ class FrogEntity extends Entity
         }
     }
 
+    setDepthFromBottom(offset=0)
+    {
+        this.setDepth(10000);
+    }
+
     onCallback()
     {
         cam.stopFollow();
