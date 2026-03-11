@@ -198,15 +198,18 @@ class Unit extends BaseUnit
                 }
             }
         }
-        //this.onCallback();
+        this.onCallback();
     }
 
     entityStepIn()
     {
         const ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
         if (ents && ents.length > 0) {
-            this.processEntityStepIn(ents);
+            this.processEntityStepIn(ents); //async call
             return;
+        }
+        else{
+            this.onCallback();
         }
     }
 
@@ -227,10 +230,7 @@ class Unit extends BaseUnit
         this.anims.play(this.config.sprite+'stop', true);
         this.updateVisability();
         this.states.forEach(item => item.onStep());
-        this.entityStepIn();
-        showArrows(this);
-        cam.stopFollow(this);
-        if(this.player.control === PlayerControl.computer) this.player.aiControl.step(this);
+        this.entityStepIn(); // async call
     }
 
     getCurrentFeatures()
