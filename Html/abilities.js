@@ -493,7 +493,21 @@ class JumpAbility extends UnitAbility
         this.unit.setPositionFromMap(this.placeX,this.placeY);
         this.unit.updateVisability();
         this.unit.beforeEntityStepIn(this.placeX, this.placeY);
-        this.unit.entityStepIn();
+        this.unit.entityStepIn(this.jumpFinal.bind(this)); // async call
+    }
+
+    jumpFinal()
+    {
+        if(this.unit.died == true)
+        {
+            if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+            {
+                cam.stopFollow();
+                pointerBlocked = false;
+            }
+            this.next();
+            return;
+        } 
         if(this.target != null)
         {
             this.unit.visible = true;

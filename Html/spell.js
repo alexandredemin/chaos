@@ -57,9 +57,9 @@ class SummonSpell extends Spell
         super.stop(res);
     }
 
-    onCallback()
+    onCallback(summonUnit = null)
     {
-        this.next();
+        this.next(summonUnit);
     }
 
     setPlace(mapX,mapY)
@@ -81,7 +81,7 @@ class SummonSpell extends Spell
             yoyo: false,
             repeat: 0,
             paused: true,
-            onComplete: function(){ this.onCallback(); },
+            onComplete: function(){ this.onCallback(unit); },
         });
         tween.play();
         /**/
@@ -141,7 +141,7 @@ class SummonSpell extends Spell
         */
     }
 
-    next()
+    next(summonUnit = null)
     {
         switch (this.step) {
             case 0:
@@ -182,6 +182,7 @@ class SummonSpell extends Spell
                 }
                 break;
             case 2:
+                this.step++;
                 let unit = new Unit(unitConfigs[this.spellConfig.name], this.wizard.scene, 0, 0, false);
                 //unit.scale = 0;
                 unit.setPositionFromMap(this.placeX, this.placeY);
@@ -189,8 +190,6 @@ class SummonSpell extends Spell
                 units.push(unit);
                 unit.updateVisability();
                 unit.beforeEntityStepIn(this.placeX, this.placeY);
-                unit.entityStepIn();
-                this.step++;
                 if(gameSettings.showEnemyMoves == true || this.wizard.player.control === PlayerControl.human)
                 {
                     unit.visible = true;
@@ -200,10 +199,15 @@ class SummonSpell extends Spell
                 else
                 {
                     unit.scale=unit.config.scale;
-                    this.next();
+                    this.next(unit);
                 }
                 break;
             case 3:
+                this.step++;
+                if(summonUnit) summonUnit.entityStepIn(this.next.bind(this, summonUnit)); // async call
+                else this.next();
+                break;
+            case 4:
                 this.stop(true);
                 return true;
                 break;

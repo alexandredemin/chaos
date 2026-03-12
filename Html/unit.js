@@ -161,7 +161,7 @@ class Unit extends BaseUnit
         else this.onCallback();
     }
 
-    processEntityStepIn(entities)
+    processEntityStepIn(entities, callback)
     {
         while(entities.length > 0){
             const ent = entities.pop();
@@ -179,11 +179,11 @@ class Unit extends BaseUnit
                         cam.startFollow(this);
                         let lm = new LossesAnimationManager(this.scene, 200, 200);
                         if(config.killed){
-                            lm.playAt(this.x,this.y,this,this,null,config);
+                            lm.playAt(this.x,this.y,this,callback,null,config);
                         }
                         else
                         {
-                            lm.playAt(this.x,this.y,this,this,"processEntityStepIn",config,[entities]);
+                            lm.playAt(this.x,this.y,this,this,"processEntityStepIn",config,[entities,callback]);
                         } 
                         return;
                     }
@@ -198,18 +198,18 @@ class Unit extends BaseUnit
                 }
             }
         }
-        this.onCallback();
+        if(callback) callback();
     }
 
-    entityStepIn()
+    entityStepIn(callback)
     {
         const ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
         if (ents && ents.length > 0) {
-            this.processEntityStepIn(ents); //async call
+            this.processEntityStepIn(ents, callback); //async call
             return;
         }
         else{
-            this.onCallback();
+            if(callback) callback();
         }
     }
 
@@ -230,7 +230,7 @@ class Unit extends BaseUnit
         this.anims.play(this.config.sprite+'stop', true);
         this.updateVisability();
         this.states.forEach(item => item.onStep());
-        this.entityStepIn(); // async call
+        this.entityStepIn(this.onCallback.bind(this)); // async call
     }
 
     getCurrentFeatures()
