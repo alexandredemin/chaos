@@ -452,6 +452,29 @@ class JumpAbility extends UnitAbility
         this.next();
     }
 
+    canJump(canStep)
+    {
+        if(canStep)
+        {
+            if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
+            {
+                pointerBlocked = true;
+                this.unit.visible = false;
+                let jumpAnimation = new JumpAnimation(this.unit.scene, this.unit);
+                jumpAnimation.playAt(this.unit, pos.x+8, pos.y+8,this);
+            }
+            else
+            {
+                this.next();
+            }
+        }
+        else
+        {
+            this.unit.features.abilityPoints--;
+            this.stop(this.unit);
+        }
+    }
+
     attack()
     {
         if(this.target != null)
@@ -570,26 +593,7 @@ class JumpAbility extends UnitAbility
                 placeSelector.hide();
                 let pos = map.tileToWorldXY(this.placeX, this.placeY);
                 this.unit.turnTo(pos.x+8,pos.y+8);
-                if(this.unit.checkEntityStepOut())
-                {
-                    if(gameSettings.showEnemyMoves == true || this.unit.player.control === PlayerControl.human)
-                    {
-                        pointerBlocked = true;
-                        this.unit.visible = false;
-                        let jumpAnimation = new JumpAnimation(this.unit.scene, this.unit);
-                        jumpAnimation.playAt(this.unit, pos.x+8, pos.y+8,this);
-                    }
-                    else
-                    {
-                        this.next();
-                    }
-                }
-                else
-                {
-                    this.unit.features.abilityPoints--;
-                    this.stop(this.unit);
-                    return true;
-                }
+                this.unit.checkEntityStepOut(this.canJump.bind(this)); //async call
                 break;
             case 2:
                 this.step++;

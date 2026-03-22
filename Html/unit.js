@@ -124,6 +124,7 @@ class Unit extends BaseUnit
         hideArrows();
     }
 
+    /*
     checkEntityStepOut()
     {
         let canStep = true;
@@ -138,6 +139,34 @@ class Unit extends BaseUnit
         }
         return canStep;
     }
+    */
+
+    processEntityStepOut(entities, callback, canStep = true)
+    {
+        while(canStep && entities.length > 0){
+            const ent = entities.pop();
+            const result = ent.onStepOut(this, this.processEntityStepOut.bind(this,entities, callback)); //async call
+            if(result != null){
+                if(result !== true) canStep = false;
+                break;
+            }
+            else return;
+        }
+        if(callback) callback(canStep);
+    }
+
+
+    checkEntityStepOut(callback)
+    {
+        const ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
+        if (ents && ents.length > 0) {
+            this.processEntityStepOut(ents, callback); //async call
+            return;
+        }
+        else{
+            if(callback) callback(true);
+        }
+    }
 
     beforeEntityStepIn(mapX, mapY)
     {
@@ -149,9 +178,13 @@ class Unit extends BaseUnit
         }
     }
 
-    stepTo(mapX, mapY)
+    stepTo(mapX, mapY, canStep = null)
     {
-        if(this.checkEntityStepOut())
+        if(canStep === null){
+            this.checkEntityStepOut(this.stepTo.bind(this, mapX, mapY)); //async call
+            return;
+        }
+        if(canStep)
         {
             this.beforeEntityStepIn(mapX, mapY);
             this.features.move--;
@@ -245,9 +278,13 @@ class Unit extends BaseUnit
         return curFeatures;
     }
 
-    atackTo(mapX, mapY)
+    atackTo(mapX, mapY, canStep = null)
     {
-        if(! this.checkEntityStepOut())
+        if(canStep === null){
+            this.checkEntityStepOut(this.atackTo.bind(this, mapX, mapY)); //async call
+            return;
+        }
+        if(! canStep)
         {
             this.onCallback();
             return;
