@@ -452,7 +452,7 @@ class JumpAbility extends UnitAbility
         this.next();
     }
 
-    canJump(canStep)
+    canJump(targetPos, canStep)
     {
         if(canStep)
         {
@@ -461,7 +461,7 @@ class JumpAbility extends UnitAbility
                 pointerBlocked = true;
                 this.unit.visible = false;
                 let jumpAnimation = new JumpAnimation(this.unit.scene, this.unit);
-                jumpAnimation.playAt(this.unit, pos.x+8, pos.y+8,this);
+                jumpAnimation.playAt(this.unit, targetPos.x+8, targetPos.y+8,this);
             }
             else
             {
@@ -593,7 +593,7 @@ class JumpAbility extends UnitAbility
                 placeSelector.hide();
                 let pos = map.tileToWorldXY(this.placeX, this.placeY);
                 this.unit.turnTo(pos.x+8,pos.y+8);
-                this.unit.checkEntityStepOut(this.canJump.bind(this)); //async call
+                this.unit.checkEntityStepOut(this.canJump.bind(this, pos)); //async call
                 break;
             case 2:
                 this.step++;

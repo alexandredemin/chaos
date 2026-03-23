@@ -120,7 +120,7 @@ class Entity extends BaseUnit
         return null;
     }
 
-    onStepOut(unit)
+    onStepOut(unit, callback=null)
     {
         return true;
     }
@@ -207,38 +207,37 @@ class WebEntity extends Entity
         return null;
     }
 
-    onStepOut(unit)
+    onStepOut(unit, callback=null)
     {
-        if(unit.features.webImmunity !== true)
+        if(unit.features.webImmunity === true)
         {
-            unit.features.move = 0;
-            let config = null;
-            if(Math.random() <= unit.features.strength/(unit.features.strength + this.features.strength))
-            {
-                config = {hit: true, damaged: false, killed: true};
-            }
-            else
-            {
-                config = {hit: true, damaged: false, killed: false};
-            }
-            if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
-            {
-                hideArrows();
-                cam.startFollow(this);
-                var lm = new LossesAnimationManager(this.scene, 200, 200);
-                lm.playAt(this.x,this.y,this,null,null,config);
-            }
-            else
-            {  
-                if(config.killed) this.die();
-            }
-            return false;
+            this.setDepthFromBottom();
+            return true;
+        }
+        
+        unit.features.move = 0;
+        let config = null;
+        if(Math.random() <= unit.features.strength/(unit.features.strength + this.features.strength))
+        {
+            config = {hit: true, damaged: false, killed: true};
         }
         else
         {
-            this.setDepthFromBottom();
+            config = {hit: true, damaged: false, killed: false};
         }
-        return true;
+        if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
+        {
+            hideArrows();
+            cam.startFollow(this);
+            var lm = new LossesAnimationManager(this.scene, 200, 200);
+            lm.playAt(this.x,this.y,this,() => { cam.stopFollow(); callback(false); },null,config);
+            return null;
+        }
+        else
+        {  
+            if(config.killed) this.die();
+            return false;
+        }
     }
 
     makeMove()
@@ -449,7 +448,7 @@ class GlueBlobEntity extends Entity
         return null;
     }
 
-    onStepOut(unit)
+    onStepOut(unit, callback=null)
     {
         unit.features.move = 0;
         let config = null;
@@ -557,7 +556,7 @@ class PentagramEntity extends Entity
         return null;
     }
 
-    onStepOut(unit)
+    onStepOut(unit, callback=null)
     {
         this.wizard = null;
         this.features.time = 0;
@@ -684,7 +683,7 @@ class FrogEntity extends Entity
         return null;
     }
 
-    onStepOut(unit)
+    onStepOut(unit, callback=null)
     {
         return true;
     }
@@ -803,7 +802,7 @@ class DoorEntity extends Entity
         return null;
     }
 
-    onStepOut(unit)
+    onStepOut(unit, callback=null)
     {
         //this.close();
         return true;
@@ -862,7 +861,7 @@ class MushroomEntity extends Entity
         return null;
     }
 
-    onStepOut(unit)
+    onStepOut(unit, callback=null)
     {
         return true;
     }
