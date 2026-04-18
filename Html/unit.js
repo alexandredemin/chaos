@@ -448,15 +448,6 @@ class Unit extends BaseUnit
         return result;
     }
 
-    /*
-    startAbility()
-    {
-        this.processedAbility = abilities[this.config.abilities[Object.keys(this.config.abilities)[0]].type];
-        this.processedAbility.start(this);
-        this.processedAbility.next();
-    }
-    */
-    
     startAbility(abilityType = null)
     {
         if(abilityType == null)
