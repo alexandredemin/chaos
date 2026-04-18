@@ -4,7 +4,6 @@ class UnitAbility
 {
     constructor()
     {
-
     }
 
     start(unit)
@@ -13,7 +12,7 @@ class UnitAbility
 
     stop(unit)
     {
-      unit.endAbility();  
+        unit.endAbility();
     }
 
     setTarget(target)
@@ -24,8 +23,41 @@ class UnitAbility
     {
         return true;
     }
+
+    canActivate(unit)
+    {
+        return true;
+    }
 }
 
+//---------------------------help functions----------------------------
+function getAdjacentDoors(unit, openState = null, requireEmpty = false)
+{
+    let result = [];
+    if(unit == null) return result;
+
+    for(let i = 0; i < entities.length; i++)
+    {
+        const ent = entities[i];
+        if(ent == null || ent.config == null) continue;
+        if(ent.config.name !== 'door') continue;
+
+        const dx = Math.abs(ent.mapX - unit.mapX);
+        const dy = Math.abs(ent.mapY - unit.mapY);
+
+        if(dx > 1 || dy > 1) continue;
+        if(dx === 0 && dy === 0) continue;
+
+        if(openState != null && ent.features.open !== openState) continue;
+        if(requireEmpty && getUnitAtMap(ent.mapX, ent.mapY) != null) continue;
+
+        result.push(ent);
+    }
+
+    return result;
+}
+
+//----------------------------abilities----------------------------
 class ConjureAbility extends UnitAbility
 {
     step = 0;
@@ -608,6 +640,236 @@ class JumpAbility extends UnitAbility
                 return true;
                 break;
         }
+        return false;
+    }
+}
+
+class DoorOpenAbility extends UnitAbility
+{
+    step = 0;
+    unit = null;
+    door = null;
+    placeX = -1;
+    placeY = -1;
+
+    constructor()
+    {
+        super();
+    }
+
+    start(unit)
+    {
+        this.step = 0;
+        this.unit = unit;
+        this.door = null;
+        this.placeX = -1;
+        this.placeY = -1;
+    }
+
+    stop(unit)
+    {
+        placeSelector.hide();
+        setInteractionScenario(userInteractionScenario.movement);
+
+        this.step = 0;
+        this.unit = null;
+        this.door = null;
+        this.placeX = -1;
+        this.placeY = -1;
+
+        super.stop(unit);
+    }
+
+    canActivate(unit)
+    {
+        if(unit == null) return false;
+        if(unit.features.abilityPoints <= 0) return false;
+
+        return getAdjacentDoors(unit, false, false).length > 0;
+    }
+
+    setPlace(mapX, mapY)
+    {
+        this.placeX = mapX;
+        this.placeY = mapY;
+        this.next();
+    }
+
+    next()
+    {
+        switch(this.step)
+        {
+            case 0:
+            {
+                const doors = getAdjacentDoors(this.unit, false, false);
+
+                if(doors.length <= 0)
+                {
+                    this.stop(this.unit);
+                    return true;
+                }
+
+                if(this.unit.player.control === PlayerControl.human && doors.length > 1)
+                {
+                    let places = [];
+                    for(let i = 0; i < doors.length; i++)
+                    {
+                        places.push({ x: doors[i].mapX, y: doors[i].mapY });
+                    }
+
+                    setInteractionScenario(userInteractionScenario.placeSelection);
+                    placeSelector.show(places, this);
+                    this.step = 1;
+                    return false;
+                }
+
+                this.door = doors[0];
+                this.unit.features.abilityPoints--;
+                this.door.open();
+                this.stop(this.unit);
+                return true;
+            }
+
+            case 1:
+            {
+                const doors = getAdjacentDoors(this.unit, false, false);
+                this.door = null;
+
+                for(let i = 0; i < doors.length; i++)
+                {
+                    if(doors[i].mapX === this.placeX && doors[i].mapY === this.placeY)
+                    {
+                        this.door = doors[i];
+                        break;
+                    }
+                }
+
+                if(this.door != null)
+                {
+                    this.unit.features.abilityPoints--;
+                    this.door.open();
+                }
+
+                this.stop(this.unit);
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+class DoorCloseAbility extends UnitAbility
+{
+    step = 0;
+    unit = null;
+    door = null;
+    placeX = -1;
+    placeY = -1;
+
+    constructor()
+    {
+        super();
+    }
+
+    start(unit)
+    {
+        this.step = 0;
+        this.unit = unit;
+        this.door = null;
+        this.placeX = -1;
+        this.placeY = -1;
+    }
+
+    stop(unit)
+    {
+        placeSelector.hide();
+        setInteractionScenario(userInteractionScenario.movement);
+
+        this.step = 0;
+        this.unit = null;
+        this.door = null;
+        this.placeX = -1;
+        this.placeY = -1;
+
+        super.stop(unit);
+    }
+
+    canActivate(unit)
+    {
+        if(unit == null) return false;
+        if(unit.features.abilityPoints <= 0) return false;
+
+        return getAdjacentDoors(unit, true, true).length > 0;
+    }
+
+    setPlace(mapX, mapY)
+    {
+        this.placeX = mapX;
+        this.placeY = mapY;
+        this.next();
+    }
+
+    next()
+    {
+        switch(this.step)
+        {
+            case 0:
+            {
+                const doors = getAdjacentDoors(this.unit, true, true);
+
+                if(doors.length <= 0)
+                {
+                    this.stop(this.unit);
+                    return true;
+                }
+
+                if(this.unit.player.control === PlayerControl.human && doors.length > 1)
+                {
+                    let places = [];
+                    for(let i = 0; i < doors.length; i++)
+                    {
+                        places.push({ x: doors[i].mapX, y: doors[i].mapY });
+                    }
+
+                    setInteractionScenario(userInteractionScenario.placeSelection);
+                    placeSelector.show(places, this);
+                    this.step = 1;
+                    return false;
+                }
+
+                this.door = doors[0];
+                this.unit.features.abilityPoints--;
+                this.door.close();
+                this.stop(this.unit);
+                return true;
+            }
+
+            case 1:
+            {
+                const doors = getAdjacentDoors(this.unit, true, true);
+                this.door = null;
+
+                for(let i = 0; i < doors.length; i++)
+                {
+                    if(doors[i].mapX === this.placeX && doors[i].mapY === this.placeY)
+                    {
+                        this.door = doors[i];
+                        break;
+                    }
+                }
+
+                if(this.door != null)
+                {
+                    this.unit.features.abilityPoints--;
+                    this.door.close();
+                }
+
+                this.stop(this.unit);
+                return true;
+            }
+        }
+
         return false;
     }
 }

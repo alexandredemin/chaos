@@ -58,11 +58,13 @@ var GameScene = new Phaser.Class({
 
         atackFeatures['infectious'] = new InfectiousAtack();
 
-        abilities['conjure'] = new ConjureAbility();
-        abilities['fire'] = new FireAbility();
-        abilities['gas'] = new GasAbility();
-        abilities['web'] = new WebAbility();
-        abilities['jump'] = new JumpAbility();
+        abilities['conjure'].ability = new ConjureAbility();
+        abilities['fire'].ability = new FireAbility();
+        abilities['gas'].ability = new GasAbility();
+        abilities['web'].ability = new WebAbility();
+        abilities['jump'].ability = new JumpAbility();
+        abilities['door_open'].ability = new DoorOpenAbility();
+        abilities['door_close'].ability = new DoorCloseAbility();
 
         initActionRegistry();
 

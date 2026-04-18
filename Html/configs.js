@@ -213,6 +213,16 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 3,
+        },
+        abilities: {
+            door_open: {
+                type: 'door_open',
+                config: {}
+            },
+            door_close: {
+                type: 'door_close',
+                config: {}
+            }
         }
     },
 
@@ -533,13 +543,49 @@ const atackFeatures = {
 };
 
 //---------------------------- Unit abilities ----------------------------
-
 const abilities = {
-    'conjure': null,
-    'fire': null,
-    'gas': null,
-    'web': null,
-    'jump': null,
+    'conjure': {
+        title: 'Conjure',
+        icon: null,
+        order: 10,
+        ability: null,
+    },
+    'fire': {
+        title: 'Fire',
+        icon: null,
+        order: 20,
+        ability: null,
+    },
+    'gas': {
+        title: 'Gas',
+        icon: null,
+        order: 30,
+        ability: null,
+    },
+    'web': {
+        title: 'Web',
+        icon: null,
+        order: 40,
+        ability: null,
+    },
+    'jump': {
+        title: 'Jump',
+        icon: null,
+        order: 50,
+        ability: null,
+    },
+    'door_open': {
+        title: 'Open door',
+        icon: null,
+        order: 100,
+        ability: null,
+    },
+    'door_close': {
+        title: 'Close door',
+        icon: null,
+        order: 110,
+        ability: null,
+    },
 };
 
 //---------------------------- Unit states ----------------------------------

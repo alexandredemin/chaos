@@ -417,13 +417,65 @@ class Unit extends BaseUnit
         return false;
     }
 
+    getAvailableAbilities()
+    {
+        let result = [];
+        if(this.features.abilityPoints <= 0) return result;
+        if(this.config.abilities == null) return result;
+        const abilityKeys = Object.keys(this.config.abilities);
+        for(let i = 0; i < abilityKeys.length; i++)
+        {
+            const abilityKey = abilityKeys[i];
+            const unitAbility = this.config.abilities[abilityKey];
+
+            if(unitAbility == null || unitAbility.type == null) continue;
+
+            const abilityDef = abilities[unitAbility.type];
+            if(abilityDef == null || abilityDef.ability == null) continue;
+
+            if(abilityDef.ability.canActivate(this))
+            {
+                result.push({
+                    key: abilityKey,
+                    type: unitAbility.type,
+                    title: abilityDef.title,
+                    icon: abilityDef.icon,
+                    order: abilityDef.order,
+                });
+            }
+        }
+        result.sort((a, b) => a.order - b.order);
+        return result;
+    }
+
+    /*
     startAbility()
     {
         this.processedAbility = abilities[this.config.abilities[Object.keys(this.config.abilities)[0]].type];
         this.processedAbility.start(this);
         this.processedAbility.next();
     }
+    */
     
+    startAbility(abilityType = null)
+    {
+        if(abilityType == null)
+        {
+            const availableAbilities = this.getAvailableAbilities();
+            if(availableAbilities.length <= 0) return false;
+            abilityType = availableAbilities[0].type;
+        }
+
+        const abilityDef = abilities[abilityType];
+        if(abilityDef == null || abilityDef.ability == null) return false;
+
+        this.processedAbility = abilityDef.ability;
+        this.processedAbility.start(this);
+        this.processedAbility.next();
+
+        return true;
+    }
+
     endAbility()
     {
         this.processedAbility = null;
