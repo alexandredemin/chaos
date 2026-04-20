@@ -383,9 +383,22 @@ class AIControl
         {
             if(unit.mapX === unit.aiControl.target[0] && unit.mapY === unit.aiControl.target[1])
             {
-                if(unit.config.abilities && unit.features.abilityPoints > 0 && unit.config.name !== "imp")
+                const aiAbilityTypes = ["fire", "gas", "web"];
+                let aiAbilityType = null;
+                if (unit.config.abilities)
                 {
-                    unit.startAbility();
+                    const availableAbilities = unit.getAvailableAbilities();
+                    const aiAbility = availableAbilities.find(a => aiAbilityTypes.includes(a.type));
+                    if (aiAbility) aiAbilityType = aiAbility.type;
+                }
+                
+                //if (unit.config.abilities && unit.features.abilityPoints > 0 && Object.values(unit.config.abilities).some(a =>
+                //        a && (a.type === "fire" || a.type === "gas" || a.type === "web")
+                //    )
+                //)
+                if (aiAbilityType != null && unit.features.abilityPoints > 0)
+                {
+                    unit.startAbility(aiAbilityType);
                 }
                 else if(unit.features.move > 0)
                 {
@@ -504,7 +517,7 @@ class AIControl
     {
         if(!unit.config.abilities || !unit.config.abilities.gas)return;
         let range = unit.config.abilities.gas.config.range;
-        let gasAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
+        let gasAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type].ability;
         for(let i=0;i<stepPlaces.length;i++)
         {
             let place = stepPlaces[i];
@@ -538,7 +551,7 @@ class AIControl
     {
         if(!unit.config.abilities || !unit.config.abilities.fire)return;
         let range = unit.config.abilities.fire.config.range;
-        let fireAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type];
+        let fireAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type].ability;
         for(let i=0;i<stepPlaces.length;i++)
         {
             let place = stepPlaces[i];
@@ -722,7 +735,7 @@ class AIControl
 
             if (unit.features.mana >= unit.aiControl.plannedSpell.cost) {
                 unit.aiControl.spell = unit.aiControl.plannedSpell;
-                unit.startAbility();
+                unit.startAbility(unit.abilities.conjure.type);
             }
             else {
                 this.pass();
