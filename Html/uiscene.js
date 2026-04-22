@@ -24,7 +24,7 @@ const UIScene = new Phaser.Class({
 
     update: function ()
     {
-        if (this.bottomBar != null) this.bottomBar.refresh(false);
+        if (this.bottomBar != null) this.bottomBar.tick();
     },
 
     _initTurnTransition: function () {

@@ -246,6 +246,8 @@ class SelectedUnitInfoPanel extends Phaser.GameObjects.Container
         this.scene = scene;
         this.panelWidth = width;
         this.panelHeight = height;
+        this.unit = null;
+        this.lastStatsSignature = '';
 
         this.background = scene.add.rectangle(0, 0, width, height, 0x0f141b, 0.55);
         this.background.setOrigin(0, 0);
@@ -280,19 +282,57 @@ class SelectedUnitInfoPanel extends Phaser.GameObjects.Container
         });
         this.add(this.hintText);
 
-        this.unit = null;
-        this.setUnit(null);
+        this.setUnit(null, true);
     }
 
-    setUnit(unit)
+    _rebuildPortrait(unit)
     {
-        this.unit = unit;
-
         if (this.portrait != null)
         {
             this.portrait.destroy();
             this.portrait = null;
         }
+
+        if (unit == null || unit.config == null || unit.config.sprite == null) return;
+        if (!this.scene.textures.exists(unit.config.sprite)) return;
+
+        this.portrait = this.scene.add.image(38, 38, unit.config.sprite);
+        this.portrait.setOrigin(0.5, 0.5);
+
+        const maxPortraitSize = 44;
+        const baseSize = Math.max(this.portrait.width, this.portrait.height, 1);
+        let scale = maxPortraitSize / baseSize;
+        if (unit.config.scale != null) scale *= unit.config.scale;
+        this.portrait.setScale(scale);
+
+        this.add(this.portrait);
+        this.bringToTop(this.portrait);
+        this.bringToTop(this.nameText);
+        this.bringToTop(this.statsText);
+        this.bringToTop(this.hintText);
+    }
+
+    setUnit(unit, force = false)
+    {
+        const unitChanged = this.unit !== unit;
+        this.unit = unit;
+
+        if (unitChanged || force)
+        {
+            this._rebuildPortrait(unit);
+        }
+
+        const statsSignature = (unit == null)
+            ? 'none'
+            : [
+                unit.config ? unit.config.name : 'unit',
+                unit.features.health,
+                unit.features.move,
+                unit.features.abilityPoints
+            ].join(';');
+
+        if (!force && !unitChanged && statsSignature === this.lastStatsSignature) return;
+        this.lastStatsSignature = statsSignature;
 
         if (unit == null)
         {
@@ -309,22 +349,11 @@ class SelectedUnitInfoPanel extends Phaser.GameObjects.Container
         const hpText = 'HP: ' + unit.features.health + '/' + maxHealth;
         const moveText = 'Move: ' + unit.features.move + '/' + maxMove;
         const apText = 'AP: ' + unit.features.abilityPoints;
+
         this.statsText.setText(hpText + '   ' + moveText + '   ' + apText);
-        this.hintText.setText(unit.player && unit.player.control === PlayerControl.human ? 'Ready for commands' : 'Observed unit');
-
-        if (unit.config != null && unit.config.sprite != null && this.scene.textures.exists(unit.config.sprite))
-        {
-            this.portrait = this.scene.add.image(38, 38, unit.config.sprite);
-            this.portrait.setOrigin(0.5, 0.5);
-
-            const maxPortraitSize = 44;
-            const baseSize = Math.max(this.portrait.width, this.portrait.height, 1);
-            let scale = maxPortraitSize / baseSize;
-            if (unit.config.scale != null) scale *= unit.config.scale;
-            this.portrait.setScale(scale);
-            this.add(this.portrait);
-            this.sendToBack(this.background);
-        }
+        this.hintText.setText(unit.player && unit.player.control === PlayerControl.human
+            ? 'Ready for commands'
+            : 'Observed unit');
     }
 }
 
@@ -338,9 +367,17 @@ class BottomBar extends Phaser.GameObjects.Container
         this.scene = scene;
         this.barWidth = 0;
         this.barHeight = 88;
-        this.lastSelectedUnit = undefined;
-        this.lastSignature = '';
-        this.lastSizeSignature = '';
+
+        this.leftSectionX = 0;
+        this.centerSectionX = 0;
+        this.rightSectionX = 0;
+        this.centerWidth = 280;
+        this.rightWidth = 0;
+
+        this.lastViewportSignature = '';
+        this.lastInfoSignature = '';
+        this.lastAbilityStateSignature = '';
+        this.dirty = true;
 
         this.background = scene.add.rectangle(0, 0, 100, this.barHeight, 0x06080d, 0.82);
         this.background.setOrigin(0, 0);
@@ -348,7 +385,7 @@ class BottomBar extends Phaser.GameObjects.Container
         this.add(this.background);
 
         this.gameButtonsPanel = new UIButtonRow(scene, 0, 0, { gap: 8 });
-        this.unitInfoPanel = new SelectedUnitInfoPanel(scene, 0, 0, 280, 76);
+        this.unitInfoPanel = new SelectedUnitInfoPanel(scene, 0, 0, this.centerWidth, 76);
         this.abilityButtonsPanel = new UIButtonRow(scene, 0, 0, { gap: 8 });
 
         this.add(this.gameButtonsPanel);
@@ -371,32 +408,18 @@ class BottomBar extends Phaser.GameObjects.Container
         this.refresh(true);
     }
 
-    layout()
+    markDirty()
     {
-        const w = this.scene.scale.width;
-        const h = this.scene.scale.height;
-        const margin = 12;
-        const innerPadding = 12;
+        this.dirty = true;
+    }
 
-        this.barWidth = Math.max(640, Math.min(w - margin * 2, 1080));
-        this.barHeight = 88;
+    _getUnitKey(unit)
+    {
+        if (unit == null) return 'none';
+        if (unit.id != null) return String(unit.id);
 
-        this.setPosition((w - this.barWidth) / 2, h - this.barHeight - margin);
-        this.background.width = this.barWidth;
-        this.background.height = this.barHeight;
-
-        const leftWidth = 170;
-        const centerWidth = 320;
-        const rightWidth = this.barWidth - leftWidth - centerWidth - innerPadding * 4;
-
-        this.gameButtonsPanel.setPosition(innerPadding, (this.barHeight - 52) / 2);
-        this.unitInfoPanel.setPosition(leftWidth + innerPadding * 2, (this.barHeight - 76) / 2);
-        this.unitInfoPanel.background.width = centerWidth;
-        this.unitInfoPanel.panelWidth = centerWidth;
-
-        this.abilityButtonsPanel.setPosition(leftWidth + centerWidth + innerPadding * 3, (this.barHeight - 52) / 2);
-        this.rightWidth = rightWidth;
-        this.lastSizeSignature = w + 'x' + h;
+        const name = unit.config && unit.config.name ? unit.config.name : 'unit';
+        return name + '@' + unit.mapX + ',' + unit.mapY;
     }
 
     _getAbilityTypeForProcessed(unit)
@@ -411,6 +434,40 @@ class BottomBar extends Phaser.GameObjects.Container
         }
 
         return null;
+    }
+
+    layout()
+    {
+        const w = this.scene.scale.width;
+        const h = this.scene.scale.height;
+
+        const margin = 12;
+        const innerPadding = 16;
+
+        this.barWidth = Math.max(720, Math.min(w - margin * 2, 1180));
+        this.barHeight = 88;
+
+        this.setPosition((w - this.barWidth) / 2, h - this.barHeight - margin);
+
+        this.background.width = this.barWidth;
+        this.background.height = this.barHeight;
+
+        this.leftSectionX = innerPadding;
+
+        this.centerWidth = 340;
+        this.centerSectionX = Math.floor((this.barWidth - this.centerWidth) / 2);
+
+        this.rightSectionX = this.centerSectionX + this.centerWidth + innerPadding;
+        this.rightWidth = this.barWidth - this.rightSectionX - innerPadding;
+
+        this.gameButtonsPanel.setPosition(this.leftSectionX, (this.barHeight - 52) / 2);
+        this.unitInfoPanel.setPosition(this.centerSectionX, (this.barHeight - 76) / 2);
+        this.unitInfoPanel.background.width = this.centerWidth;
+        this.unitInfoPanel.panelWidth = this.centerWidth;
+
+        this.abilityButtonsPanel.setPosition(this.rightSectionX, (this.barHeight - 52) / 2);
+
+        this.lastViewportSignature = w + 'x' + h;
     }
 
     _getAbilityButtonConfig(unit, abilityEntry)
@@ -446,6 +503,9 @@ class BottomBar extends Phaser.GameObjects.Container
                     if (selectedUnit.processedAbility != null) selectedUnit.stopAbility();
                     selectedUnit.startAbility(abilityEntry.type);
                 }
+
+                this.markDirty();
+                this.refresh(false);
             }
         };
     }
@@ -480,20 +540,24 @@ class BottomBar extends Phaser.GameObjects.Container
         if (contentWidth > this.rightWidth && this.abilityButtonsPanel.buttons.length > 0)
         {
             const narrowWidth = 60;
-            for (let i = 0; i < this.abilityButtonsPanel.buttons.length; i++)
+            for (let i = 0; i < buttonConfigs.length; i++)
             {
-                const cfg = buttonConfigs[i];
-                cfg.width = narrowWidth;
-                cfg.mode = cfg.icon ? 'auto' : 'text';
+                buttonConfigs[i].width = narrowWidth;
+                buttonConfigs[i].mode = buttonConfigs[i].icon ? 'auto' : 'text';
             }
             this.abilityButtonsPanel.setButtons(buttonConfigs);
         }
+
+        // после пересборки всегда прижимаем влево
+        this.abilityButtonsPanel.setPosition(this.rightSectionX, (this.barHeight - 52) / 2);
     }
 
     refresh(force = false)
     {
-        if (this.lastSizeSignature !== (this.scene.scale.width + 'x' + this.scene.scale.height))
+        const viewportSignature = this.scene.scale.width + 'x' + this.scene.scale.height;
+        if (force || viewportSignature !== this.lastViewportSignature)
         {
+            console.log('Viewport changed, refreshing bottom bar layout');
             this.layout();
             force = true;
         }
@@ -502,30 +566,47 @@ class BottomBar extends Phaser.GameObjects.Container
         const isHumanTurn = currentPlayer != null && currentPlayer.control === PlayerControl.human;
         const canControlUnit = isHumanTurn && selectedUnit != null && selectedUnit.player === currentPlayer;
         const activeAbilityType = this._getAbilityTypeForProcessed(selectedUnit);
+        const unitKey = this._getUnitKey(selectedUnit);
 
-        let abilitySignature = '';
-        if (canControlUnit && selectedUnit != null)
-        {
-            const availableAbilities = selectedUnit.getAvailableAbilities();
-            abilitySignature = availableAbilities.map(a => a.type).join('|');
-        }
-
-        const signature = [
+        const infoSignature = [
             isHumanTurn ? 'human' : 'ai',
             pointerBlocked ? 'blocked' : 'free',
-            selectedUnit ? selectedUnit.config.name : 'none',
+            unitKey,
             selectedUnit ? selectedUnit.features.health : '-',
             selectedUnit ? selectedUnit.features.move : '-',
-            selectedUnit ? selectedUnit.features.abilityPoints : '-',
-            activeAbilityType || '-',
-            abilitySignature
+            selectedUnit ? selectedUnit.features.abilityPoints : '-'
         ].join(';');
 
-        if (!force && signature === this.lastSignature) return;
-        this.lastSignature = signature;
+        if (force || infoSignature !== this.lastInfoSignature)
+        {
+            console.log('Selected unit or turn state changed, refreshing info panel and game buttons');
+            this.lastInfoSignature = infoSignature;
+            this._refreshGameButtons(isHumanTurn);
+            this.unitInfoPanel.setUnit(selectedUnit, force);
+        }
 
-        this._refreshGameButtons(isHumanTurn);
-        this.unitInfoPanel.setUnit(selectedUnit);
-        this._refreshAbilityButtons(selectedUnit, canControlUnit);
+        const abilityStateSignature = [
+            isHumanTurn ? 'human' : 'ai',
+            pointerBlocked ? 'blocked' : 'free',
+            unitKey,
+            selectedUnit ? selectedUnit.mapX : '-',
+            selectedUnit ? selectedUnit.mapY : '-',
+            selectedUnit ? selectedUnit.features.move : '-',
+            selectedUnit ? selectedUnit.features.abilityPoints : '-',
+            activeAbilityType || '-'
+        ].join(';');
+
+        if (force || this.dirty || abilityStateSignature !== this.lastAbilityStateSignature)
+        {       
+            console.log('Ability state changed, refreshing ability buttons');
+            this.lastAbilityStateSignature = abilityStateSignature;
+            this._refreshAbilityButtons(selectedUnit, canControlUnit);
+            this.dirty = false;
+        }
+    }
+
+    tick()
+    {
+        this.refresh(false);
     }
 }
