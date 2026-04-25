@@ -438,36 +438,58 @@ class BottomBar extends Phaser.GameObjects.Container
 
     layout()
     {
-        const w = this.scene.scale.width;
-        const h = this.scene.scale.height;
+        const displayWidth = (this.scene.scale.displaySize && this.scene.scale.displaySize.width)
+            ? this.scene.scale.displaySize.width
+            : this.scene.scale.width;
+
+        const displayHeight = (this.scene.scale.displaySize && this.scene.scale.displaySize.height)
+            ? this.scene.scale.displaySize.height
+            : this.scene.scale.height;
 
         const margin = 12;
         const innerPadding = 16;
+        const minRightWidth = 120;
+        const minCenterWidth = 255;
+        const preferredCenterWidth = 300;
 
-        this.barWidth = Math.max(720, Math.min(w - margin * 2, 1180));
         this.barHeight = 88;
+        this.barWidth = Math.min(displayWidth - margin * 2, 1180);
+        this.barWidth = Math.max(this.barWidth, 320);
 
-        this.setPosition((w - this.barWidth) / 2, h - this.barHeight - margin);
+        this.setPosition((displayWidth - this.barWidth) / 2, displayHeight - this.barHeight - margin);
 
-        this.background.width = this.barWidth;
-        this.background.height = this.barHeight;
+        this.background.setSize(this.barWidth, this.barHeight);
+        this.background.setDisplaySize(this.barWidth, this.barHeight);
+        this.background.setStrokeStyle(1, 0x334155, 1);
 
-        this.leftSectionX = innerPadding;
+        let nextX = innerPadding;
 
-        this.centerWidth = 340;
-        this.centerSectionX = Math.floor((this.barWidth - this.centerWidth) / 2);
-
-        this.rightSectionX = this.centerSectionX + this.centerWidth + innerPadding;
-        this.rightWidth = this.barWidth - this.rightSectionX - innerPadding;
-
+        this.leftSectionX = nextX;
         this.gameButtonsPanel.setPosition(this.leftSectionX, (this.barHeight - 52) / 2);
+
+        nextX += this.gameButtonsPanel.getContentWidth() + innerPadding;
+
+        const maxCenterWidth = Math.max(
+            minCenterWidth,
+            this.barWidth - nextX - innerPadding - minRightWidth
+        );
+        this.centerWidth = Math.min(preferredCenterWidth, maxCenterWidth);
+
+        this.centerSectionX = nextX;
         this.unitInfoPanel.setPosition(this.centerSectionX, (this.barHeight - 76) / 2);
-        this.unitInfoPanel.background.width = this.centerWidth;
         this.unitInfoPanel.panelWidth = this.centerWidth;
+        this.unitInfoPanel.background.setSize(this.centerWidth, 76);
+        this.unitInfoPanel.background.setDisplaySize(this.centerWidth, 76);
+        this.unitInfoPanel.background.setStrokeStyle(1, 0x2b3442, 1);
+
+        nextX += this.centerWidth + innerPadding;
+
+        this.rightSectionX = nextX;
+        this.rightWidth = Math.max(0, this.barWidth - this.rightSectionX - innerPadding);
 
         this.abilityButtonsPanel.setPosition(this.rightSectionX, (this.barHeight - 52) / 2);
 
-        this.lastViewportSignature = w + 'x' + h;
+        this.lastViewportSignature = displayWidth + 'x' + displayHeight;
     }
 
     _getAbilityButtonConfig(unit, abilityEntry)
@@ -551,13 +573,20 @@ class BottomBar extends Phaser.GameObjects.Container
         // после пересборки всегда прижимаем влево
         this.abilityButtonsPanel.setPosition(this.rightSectionX, (this.barHeight - 52) / 2);
     }
-
+    
     refresh(force = false)
     {
-        const viewportSignature = this.scene.scale.width + 'x' + this.scene.scale.height;
+        const displayWidth = (this.scene.scale.displaySize && this.scene.scale.displaySize.width)
+            ? this.scene.scale.displaySize.width
+            : this.scene.scale.width;
+
+        const displayHeight = (this.scene.scale.displaySize && this.scene.scale.displaySize.height)
+            ? this.scene.scale.displaySize.height
+            : this.scene.scale.height;
+
+        const viewportSignature = displayWidth + 'x' + displayHeight;
         if (force || viewportSignature !== this.lastViewportSignature)
         {
-            console.log('Viewport changed, refreshing bottom bar layout');
             this.layout();
             force = true;
         }
@@ -579,7 +608,6 @@ class BottomBar extends Phaser.GameObjects.Container
 
         if (force || infoSignature !== this.lastInfoSignature)
         {
-            console.log('Selected unit or turn state changed, refreshing info panel and game buttons');
             this.lastInfoSignature = infoSignature;
             this._refreshGameButtons(isHumanTurn);
             this.unitInfoPanel.setUnit(selectedUnit, force);
@@ -597,8 +625,7 @@ class BottomBar extends Phaser.GameObjects.Container
         ].join(';');
 
         if (force || this.dirty || abilityStateSignature !== this.lastAbilityStateSignature)
-        {       
-            console.log('Ability state changed, refreshing ability buttons');
+        {
             this.lastAbilityStateSignature = abilityStateSignature;
             this._refreshAbilityButtons(selectedUnit, canControlUnit);
             this.dirty = false;
