@@ -374,6 +374,8 @@ class BottomBar extends Phaser.GameObjects.Container
         this.centerWidth = 280;
         this.rightWidth = 0;
 
+        this.autoWidthMode = true; 
+
         this.lastViewportSignature = '';
         this.lastInfoSignature = '';
         this.lastAbilityStateSignature = '';
@@ -436,6 +438,7 @@ class BottomBar extends Phaser.GameObjects.Container
         return null;
     }
 
+/*
     layout()
     {
         const displayWidth = (this.scene.scale.displaySize && this.scene.scale.displaySize.width)
@@ -446,8 +449,8 @@ class BottomBar extends Phaser.GameObjects.Container
             ? this.scene.scale.displaySize.height
             : this.scene.scale.height;
 
-        const margin = 12;
-        const innerPadding = 16;
+        const margin = 6;
+        const innerPadding = 8;
         const minRightWidth = 120;
         const minCenterWidth = 255;
         const preferredCenterWidth = 300;
@@ -487,6 +490,110 @@ class BottomBar extends Phaser.GameObjects.Container
         this.rightSectionX = nextX;
         this.rightWidth = Math.max(0, this.barWidth - this.rightSectionX - innerPadding);
 
+        this.abilityButtonsPanel.setPosition(this.rightSectionX, (this.barHeight - 52) / 2);
+
+        this.lastViewportSignature = displayWidth + 'x' + displayHeight;
+    }
+*/
+
+    layout(autoWidth = false)
+    {
+        const displayWidth = (this.scene.scale.displaySize && this.scene.scale.displaySize.width)
+            ? this.scene.scale.displaySize.width
+            : this.scene.scale.width;
+
+        const displayHeight = (this.scene.scale.displaySize && this.scene.scale.displaySize.height)
+            ? this.scene.scale.displaySize.height
+            : this.scene.scale.height;
+
+        const margin = 6;
+        const innerPadding = 8;
+        const minCenterWidth = 255;
+        const preferredCenterWidth = 300;
+        const maxBarWidth = Math.min(displayWidth - margin * 2, 1180);
+
+        this.barHeight = 88;
+
+        const leftWidth = this.gameButtonsPanel.getContentWidth();
+        const rightWidth = this.abilityButtonsPanel.getContentWidth();
+        const hasRightSection = rightWidth > 0;
+
+        if (autoWidth)
+        {
+            this.centerWidth = preferredCenterWidth;
+
+            let desiredBarWidth =
+                innerPadding + leftWidth +
+                innerPadding + this.centerWidth +
+                (hasRightSection ? innerPadding + rightWidth : 0) +
+                innerPadding;
+
+            if (desiredBarWidth > maxBarWidth)
+            {
+                const availableCenterWidth =
+                    maxBarWidth -
+                    (innerPadding + leftWidth + innerPadding + (hasRightSection ? innerPadding + rightWidth : 0) + innerPadding);
+
+                this.centerWidth = Math.max(minCenterWidth, availableCenterWidth);
+                desiredBarWidth =
+                    innerPadding + leftWidth +
+                    innerPadding + this.centerWidth +
+                    (hasRightSection ? innerPadding + rightWidth : 0) +
+                    innerPadding;
+            }
+
+            this.barWidth = Math.min(Math.max(desiredBarWidth, 320), maxBarWidth);
+            this.rightWidth = rightWidth;
+        }
+        else
+        {
+            const minRightWidth = 120;
+
+            this.barWidth = Math.max(maxBarWidth, 320);
+
+            const maxCenterWidth = Math.max(
+                minCenterWidth,
+                this.barWidth - (
+                    innerPadding + leftWidth +
+                    innerPadding + Math.max(minRightWidth, rightWidth) +
+                    innerPadding
+                ) - innerPadding
+            );
+
+            this.centerWidth = Math.min(preferredCenterWidth, maxCenterWidth);
+            this.rightWidth = Math.max(0, this.barWidth - (
+                innerPadding + leftWidth +
+                innerPadding + this.centerWidth +
+                innerPadding
+            ) - innerPadding);
+        }
+
+        // В autoWidth режиме прижимаем панель влево, а не центрируем
+        const barX = autoWidth ? margin : (displayWidth - this.barWidth) / 2;
+        const barY = displayHeight - this.barHeight - margin;
+        this.setPosition(barX, barY);
+
+        this.background.setSize(this.barWidth, this.barHeight);
+        this.background.setDisplaySize(this.barWidth, this.barHeight);
+        this.background.setStrokeStyle(1, 0x334155, 1);
+
+        let nextX = innerPadding;
+
+        this.leftSectionX = nextX;
+        this.gameButtonsPanel.setPosition(this.leftSectionX, (this.barHeight - 52) / 2);
+
+        nextX += leftWidth + innerPadding;
+
+        this.centerSectionX = nextX;
+        this.unitInfoPanel.setPosition(this.centerSectionX, (this.barHeight - 76) / 2);
+        this.unitInfoPanel.panelWidth = this.centerWidth;
+        this.unitInfoPanel.background.setSize(this.centerWidth, 76);
+        this.unitInfoPanel.background.setDisplaySize(this.centerWidth, 76);
+        this.unitInfoPanel.background.setStrokeStyle(1, 0x2b3442, 1);
+
+        nextX += this.centerWidth + innerPadding;
+
+        this.rightSectionX = nextX;
         this.abilityButtonsPanel.setPosition(this.rightSectionX, (this.barHeight - 52) / 2);
 
         this.lastViewportSignature = displayWidth + 'x' + displayHeight;
@@ -574,6 +681,7 @@ class BottomBar extends Phaser.GameObjects.Container
         this.abilityButtonsPanel.setPosition(this.rightSectionX, (this.barHeight - 52) / 2);
     }
     
+    /*
     refresh(force = false)
     {
         const displayWidth = (this.scene.scale.displaySize && this.scene.scale.displaySize.width)
@@ -628,6 +736,72 @@ class BottomBar extends Phaser.GameObjects.Container
         {
             this.lastAbilityStateSignature = abilityStateSignature;
             this._refreshAbilityButtons(selectedUnit, canControlUnit);
+            this.dirty = false;
+        }
+    }
+    */
+
+    refresh(force = false)
+    {
+        const displayWidth = (this.scene.scale.displaySize && this.scene.scale.displaySize.width)
+            ? this.scene.scale.displaySize.width
+            : this.scene.scale.width;
+
+        const displayHeight = (this.scene.scale.displaySize && this.scene.scale.displaySize.height)
+            ? this.scene.scale.displaySize.height
+            : this.scene.scale.height;
+
+        const viewportSignature = displayWidth + 'x' + displayHeight;
+        if (force || viewportSignature !== this.lastViewportSignature)
+        {
+            this.layout(this.autoWidthMode === true);
+            force = true;
+        }
+
+        const currentPlayer = players != null ? players[playerInd] : null;
+        const isHumanTurn = currentPlayer != null && currentPlayer.control === PlayerControl.human;
+        const canControlUnit = isHumanTurn && selectedUnit != null && selectedUnit.player === currentPlayer;
+        const activeAbilityType = this._getAbilityTypeForProcessed(selectedUnit);
+        const unitKey = this._getUnitKey(selectedUnit);
+
+        const infoSignature = [
+            isHumanTurn ? 'human' : 'ai',
+            pointerBlocked ? 'blocked' : 'free',
+            unitKey,
+            selectedUnit ? selectedUnit.features.health : '-',
+            selectedUnit ? selectedUnit.features.move : '-',
+            selectedUnit ? selectedUnit.features.abilityPoints : '-'
+        ].join(';');
+
+        if (force || infoSignature !== this.lastInfoSignature)
+        {
+            this.lastInfoSignature = infoSignature;
+            this._refreshGameButtons(isHumanTurn);
+            this.unitInfoPanel.setUnit(selectedUnit, force);
+        }
+
+        const abilityStateSignature = [
+            isHumanTurn ? 'human' : 'ai',
+            pointerBlocked ? 'blocked' : 'free',
+            unitKey,
+            selectedUnit ? selectedUnit.mapX : '-',
+            selectedUnit ? selectedUnit.mapY : '-',
+            selectedUnit ? selectedUnit.features.move : '-',
+            selectedUnit ? selectedUnit.features.abilityPoints : '-',
+            activeAbilityType || '-'
+        ].join(';');
+
+        if (force || this.dirty || abilityStateSignature !== this.lastAbilityStateSignature)
+        {
+            this.lastAbilityStateSignature = abilityStateSignature;
+            this._refreshAbilityButtons(selectedUnit, canControlUnit);
+
+            // После пересборки кнопок abilities пересчитываем ширину панели
+            if (this.autoWidthMode === true)
+            {
+                this.layout(true);
+            }
+
             this.dirty = false;
         }
     }
