@@ -215,12 +215,8 @@ const unitConfigs = {
             attackCost: 3,
         },
         abilities: {
-            door_open: {
-                type: 'door_open',
-                config: {}
-            },
-            door_close: {
-                type: 'door_close',
+            use: {
+                type: 'use',
                 config: {}
             }
         }
@@ -574,16 +570,10 @@ const abilities = {
         order: 50,
         ability: null,
     },
-    'door_open': {
-        title: 'Open door',
+    'use': {
+        title: 'Use',
         icon: null,
         order: 100,
-        ability: null,
-    },
-    'door_close': {
-        title: 'Close door',
-        icon: null,
-        order: 110,
         ability: null,
     },
 };

@@ -63,8 +63,7 @@ var GameScene = new Phaser.Class({
         abilities['gas'].ability = new GasAbility();
         abilities['web'].ability = new WebAbility();
         abilities['jump'].ability = new JumpAbility();
-        abilities['door_open'].ability = new DoorOpenAbility();
-        abilities['door_close'].ability = new DoorCloseAbility();
+        abilities['use'].ability = new UseAbility();
 
         initActionRegistry();
 

@@ -31,29 +31,20 @@ class UnitAbility
 }
 
 //---------------------------help functions----------------------------
-function getAdjacentDoors(unit, openState = null, requireEmpty = false)
+function getAdjacentUsableEntities(unit)
 {
     let result = [];
     if(unit == null) return result;
-
     for(let i = 0; i < entities.length; i++)
     {
         const ent = entities[i];
-        if(ent == null || ent.config == null) continue;
-        if(ent.config.name !== 'door') continue;
-
-        const dx = Math.abs(ent.mapX - unit.mapX);
-        const dy = Math.abs(ent.mapY - unit.mapY);
-
-        if(dx > 1 || dy > 1) continue;
-        if(dx === 0 && dy === 0) continue;
-
-        if(openState != null && ent.features.open !== openState) continue;
-        if(requireEmpty && getUnitAtMap(ent.mapX, ent.mapY) != null) continue;
-
-        result.push(ent);
+        if(ent == null) continue;
+        if(typeof ent.canUse !== 'function') continue;
+        if(ent.canUse(unit))
+        {
+            result.push(ent);
+        }
     }
-
     return result;
 }
 
@@ -644,6 +635,7 @@ class JumpAbility extends UnitAbility
     }
 }
 
+/*
 class DoorOpenAbility extends UnitAbility
 {
     step = 0;
@@ -902,6 +894,142 @@ class DoorCloseAbility extends UnitAbility
                     {
                         //this.unit.features.abilityPoints--;
                         door.close();
+                    }
+                }
+                this.stop(this.unit);
+                return true;
+            }
+        }
+        return false;
+    }
+}
+*/
+
+class UseAbility extends UnitAbility
+{
+    step = 0;
+    unit = null;
+    targets = null;
+    placeX = -1;
+    placeY = -1;
+
+    constructor()
+    {
+        super();
+    }
+
+    onCallback()
+    {
+        cam.stopFollow();
+        this.next();
+    }
+
+    start(unit)
+    {
+        this.step = 0;
+        this.unit = unit;
+        this.targets = null;
+        this.placeX = -1;
+        this.placeY = -1;
+    }
+
+    stop(unit)
+    {
+        placeSelector.hide();
+        setInteractionScenario(userInteractionScenario.movement);
+        this.step = 0;
+        this.unit = null;
+        this.targets = null;
+        this.placeX = -1;
+        this.placeY = -1;
+        super.stop(unit);
+    }
+
+    canActivate(unit)
+    {
+        if(unit == null) return false;
+        //if(unit.features.abilityPoints <= 0) return false;
+        return getAdjacentUsableEntities(unit).length > 0;
+    }
+
+    setPlace(mapX, mapY)
+    {
+        this.placeX = mapX;
+        this.placeY = mapY;
+        this.next();
+    }
+
+    next()
+    {
+        switch(this.step)
+        {
+            case 0:
+            {
+                this.targets = getAdjacentUsableEntities(this.unit);
+                if(this.targets.length <= 0)
+                {
+                    this.stop(this.unit);
+                    return true;
+                }
+                if(this.targets.length > 1)
+                {
+                    let places = [];
+                    for(let i = 0; i < this.targets.length; i++)
+                    {
+                        places.push([this.targets[i].mapX, this.targets[i].mapY]);
+                    }
+
+                    if(this.unit.player.control === PlayerControl.human)
+                    {
+                        setInteractionScenario(userInteractionScenario.placeSelection);
+                        this.step++;
+                        placeSelector.show(places, this);
+                        return false;
+                    }
+                    else
+                    {
+                        const targetPlace = this.unit.player.aiControl.selectUseTarget(this.unit, this.targets);
+                        if(targetPlace == null)
+                        {
+                            this.stop(this.unit);
+                            return true;
+                        }
+                        else
+                        {
+                            this.placeX = targetPlace.x;
+                            this.placeY = targetPlace.y;
+                            this.step++;
+                            this.next();
+                            return false;
+                        }
+                    }
+                }
+                else
+                {
+                    this.placeX = this.targets[0].mapX;
+                    this.placeY = this.targets[0].mapY;
+                    this.step++;
+                    this.next();
+                    return false;
+                }
+            }
+            case 1:
+            {
+                if(this.targets !== null)
+                {
+                    let target = null;
+                    for(let i = 0; i < this.targets.length; i++)
+                    {
+                        if(this.targets[i].mapX === this.placeX && this.targets[i].mapY === this.placeY)
+                        {
+                            target = this.targets[i];
+                            break;
+                        }
+                    }
+                    if(target != null)
+                    {
+                        //this.unit.features.abilityPoints--;
+                        target.use(this.unit);
                     }
                 }
                 this.stop(this.unit);

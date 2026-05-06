@@ -135,6 +135,16 @@ class Entity extends BaseUnit
         moveEntites();
     }
 
+    canUse(unit)
+    {
+        return false;
+    }
+
+    use(unit)
+    {
+        return false;
+    }
+
 }
 
 class WebEntity extends Entity
@@ -818,6 +828,28 @@ class DoorEntity extends Entity
         if (this.features.open && getUnitAtMap(this.mapX, this.mapY) == null) this.close();
         super.makeMove();
         super.endMove();
+    }
+
+    canUse(unit)
+    {
+        if(unit == null) return false;
+        const dx = Math.abs(this.mapX - unit.mapX);
+        const dy = Math.abs(this.mapY - unit.mapY);
+        if(dx > 1 || dy > 1) return false;
+        if(dx === 0 && dy === 0) return false;
+        if(this.features.open)
+        {
+            return getUnitAtMap(this.mapX, this.mapY) == null;
+        }
+        return true;
+    }
+
+    use(unit)
+    {
+        if(!this.canUse(unit)) return false;
+        if(this.features.open) this.close();
+        else this.open();
+        return true;
     }
 }
 
