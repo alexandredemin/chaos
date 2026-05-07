@@ -77,7 +77,7 @@ class MapGenerator {
         // items
         const items = this._placeItems(objects.concat(doors));
         
-        objects = objects.concat(doors);
+        objects = objects.concat(doors, items);
 
         return {
             width: this.width,

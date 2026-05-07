@@ -122,8 +122,8 @@ const itemConfigs = {
     'spell_scroll': {
         id: 'spell_scroll',
         name: 'Spell scroll',
-        sprite: 'scroll',
-        scale: 0.65,
+        sprite: 'web',
+        scale: 0.1,
         stackOffset: { x: 0, y: 0 },
     },
 
@@ -138,8 +138,8 @@ const itemConfigs = {
     'mana_potion': {
         id: 'mana_potion',
         name: 'Mana potion',
-        sprite: 'magic_ball',
-        scale: 0.18,
+        sprite: 'mushroom',
+        scale: 0.75,
         stackOffset: { x: 0, y: 0 },
     },
 };

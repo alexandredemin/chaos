@@ -217,4 +217,10 @@ class ItemEntity extends Entity
         this.stackSprites = [];
         super.die();
     }
+
+    makeMove()
+    {
+        super.makeMove();
+        super.endMove();
+    }
 }
