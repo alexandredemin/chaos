@@ -25,6 +25,10 @@ class Entity extends BaseUnit
         let entity = entityConfigs[storedData.configName].createFunction(scene, 0, 0, false);
         entity.setPositionFromMap(storedData.mapX, storedData.mapY);
         for (let key in storedData.features) {entity.features[key] = storedData.features[key];}
+        if(typeof entity.loadStoredData === 'function')
+        {
+            entity.loadStoredData(storedData);
+        }
         entity.start(false);
         entities.push(entity);
         return entity;

@@ -297,6 +297,10 @@ var GameScene = new Phaser.Class({
                     entity.features[prop.name] = prop.value;
                 }
             }
+            if(typeof entity.loadObjectProperties === 'function')
+            {
+                entity.loadObjectProperties(e.properties);
+            }
             entity.start(false);
             entities.push(entity);
         }

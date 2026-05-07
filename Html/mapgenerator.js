@@ -74,6 +74,9 @@ class MapGenerator {
         // start positions
         let objects = this._generateStartPositions();
 
+        // items
+        const items = this._placeItems(objects.concat(doors));
+        
         objects = objects.concat(doors);
 
         return {
@@ -987,6 +990,59 @@ class MapGenerator {
                 }
             }
         }
+    }
+
+    //--- place items ---
+    _placeItems(occupiedObjects = [])
+    {
+        const objects = [];
+        const itemNames = Object.keys(itemConfigs);
+        if(itemNames.length <= 0) return objects;
+
+        const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
+        if(candidateRooms.length <= 0) return objects;
+
+        const occupied = new Set();
+
+        for(let i = 0; i < occupiedObjects.length; i++)
+        {
+            const obj = occupiedObjects[i];
+            const ox = Math.floor(obj.x / 16);
+            const oy = Math.floor(obj.y / 16);
+            occupied.add(ox + ':' + oy);
+        }
+
+        for(let r = 0; r < candidateRooms.length; r++)
+        {
+            const room = candidateRooms[r];
+            const itemCount = this._rand(1, 2);
+            let placed = 0;
+            let attempts = 0;
+
+            while(placed < itemCount && attempts < 20)
+            {
+                attempts++;
+                const x = this._rand(room.x, room.x + room.w - 1);
+                const y = this._rand(room.y, room.y + room.h - 1);
+                const key = x + ':' + y;
+                if(occupied.has(key)) continue;
+
+                const itemName = itemNames[this._rand(0, itemNames.length - 1)];
+                objects.push({
+                    type: "entity",
+                    name: "item",
+                    x: x * 16,
+                    y: y * 16,
+                    properties: [
+                    { name: "itemConfigName", type: "string", value: itemName },
+                    { name: "itemCount", type: "int", value: 1 }
+                    ]
+                });
+                occupied.add(key);
+                placed++;
+            }
+        }
+    return objects;
     }
 
     //--- start positions ---

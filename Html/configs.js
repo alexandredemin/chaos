@@ -102,6 +102,46 @@ const entityConfigs = {
         },
         createFunction: (scene,x,y,visible=true) => MushroomEntity.create(scene,x,y,visible)
     },
+
+    'item': {
+        name: 'item',
+        sprite: '',
+        scale: 1.0,
+        features: {
+            health: 1,
+            blocksLOS: false,
+            itemConfigName: null,
+            itemCount: 1,
+        },
+        createFunction: (scene, x, y, visible=true) => ItemEntity.create(scene, x, y, visible)
+    },
+};
+
+//---------------------------- Item configs ----------------------------
+const itemConfigs = {
+    'spell_scroll': {
+        id: 'spell_scroll',
+        name: 'Spell scroll',
+        sprite: 'scroll',
+        scale: 0.65,
+        stackOffset: { x: 0, y: 0 },
+    },
+
+    'healing_potion': {
+        id: 'healing_potion',
+        name: 'Healing potion',
+        sprite: 'fireball',
+        scale: 0.18,
+        stackOffset: { x: 0, y: 0 },
+    },
+
+    'mana_potion': {
+        id: 'mana_potion',
+        name: 'Mana potion',
+        sprite: 'magic_ball',
+        scale: 0.18,
+        stackOffset: { x: 0, y: 0 },
+    },
 };
 
 //---------------------------- Unit configs ----------------------------
