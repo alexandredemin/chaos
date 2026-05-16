@@ -122,8 +122,8 @@ const itemConfigs = {
     'spell_scroll': {
         id: 'spell_scroll',
         name: 'Spell scroll',
-        sprite: 'web',
-        scale: 0.1,
+        sprite: 'spell_scroll',
+        scale: 0.12,
         stackOffset: { x: 0, y: 0 },
     },
 
