@@ -17,6 +17,7 @@ class Unit extends BaseUnit
         if(id)this.id = id;
         else this.id = nextUnitId++;
         this.zOffset = 1;
+        if(!Array.isArray(this.features.items)) this.features.items = [];
         this.initAnimations();
     }
   
@@ -39,6 +40,7 @@ class Unit extends BaseUnit
         if(data.id >= nextUnitId) nextUnitId = data.id + 1;
         u.setPositionFromMap(data.mapX, data.mapY);
         for (let key in data.features) {u.features[key] = data.features[key];}
+        if(!Array.isArray(u.features.items)) u.features.items = [];
         u.abilities = clone(data.abilities);
         u.player = playersMap[data.playerName];
         units.push(u);
@@ -48,6 +50,59 @@ class Unit extends BaseUnit
         }
         for (let sd of data.states) UnitState.deserialize(sd, u);
         return u;
+    }
+
+    getItems()
+    {
+        if(!Array.isArray(this.features.items)) this.features.items = [];
+        return this.features.items.map(data => Item.deserialize(data));
+    }
+
+    hasItems()
+    {
+        return Array.isArray(this.features.items) && this.features.items.length > 0;
+    }
+
+    getItemCount()
+    {
+        if(!Array.isArray(this.features.items)) this.features.items = [];
+        return this.features.items.length;
+    }
+
+    addItem(item)
+    {
+        if(!Array.isArray(this.features.items)) this.features.items = [];
+        if(item instanceof Item)
+        {
+            this.features.items.push(item.serialize());
+        }
+        else if(typeof item === 'string')
+        {
+            this.features.items.push({
+                uid: 'item_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+                configName: item,
+                params: {}
+            });
+        }
+        else
+        {
+            this.features.items.push(clone(item));
+        }
+    }
+
+    removeItem(index=0)
+    {
+        if(!Array.isArray(this.features.items)) this.features.items = [];
+        if(index < 0 || index >= this.features.items.length) return null;
+        const itemData = this.features.items.splice(index, 1)[0];
+        return Item.deserialize(itemData);
+    }
+
+    getItem(index=0)
+    {
+        if(!Array.isArray(this.features.items)) this.features.items = [];
+        if(index < 0 || index >= this.features.items.length) return null;
+        return Item.deserialize(this.features.items[index]);
     }
 
     initAnimations()
