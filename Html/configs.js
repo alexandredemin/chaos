@@ -110,8 +110,7 @@ const entityConfigs = {
         features: {
             health: 1,
             blocksLOS: false,
-            itemConfigName: null,
-            itemCount: 1,
+            items: [],
         },
         createFunction: (scene, x, y, visible=true) => ItemEntity.create(scene, x, y, visible)
     },

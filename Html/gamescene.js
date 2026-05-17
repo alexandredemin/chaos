@@ -297,9 +297,9 @@ var GameScene = new Phaser.Class({
                     entity.features[prop.name] = prop.value;
                 }
             }
-            if(typeof entity.loadObjectProperties === 'function')
+            if(Array.isArray(e.items) && entity.features.hasOwnProperty('items'))
             {
-                entity.loadObjectProperties(e.properties);
+                entity.features.items = clone(e.items);
             }
             entity.start(false);
             entities.push(entity);

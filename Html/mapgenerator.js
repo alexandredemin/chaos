@@ -1033,10 +1033,8 @@ class MapGenerator {
                     name: "item",
                     x: x * 16,
                     y: y * 16,
-                    properties: [
-                    { name: "itemConfigName", type: "string", value: itemName },
-                    { name: "itemCount", type: "int", value: 1 }
-                    ]
+                    properties: [],
+                    items: [createItemData(itemName, {})]
                 });
                 occupied.add(key);
                 placed++;
