@@ -276,7 +276,8 @@ var GameScene = new Phaser.Class({
                     configName: obj.name,   // name in Tiled = key in entityConfigs
                     x: objPos.x,
                     y: objPos.y,
-                    properties: obj.properties || []
+                    properties: obj.properties || [],
+                    items: obj.items || []
                 });
             }
         }
