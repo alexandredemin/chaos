@@ -125,6 +125,18 @@ class ItemEntity extends Entity
         return Item.deserialize(this.features.items[0]);
     }
 
+    getItems()
+    {
+        if(!Array.isArray(this.features.items)) this.features.items = [];
+        return this.features.items.map(data => Item.deserialize(data));
+    }
+
+    getItemCount()
+    {
+        if(!Array.isArray(this.features.items)) this.features.items = [];
+        return this.features.items.length;
+    }
+
     syncVisuals()
     {
         const topItem = this.getTopItem();

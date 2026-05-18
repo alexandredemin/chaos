@@ -48,6 +48,19 @@ function getAdjacentUsableEntities(unit)
     return result;
 }
 
+function getItemEntityAtUnit(unit)
+{
+    if(unit == null) return null;
+    const ents = Entity.getEntitiesAtMap(unit.mapX, unit.mapY);
+    if(ents == null || ents.length <= 0) return null;
+    for(let i = 0; i < ents.length; i++)
+    {
+        const ent = ents[i];
+        if(ent instanceof ItemEntity && ent.getItemCount() > 0) return ent;
+    }
+    return null;
+}
+
 //----------------------------abilities----------------------------
 class ConjureAbility extends UnitAbility
 {
@@ -635,276 +648,6 @@ class JumpAbility extends UnitAbility
     }
 }
 
-/*
-class DoorOpenAbility extends UnitAbility
-{
-    step = 0;
-    unit = null;
-    doors = null;
-    placeX = -1;
-    placeY = -1;
-
-    constructor()
-    {
-        super();
-    }
-
-    onCallback()
-    {
-        cam.stopFollow();
-        this.next();
-    }
-
-    start(unit)
-    {
-        this.step = 0;
-        this.unit = unit;
-        this.doors = null;
-        this.placeX = -1;
-        this.placeY = -1;
-    }
-
-    stop(unit)
-    {
-        placeSelector.hide();
-        setInteractionScenario(userInteractionScenario.movement);
-        this.step = 0;
-        this.unit = null;
-        this.doors = null;
-        this.placeX = -1;
-        this.placeY = -1;
-        super.stop(unit);
-    }
-
-    canActivate(unit)
-    {
-        if(unit == null) return false;
-        //if(unit.features.abilityPoints <= 0) return false;
-        return getAdjacentDoors(unit, false, false).length > 0;
-    }
-
-    setPlace(mapX, mapY)
-    {
-        this.placeX = mapX;
-        this.placeY = mapY;
-        this.next();
-    }
-
-    next()
-    {
-        switch(this.step)
-        {
-             case 0:
-            {
-                this.doors = getAdjacentDoors(this.unit, false, false);
-                if(this.doors.length <= 0)
-                {
-                    this.stop(this.unit);
-                    return true;
-                }
-                if(this.doors.length > 1)
-                {
-                    let places = [];
-                    for(let i = 0; i < this.doors.length; i++)
-                    {
-                        places.push([this.doors[i].mapX, this.doors[i].mapY]);
-                    }
-                    if(this.unit.player.control === PlayerControl.human)
-                    {
-                        setInteractionScenario(userInteractionScenario.placeSelection);                
-                        this.step++;
-                        placeSelector.show(places, this);
-                        return false;
-                    }
-                    else
-                    {
-                        const targetPlace = this.unit.player.aiControl.selectDoorOpenTarget(this.unit, doors);
-                        if(targetPlace == null)
-                        {
-                            this.stop(this.unit);
-                            return true;
-                        }
-                        else
-                        {
-                            this.placeX = targetPlace.x;
-                            this.placeY = targetPlace.y;
-                            this.step++;
-                            this.next();
-                            return false;
-                        }
-                    }
-                }
-                else
-                {
-                    this.placeX = this.doors[0].mapX;
-                    this.placeY = this.doors[0].mapY;
-                    this.step++;
-                    this.next();
-                }
-                break;
-            }
-            case 1:
-            {
-                if(this.doors !== null)
-                {
-                    let door = null;
-                    for(let i = 0; i < this.doors.length; i++)
-                    {
-                        if(this.doors[i].mapX === this.placeX && this.doors[i].mapY === this.placeY)
-                        {
-                            door = this.doors[i];
-                            break;
-                        }
-                    }
-                    if(door != null)
-                    {
-                        //this.unit.features.abilityPoints--;
-                        door.open();
-                    }
-                }
-                this.stop(this.unit);
-                return true;
-            }
-        }
-        return false;
-    }
-}
-
-class DoorCloseAbility extends UnitAbility
-{
-    step = 0;
-    unit = null;
-    doors = null;
-    placeX = -1;
-    placeY = -1;
-
-    constructor()
-    {
-        super();
-    }
-
-    onCallback()
-    {
-        cam.stopFollow();
-        this.next();
-    }
-
-    start(unit)
-    {
-        this.step = 0;
-        this.unit = unit;
-        this.doors = null;
-        this.placeX = -1;
-        this.placeY = -1;
-    }
-
-    stop(unit)
-    {
-        placeSelector.hide();
-        setInteractionScenario(userInteractionScenario.movement);
-        this.step = 0;
-        this.unit = null;
-        this.doors = null;
-        this.placeX = -1;
-        this.placeY = -1;
-        super.stop(unit);
-    }
-
-    canActivate(unit)
-    {
-        if(unit == null) return false;
-        //if(unit.features.abilityPoints <= 0) return false;
-        return getAdjacentDoors(unit, true, true).length > 0;
-    }
-
-    setPlace(mapX, mapY)
-    {
-        this.placeX = mapX;
-        this.placeY = mapY;
-        this.next();
-    }
-
-    next()
-    {
-        switch(this.step)
-        {
-            case 0:
-            {
-                this.doors = getAdjacentDoors(this.unit, true, true);
-                if(this.doors.length <= 0)
-                {
-                    this.stop(this.unit);
-                    return true;
-                }
-                if(this.doors.length > 1)
-                {
-                    let places = [];
-                    for(let i = 0; i < this.doors.length; i++)
-                    {
-                        places.push([this.doors[i].mapX, this.doors[i].mapY]);
-                    }
-                    if(this.unit.player.control === PlayerControl.human)
-                    {
-                        setInteractionScenario(userInteractionScenario.placeSelection);
-                        this.step++;
-                        placeSelector.show(places, this);
-                        return false;
-                    }
-                    else
-                    {
-                        const targetPlace = this.unit.player.aiControl.selectDoorOpenTarget(this.unit, doors);
-                        if(targetPlace == null)
-                        {
-                            this.stop(this.unit);
-                            return true;
-                        }
-                        else
-                        {
-                            this.placeX = targetPlace.x;
-                            this.placeY = targetPlace.y;
-                            this.step++;
-                            this.next();
-                            return false;
-                        }
-                    }
-                }
-                else
-                {
-                    this.placeX = this.doors[0].mapX;
-                    this.placeY = this.doors[0].mapY;
-                    this.step++;
-                    this.next();
-                }
-                break;
-            }
-            case 1:
-            {
-                if(this.doors !== null)
-                {
-                    let door = null;
-                    for(let i = 0; i < this.doors.length; i++)
-                    {
-                        if(this.doors[i].mapX === this.placeX && this.doors[i].mapY === this.placeY)
-                        {
-                            door = this.doors[i];
-                            break;
-                        }
-                    }
-                    if(door != null)
-                    {
-                        //this.unit.features.abilityPoints--;
-                        door.close();
-                    }
-                }
-                this.stop(this.unit);
-                return true;
-            }
-        }
-        return false;
-    }
-}
-*/
-
 class UseAbility extends UnitAbility
 {
     step = 0;
@@ -1037,5 +780,107 @@ class UseAbility extends UnitAbility
             }
         }
         return false;
+    }
+}
+
+class PickUpAbility extends UnitAbility
+{
+    step = 0;
+    unit = null;
+    itemEntity = null;
+    selectedItemIndex = -1;
+
+    constructor()
+    {
+        super();
+    }
+
+    start(unit)
+    {
+        this.step = 0;
+        this.unit = unit;
+        this.itemEntity = getItemEntityAtUnit(unit);
+        this.selectedItemIndex = -1;
+    }
+
+    stop(unit)
+    {
+        this.step = 0;
+        this.unit = null;
+        this.itemEntity = null;
+        this.selectedItemIndex = -1;
+
+        if(pickupPanel != null && pickupPanel.visible)
+        {
+            const cb = pickupPanel.callbackObject;
+            pickupPanel.callbackObject = null;
+            pickupPanel.hide(null);
+            pickupPanel.callbackObject = cb;
+        }
+
+        super.stop(unit);
+    }
+
+    canActivate(unit)
+    {
+        if(unit == null) return false;
+        if(unit.features.abilityPoints <= 0) return false;
+        if(typeof unit.hasFreeItemSlot === 'function' && !unit.hasFreeItemSlot()) return false;
+
+        const itemEntity = getItemEntityAtUnit(unit);
+        return itemEntity != null && itemEntity.getItemCount() > 0;
+    }
+
+    onCallback(result)
+    {
+        if(result == null)
+        {
+            this.stop(this.unit);
+            return;
+        }
+
+        this.selectedItemIndex = result.itemIndex;
+        this.next();
+    }
+
+    next()
+    {
+        switch(this.step)
+        {
+            case 0:
+                if(this.itemEntity == null)
+                {
+                    this.stop(this.unit);
+                    return true;
+                }
+                pickupPanel.show(this.itemEntity, this.unit, this);
+                this.step = 1;
+                return false;
+            case 1:
+                if(this.itemEntity == null || this.selectedItemIndex < 0)
+                {
+                    this.stop(this.unit);
+                    return true;
+                }
+                if(!this.unit.hasFreeItemSlot())
+                {
+                    this.stop(this.unit);
+                    return true;
+                }
+                const item = this.itemEntity.removeItem(this.selectedItemIndex);
+                if(item != null)
+                {
+                    const added = this.unit.addItem(item);
+                    if(added)
+                    {
+                        this.unit.features.abilityPoints--;
+                        if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
+                    }
+                }
+                this.stop(this.unit);
+                return true;
+        }
+
+        return true;
     }
 }

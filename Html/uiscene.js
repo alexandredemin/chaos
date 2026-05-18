@@ -19,6 +19,7 @@ const UIScene = new Phaser.Class({
         resize();
 
         book = new MagicBook(this);
+        pickupPanel = new PickUpPanel(this);
         startTurn();
     },
 
@@ -126,5 +127,6 @@ const UIScene = new Phaser.Class({
         }
 
         if (this.bottomBar != null) this.bottomBar.layout();
+        if (pickupPanel != null) pickupPanel.layout();
     },
 });

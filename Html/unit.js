@@ -52,6 +52,16 @@ class Unit extends BaseUnit
         return u;
     }
 
+    getItemCapacity()
+    {
+        return this.features.itemCapacity || 0;
+    }
+
+    hasFreeItemSlot()
+    {
+        return this.getItemCount() < this.getItemCapacity();
+    }
+
     getItems()
     {
         if(!Array.isArray(this.features.items)) this.features.items = [];
@@ -72,6 +82,7 @@ class Unit extends BaseUnit
     addItem(item)
     {
         if(!Array.isArray(this.features.items)) this.features.items = [];
+        if(!this.hasFreeItemSlot()) return false;
         if(item instanceof Item)
         {
             this.features.items.push(item.serialize());
@@ -88,6 +99,7 @@ class Unit extends BaseUnit
         {
             this.features.items.push(clone(item));
         }
+        return true;
     }
 
     removeItem(index=0)

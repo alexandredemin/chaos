@@ -252,12 +252,17 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 3,
+            itemCapacity: 2,
         },
         abilities: {
             use: {
                 type: 'use',
                 config: {}
-            }
+            },
+            pickup: {
+                type: 'pickup',
+                config: {}
+            }   
         }
     },
 
@@ -613,6 +618,12 @@ const abilities = {
         title: 'Use',
         icon: null,
         order: 100,
+        ability: null,
+    },
+    'pickup': {
+        title: 'Pick up',
+        icon: null,
+        order: 90,
         ability: null,
     },
 };

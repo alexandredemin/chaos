@@ -311,6 +311,188 @@ class ScrollMsg extends Phaser.GameObjects.Image
     }
 }
 
+//---------------------------- PickUpPanel class ----------------------------
+class PickUpPanel
+{
+    constructor(scene)
+    {
+        this.scene = scene;
+        this.visible = false;
+        this.callbackObject = null;
+        this.itemEntity = null;
+        this.unit = null;
+        this.scrollOffset = 0;
+        this.maxVisibleItems = 5;
+        this.itemButtons = [];
+
+        this.overlay = scene.add.rectangle(0, 0, scene.scale.width, scene.scale.height, 0x000000, 0.45)
+        .setOrigin(0, 0)
+        .setDepth(20000)
+        .setInteractive();
+        this.overlay.on('pointerdown', () => {});
+        this.overlay.setVisible(false);
+
+        this.bg = scene.add.rectangle(0, 0, 340, 280, 0x111111, 0.96)
+        .setOrigin(0, 0)
+        .setStrokeStyle(2, 0x666666, 1)
+        .setDepth(20001);
+        this.bg.setVisible(false);
+
+        this.title = scene.add.text(0, 0, 'Pick up item', {
+            fontSize: '20px',
+            color: '#ffffff'
+        }).setDepth(20002);
+        this.title.setVisible(false);
+
+        this.capacityText = scene.add.text(0, 0, '', {
+            fontSize: '14px',
+            color: '#cccccc'
+        }).setDepth(20002);
+        this.capacityText.setVisible(false);
+
+        this.btnUp = new TextButton(0, 0, '▲', scene, () => this.scroll(-1));
+        this.btnUp.setDepth(20002);
+        this.btnUp.setVisible(false);
+
+        this.btnDown = new TextButton(0, 0, '▼', scene, () => this.scroll(1));
+        this.btnDown.setDepth(20002);
+        this.btnDown.setVisible(false);
+
+        this.btnCancel = new TextButton(0, 0, 'Cancel', scene, () => this.hide(null));
+        this.btnCancel.setDepth(20002);
+        this.btnCancel.setVisible(false);
+
+        this.layout();
+    }
+
+    layout()
+    {
+        const w = this.scene.scale.width;
+        const h = this.scene.scale.height;
+
+        this.overlay.setSize(w, h);
+
+        const panelW = 340;
+        const panelH = 280;
+        const x = Math.round((w - panelW) / 2);
+        const y = Math.round((h - panelH) / 2);
+
+        this.bg.setPosition(x, y);
+        this.bg.setSize(panelW, panelH);
+
+        this.title.setPosition(x + 16, y + 12);
+        this.capacityText.setPosition(x + 16, y + 40);
+
+        this.btnUp.setPosition(x + panelW - 30, y + 55);
+        this.btnDown.setPosition(x + panelW - 30, y + panelH - 55);
+        this.btnCancel.setPosition(x + panelW / 2, y + panelH - 24);
+
+        this.renderItems();
+    }
+
+    show(itemEntity, unit, callbackObject)
+    {
+        this.itemEntity = itemEntity;
+        this.unit = unit;
+        this.callbackObject = callbackObject;
+        this.scrollOffset = 0;
+        this.visible = true;
+        pointerBlocked = true;
+
+        this.overlay.setVisible(true);
+        this.bg.setVisible(true);
+        this.title.setVisible(true);
+        this.capacityText.setVisible(true);
+        this.btnCancel.setVisible(true);
+
+        this.layout();
+        this.renderItems();
+    }
+
+    hide(result)
+    {
+        this.visible = false;
+        pointerBlocked = false;
+
+        this.overlay.setVisible(false);
+        this.bg.setVisible(false);
+        this.title.setVisible(false);
+        this.capacityText.setVisible(false);
+        this.btnUp.setVisible(false);
+        this.btnDown.setVisible(false);
+        this.btnCancel.setVisible(false);
+
+        for(let i = 0; i < this.itemButtons.length; i++)
+        {
+            this.itemButtons[i].destroy();
+        }
+        this.itemButtons = [];
+
+        const cb = this.callbackObject;
+        this.callbackObject = null;
+        this.itemEntity = null;
+        this.unit = null;
+
+        if(cb != null && typeof cb.onCallback === 'function')
+        {
+            cb.onCallback(result);
+        }
+    }
+
+    scroll(delta)
+    {
+        if(this.itemEntity == null) return;
+
+        const items = this.itemEntity.getItems();
+        const maxOffset = Math.max(0, items.length - this.maxVisibleItems);
+
+        this.scrollOffset += delta;
+        if(this.scrollOffset < 0) this.scrollOffset = 0;
+        if(this.scrollOffset > maxOffset) this.scrollOffset = maxOffset;
+
+        this.renderItems();
+    }
+
+    renderItems()
+    {
+        for(let i = 0; i < this.itemButtons.length; i++)
+        {
+            this.itemButtons[i].destroy();
+        }
+        this.itemButtons = [];
+
+        if(!this.visible || this.itemEntity == null || this.unit == null) return;
+
+        const items = this.itemEntity.getItems();
+        const panelX = this.bg.x;
+        const panelY = this.bg.y;
+        const listStartY = panelY + 78;
+        const rowHeight = 28;
+
+        this.capacityText.setText('Capacity: ' + this.unit.getItemCount() + '/' + this.unit.getItemCapacity());
+
+        const maxOffset = Math.max(0, items.length - this.maxVisibleItems);
+        this.btnUp.setVisible(this.scrollOffset > 0);
+        this.btnDown.setVisible(this.scrollOffset < maxOffset);
+
+        for(let i = 0; i < this.maxVisibleItems; i++)
+        {
+            const itemIndex = this.scrollOffset + i;
+            if(itemIndex >= items.length) break;
+
+            const item = items[itemIndex];
+            const label = item.getDisplayName();
+
+            const btn = new TextButton(panelX + 170, listStartY + i * rowHeight, label, this.scene, () => {
+                this.hide({ itemIndex: itemIndex });
+            });
+
+            btn.setDepth(20002);
+            this.itemButtons.push(btn);
+        }
+    }
+}
+
 //---------------------------- RangeRenderer class ----------------------------
 class RangeRenderer extends Phaser.GameObjects.RenderTexture
 {
