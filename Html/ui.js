@@ -327,6 +327,7 @@ class PickUpPanel
         this.itemRowBgs = [];
         this.itemLabels = [];
         this.itemIcons = [];
+        this.metrics = null;
 
         this.overlay = scene.add.rectangle(0, 0, scene.scale.width, scene.scale.height, 0x000000, 0.45)
         .setOrigin(0, 0)
@@ -380,27 +381,74 @@ class PickUpPanel
         this.itemIcons = [];
     }
 
-    layout()
+    getMetrics()
     {
         const w = this.scene.scale.width;
         const h = this.scene.scale.height;
 
-        this.overlay.setSize(w, h);
+        const shortSide = Math.min(w, h);
+        const scale = Phaser.Math.Clamp(shortSide / 720, 0.75, 1.45);
 
-        const panelW = 340;
-        const panelH = 280;
-        const x = Math.round((w - panelW) / 2);
-        const y = Math.round((h - panelH) / 2);
+        const panelW = Math.round(Phaser.Math.Clamp(w * 0.52, 280, 520));
+        const panelH = Math.round(Phaser.Math.Clamp(h * 0.50, 240, 430));
+
+        const padding = Math.round(12 * scale);
+        const titleFont = Math.round(20 * scale);
+        const infoFont = Math.round(14 * scale);
+        const itemFont = Math.round(14 * scale);
+        const rowHeight = Math.round(34 * scale);
+        const rowBgHeight = Math.round(28 * scale);
+        const iconSize = Math.round(20 * scale);
+
+        const headerHeight = Math.round(78 * scale);
+        const footerHeight = Math.round(48 * scale);
+
+        let maxVisibleItems = Math.floor((panelH - headerHeight - footerHeight) / rowHeight);
+        if(maxVisibleItems < 3) maxVisibleItems = 3;
+
+        return {
+            w,
+            h,
+            scale,
+            panelW,
+            panelH,
+            padding,
+            titleFont,
+            infoFont,
+            itemFont,
+            rowHeight,
+            rowBgHeight,
+            iconSize,
+            headerHeight,
+            footerHeight,
+            maxVisibleItems
+        };
+    }
+
+    layout()
+    {
+        const m = this.getMetrics();
+        this.metrics = m;
+        this.maxVisibleItems = m.maxVisibleItems;
+
+        this.overlay.setSize(m.w, m.h);
+
+        const x = Math.round((m.w - m.panelW) / 2);
+        const y = Math.round((m.h - m.panelH) / 2);
 
         this.bg.setPosition(x, y);
-        this.bg.setSize(panelW, panelH);
+        this.bg.setSize(m.panelW, m.panelH);
+        this.bg.setDisplaySize(m.panelW, m.panelH);
 
-        this.title.setPosition(x + 16, y + 12);
-        this.capacityText.setPosition(x + 16, y + 40);
+        this.title.setPosition(x + m.padding, y + Math.round(10 * m.scale));
+        this.title.setFontSize(m.titleFont);
 
-        this.btnUp.setPosition(x + panelW - 30, y + 55);
-        this.btnDown.setPosition(x + panelW - 30, y + panelH - 55);
-        this.btnCancel.setPosition(x + panelW / 2, y + panelH - 24);
+        this.capacityText.setPosition(x + m.padding, y + Math.round(38 * m.scale));
+        this.capacityText.setFontSize(m.infoFont);
+
+        this.btnUp.setPosition(x + m.panelW - Math.round(24 * m.scale), y + Math.round(56 * m.scale));
+        this.btnDown.setPosition(x + m.panelW - Math.round(24 * m.scale), y + m.panelH - Math.round(56 * m.scale));
+        this.btnCancel.setPosition(x + m.panelW / 2, y + m.panelH - Math.round(22 * m.scale));
 
         this.renderItems();
     }
@@ -467,19 +515,20 @@ class PickUpPanel
     renderItems()
     {
         this.clearItemRows();
+
         if(!this.visible || this.itemEntity == null || this.unit == null) return;
 
         const items = this.itemEntity.getItems();
+        const m = this.metrics || this.getMetrics();
+
         const panelX = this.bg.x;
         const panelY = this.bg.y;
 
-        const listStartY = panelY + 78;
-        const rowHeight = 32;
-        const rowX = panelX + 14;
-        const rowWidth = 280;
-        const iconX = rowX + 16;
-        const textX = rowX + 34;
-        const maxIconSize = 18;
+        const rowX = panelX + m.padding;
+        const rowWidth = m.panelW - m.padding * 2 - Math.round(20 * m.scale);
+        const listStartY = panelY + m.headerHeight;
+        const iconX = rowX + Math.round(14 * m.scale);
+        const textX = rowX + Math.round(30 * m.scale);
 
         this.capacityText.setText('Capacity: ' + this.unit.getItemCount() + '/' + this.unit.getItemCapacity());
 
@@ -493,38 +542,44 @@ class PickUpPanel
             if(itemIndex >= items.length) break;
 
             const item = items[itemIndex];
-            const rowY = listStartY + i * rowHeight;
+            const rowY = listStartY + i * m.rowHeight;
             const label = item.getDisplayName();
 
-            const rowBg = this.scene.add.rectangle(rowX + rowWidth / 2, rowY, rowWidth, 26, 0x1a1a1a, 0.95);
+            const rowBg = this.scene.add.rectangle(rowX + rowWidth / 2, rowY, rowWidth, m.rowBgHeight, 0x1a1a1a, 0.95);
             rowBg.setStrokeStyle(1, 0x4b5563, 1);
             rowBg.setDepth(20002);
             rowBg.setInteractive({ useHandCursor: true });
             rowBg.on('pointerover', () => {rowBg.setFillStyle(0x2a2a2a, 0.98);});
             rowBg.on('pointerout', () => {rowBg.setFillStyle(0x1a1a1a, 0.95);});
-            rowBg.on('pointerdown', () =>{this.hide({ itemIndex: itemIndex });});
-            this.itemRowBgs.push(rowBg);
+            rowBg.on('pointerdown', () => {this.hide({ itemIndex: itemIndex });});
 
-            if(item.config != null && item.config.sprite != null && item.config.sprite !== '')
+            this.itemRowBgs.push(rowBg);
+            this.itemButtons.push(rowBg);
+
+            if(item.config != null && item.config.sprite != null && item.config.sprite !== '' && this.scene.textures.exists(item.config.sprite))
             {
                 const icon = this.scene.add.image(iconX, rowY, item.config.sprite);
                 icon.setOrigin(0.5, 0.5);
+
                 const frame = icon.texture ? icon.texture.get() : null;
                 if(frame != null && frame.width > 0 && frame.height > 0)
                 {
-                    const scale = Math.min(maxIconSize / frame.width, maxIconSize / frame.height);
+                    const scale = Math.min(m.iconSize / frame.width, m.iconSize / frame.height);
                     icon.setScale(scale);
                 }
+
                 icon.setDepth(20003);
                 this.itemIcons.push(icon);
             }
 
-            const text = this.scene.add.text(textX, rowY - 9, label, {fontSize: '14px', color: '#ffffff'});
+            const text = this.scene.add.text(textX, rowY - Math.round(m.itemFont * 0.55), label, {
+                fontSize: m.itemFont + 'px',
+                color: '#ffffff',
+                wordWrap: { width: rowWidth - Math.round(42 * m.scale) }
+            });
             text.setOrigin(0, 0);
             text.setDepth(20003);
             this.itemLabels.push(text);
-
-            this.itemButtons.push(rowBg);
         }
     }
 
