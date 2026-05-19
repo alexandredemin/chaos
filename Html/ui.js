@@ -324,6 +324,9 @@ class PickUpPanel
         this.scrollOffset = 0;
         this.maxVisibleItems = 5;
         this.itemButtons = [];
+        this.itemRowBgs = [];
+        this.itemLabels = [];
+        this.itemIcons = [];
 
         this.overlay = scene.add.rectangle(0, 0, scene.scale.width, scene.scale.height, 0x000000, 0.45)
         .setOrigin(0, 0)
@@ -363,6 +366,18 @@ class PickUpPanel
         this.btnCancel.setVisible(false);
 
         this.layout();
+    }
+
+    clearItemRows()
+    {
+        for(let i = 0; i < this.itemButtons.length; i++) this.itemButtons[i].destroy();
+        this.itemButtons = [];
+        for(let i = 0; i < this.itemRowBgs.length; i++) this.itemRowBgs[i].destroy();
+        this.itemRowBgs = [];
+        for(let i = 0; i < this.itemLabels.length; i++) this.itemLabels[i].destroy();
+        this.itemLabels = [];
+        for(let i = 0; i < this.itemIcons.length; i++) this.itemIcons[i].destroy();
+        this.itemIcons = [];
     }
 
     layout()
@@ -422,11 +437,7 @@ class PickUpPanel
         this.btnDown.setVisible(false);
         this.btnCancel.setVisible(false);
 
-        for(let i = 0; i < this.itemButtons.length; i++)
-        {
-            this.itemButtons[i].destroy();
-        }
-        this.itemButtons = [];
+        this.clearItemRows();
 
         const cb = this.callbackObject;
         this.callbackObject = null;
@@ -455,19 +466,20 @@ class PickUpPanel
 
     renderItems()
     {
-        for(let i = 0; i < this.itemButtons.length; i++)
-        {
-            this.itemButtons[i].destroy();
-        }
-        this.itemButtons = [];
-
+        this.clearItemRows();
         if(!this.visible || this.itemEntity == null || this.unit == null) return;
 
         const items = this.itemEntity.getItems();
         const panelX = this.bg.x;
         const panelY = this.bg.y;
+
         const listStartY = panelY + 78;
-        const rowHeight = 28;
+        const rowHeight = 32;
+        const rowX = panelX + 14;
+        const rowWidth = 280;
+        const iconX = rowX + 16;
+        const textX = rowX + 34;
+        const maxIconSize = 18;
 
         this.capacityText.setText('Capacity: ' + this.unit.getItemCount() + '/' + this.unit.getItemCapacity());
 
@@ -481,16 +493,41 @@ class PickUpPanel
             if(itemIndex >= items.length) break;
 
             const item = items[itemIndex];
+            const rowY = listStartY + i * rowHeight;
             const label = item.getDisplayName();
 
-            const btn = new TextButton(panelX + 170, listStartY + i * rowHeight, label, this.scene, () => {
-                this.hide({ itemIndex: itemIndex });
-            });
+            const rowBg = this.scene.add.rectangle(rowX + rowWidth / 2, rowY, rowWidth, 26, 0x1a1a1a, 0.95);
+            rowBg.setStrokeStyle(1, 0x4b5563, 1);
+            rowBg.setDepth(20002);
+            rowBg.setInteractive({ useHandCursor: true });
+            rowBg.on('pointerover', () => {rowBg.setFillStyle(0x2a2a2a, 0.98);});
+            rowBg.on('pointerout', () => {rowBg.setFillStyle(0x1a1a1a, 0.95);});
+            rowBg.on('pointerdown', () =>{this.hide({ itemIndex: itemIndex });});
+            this.itemRowBgs.push(rowBg);
 
-            btn.setDepth(20002);
-            this.itemButtons.push(btn);
+            if(item.config != null && item.config.sprite != null && item.config.sprite !== '')
+            {
+                const icon = this.scene.add.image(iconX, rowY, item.config.sprite);
+                icon.setOrigin(0.5, 0.5);
+                const frame = icon.texture ? icon.texture.get() : null;
+                if(frame != null && frame.width > 0 && frame.height > 0)
+                {
+                    const scale = Math.min(maxIconSize / frame.width, maxIconSize / frame.height);
+                    icon.setScale(scale);
+                }
+                icon.setDepth(20003);
+                this.itemIcons.push(icon);
+            }
+
+            const text = this.scene.add.text(textX, rowY - 9, label, {fontSize: '14px', color: '#ffffff'});
+            text.setOrigin(0, 0);
+            text.setDepth(20003);
+            this.itemLabels.push(text);
+
+            this.itemButtons.push(rowBg);
         }
     }
+
 }
 
 //---------------------------- RangeRenderer class ----------------------------
