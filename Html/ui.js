@@ -32,6 +32,7 @@ class DebugOverlay {
 
 
 //---------------------------- UI classes ----------------------------
+/*
 class TextButton extends Phaser.GameObjects.Text
 {
     constructor(x, y, label, scene, callback)
@@ -46,6 +47,152 @@ class TextButton extends Phaser.GameObjects.Text
         button.on('pointerover', () => {if(!pointerBlocked)button.setStyle({ fill: '#f39c12' })});
         button.on('pointerout', () => button.setStyle({ fill: '#FFF' }));
     }
+}
+*/
+class TextButton extends Phaser.GameObjects.Container
+{
+	constructor(x, y, label, scene, callback)
+	{
+		super(scene, x, y);
+
+		this.scene = scene;
+		this.label = label;
+		this.callback = callback;
+
+		this.uiScale = 1.0;
+		this.baseFontSize = 18;
+		this.basePaddingX = 14;
+		this.basePaddingY = 8;
+
+		this.bgNormalFill = 0x111111;
+		this.bgHoverFill = 0x2a2a2a;
+		this.bgNormalAlpha = 0.96;
+		this.bgHoverAlpha = 0.98;
+		this.bgNormalStroke = 0x666666;
+		this.bgHoverStroke = 0xaaaaaa;
+
+		this.bg = scene.add.rectangle(0, 0, 10, 10, this.bgNormalFill, this.bgNormalAlpha);
+		this.bg.setOrigin(0, 0);
+		this.bg.setStrokeStyle(1, this.bgNormalStroke, 1);
+
+		this.textObject = scene.add.text(0, 0, label, {
+			fontSize: this.baseFontSize + 'px',
+			color: '#ffffff',
+			align: 'center'
+		});
+		this.textObject.setOrigin(0, 0);
+
+		this.add(this.bg);
+		this.add(this.textObject);
+
+		scene.add.existing(this);
+
+		this.buttonWidth = 10;
+		this.buttonHeight = 10;
+
+		this.applyMetrics();
+		this.enableInput();
+	}
+
+	enableInput()
+	{
+		this.bg.setInteractive({ useHandCursor: true });
+
+		this.bg.on('pointerdown', () =>
+		{
+			if(pointerBlocked) return;
+			if(this.callback != null) this.callback();
+		});
+
+		this.bg.on('pointerover', () =>
+		{
+			if(pointerBlocked) return;
+			this.bg.setFillStyle(this.bgHoverFill, this.bgHoverAlpha);
+			this.bg.setStrokeStyle(1, this.bgHoverStroke, 1);
+		});
+
+		this.bg.on('pointerout', () =>
+		{
+			this.bg.setFillStyle(this.bgNormalFill, this.bgNormalAlpha);
+			this.bg.setStrokeStyle(1, this.bgNormalStroke, 1);
+		});
+	}
+
+	applyMetrics()
+	{
+		const fontSize = Math.round(this.baseFontSize * this.uiScale);
+		const paddingX = Math.round(this.basePaddingX * this.uiScale);
+		const paddingY = Math.round(this.basePaddingY * this.uiScale);
+
+		this.textObject.setFontSize(fontSize);
+		this.textObject.setText(this.label);
+
+		const width = Math.ceil(this.textObject.width + paddingX * 2);
+		const height = Math.ceil(this.textObject.height + paddingY * 2);
+
+		this.buttonWidth = width;
+		this.buttonHeight = height;
+
+		// Фон рисуем от левого верхнего угла, но сам контейнер остаётся центрированным
+		this.bg.setPosition(-width / 2, -height / 2);
+		this.bg.setSize(width, height);
+		this.bg.setDisplaySize(width, height);
+
+		// Текст центрируем вручную
+		this.textObject.setPosition(-this.textObject.width / 2, -this.textObject.height / 2);
+
+		// Обновляем hit area фона
+		if(this.bg.input && this.bg.input.hitArea)
+		{
+			this.bg.input.hitArea.setTo(0, 0, width, height);
+		}
+
+		this.setSize(width, height);
+	}
+
+	setText(label)
+	{
+		this.label = label;
+		this.applyMetrics();
+		return this;
+	}
+
+	setScale(x, y = x)
+	{
+		// Для UI используем scale как коэффициент перерасчёта размеров
+		this.uiScale = x;
+		this.applyMetrics();
+		return this;
+	}
+
+	setDepth(depth)
+	{
+		super.setDepth(depth);
+		this.bg.setDepth(depth);
+		this.textObject.setDepth(depth + 0.01);
+		return this;
+	}
+
+	setVisible(visible)
+	{
+		super.setVisible(visible);
+		this.bg.setVisible(visible);
+		this.textObject.setVisible(visible);
+		return this;
+	}
+
+	setPosition(x, y)
+	{
+		super.setPosition(x, y);
+		return this;
+	}
+
+	destroy(fromScene)
+	{
+		if(this.bg) this.bg.destroy();
+		if(this.textObject) this.textObject.destroy();
+		super.destroy(fromScene);
+	}
 }
 
 //---------------------------- Menu class ------------------------------
@@ -314,275 +461,400 @@ class ScrollMsg extends Phaser.GameObjects.Image
 //---------------------------- PickUpPanel class ----------------------------
 class PickUpPanel
 {
-    constructor(scene)
-    {
-        this.scene = scene;
-        this.visible = false;
-        this.callbackObject = null;
-        this.itemEntity = null;
-        this.unit = null;
-        this.scrollOffset = 0;
-        this.maxVisibleItems = 5;
-        this.itemButtons = [];
-        this.itemRowBgs = [];
-        this.itemLabels = [];
-        this.itemIcons = [];
-        this.metrics = null;
+	constructor(scene)
+	{
+		this.scene = scene;
+		this.visible = false;
+		this.callbackObject = null;
+		this.itemEntity = null;
+		this.unit = null;
+		this.scrollOffset = 0;
+		this.maxVisibleItems = 5;
 
-        this.overlay = scene.add.rectangle(0, 0, scene.scale.width, scene.scale.height, 0x000000, 0.45)
-        .setOrigin(0, 0)
-        .setDepth(20000)
-        .setInteractive();
-        this.overlay.on('pointerdown', () => {});
-        this.overlay.setVisible(false);
+		this.itemButtons = [];
+		this.itemRowBgs = [];
+		this.itemLabels = [];
+		this.itemIcons = [];
+		this.metrics = null;
 
-        this.bg = scene.add.rectangle(0, 0, 340, 280, 0x111111, 0.96)
-        .setOrigin(0, 0)
-        .setStrokeStyle(2, 0x666666, 1)
-        .setDepth(20001);
-        this.bg.setVisible(false);
+		this.overlay = scene.add.rectangle(0, 0, scene.scale.width, scene.scale.height, 0x000000, 0.45)
+			.setOrigin(0, 0)
+			.setDepth(20000)
+			.setInteractive();
+		this.overlay.on('pointerdown', () => {});
+		this.overlay.setVisible(false);
 
-        this.title = scene.add.text(0, 0, 'Pick up item', {
-            fontSize: '20px',
-            color: '#ffffff'
-        }).setDepth(20002);
-        this.title.setVisible(false);
+		this.bg = scene.add.rectangle(0, 0, 340, 280, 0x111111, 0.96)
+			.setOrigin(0, 0)
+			.setStrokeStyle(2, 0x666666, 1)
+			.setDepth(20001);
+		this.bg.setVisible(false);
 
-        this.capacityText = scene.add.text(0, 0, '', {
-            fontSize: '14px',
-            color: '#cccccc'
-        }).setDepth(20002);
-        this.capacityText.setVisible(false);
+		this.title = scene.add.text(0, 0, 'Pick up item', {
+			fontSize: '20px',
+			color: '#ffffff'
+		}).setDepth(20002);
+		this.title.setVisible(false);
 
-        this.btnUp = new TextButton(0, 0, '▲', scene, () => this.scroll(-1));
-        this.btnUp.setDepth(20002);
-        this.btnUp.setVisible(false);
+		this.capacityText = scene.add.text(0, 0, '', {
+			fontSize: '14px',
+			color: '#cccccc'
+		}).setDepth(20002);
+		this.capacityText.setVisible(false);
 
-        this.btnDown = new TextButton(0, 0, '▼', scene, () => this.scroll(1));
-        this.btnDown.setDepth(20002);
-        this.btnDown.setVisible(false);
+		this.scrollInfoText = scene.add.text(0, 0, '', {
+			fontSize: '14px',
+			color: '#bbbbbb'
+		}).setDepth(20002);
+		this.scrollInfoText.setVisible(false);
 
-        this.btnCancel = new TextButton(0, 0, 'Cancel', scene, () => this.hide(null));
-        this.btnCancel.setDepth(20002);
-        this.btnCancel.setVisible(false);
+		// Только стрелки, без подложек
+		this.btnUpArrow = scene.add.triangle(
+			0, 0,
+			0, 50,
+			100, 50,
+			50, 0,
+			0xd8d8d8, 0.92
+		).setDepth(20003).setInteractive({ useHandCursor: true });
+		this.btnUpArrow.on('pointerdown', () => this.scroll(-1));
+		this.btnUpArrow.on('pointerover', () => this.setArrowHover(this.btnUpArrow, true));
+		this.btnUpArrow.on('pointerout', () => this.setArrowHover(this.btnUpArrow, false));
+		this.btnUpArrow.setVisible(false);
 
-        this.layout();
-    }
+		this.btnDownArrow = scene.add.triangle(
+			0, 0,
+			0, 0,
+			100, 0,
+			50, 50,
+			0xd8d8d8, 0.92
+		).setDepth(20003).setInteractive({ useHandCursor: true });
+		this.btnDownArrow.on('pointerdown', () => this.scroll(1));
+		this.btnDownArrow.on('pointerover', () => this.setArrowHover(this.btnDownArrow, true));
+		this.btnDownArrow.on('pointerout', () => this.setArrowHover(this.btnDownArrow, false));
+		this.btnDownArrow.setVisible(false);
 
-    clearItemRows()
-    {
-        for(let i = 0; i < this.itemButtons.length; i++) this.itemButtons[i].destroy();
-        this.itemButtons = [];
-        for(let i = 0; i < this.itemRowBgs.length; i++) this.itemRowBgs[i].destroy();
-        this.itemRowBgs = [];
-        for(let i = 0; i < this.itemLabels.length; i++) this.itemLabels[i].destroy();
-        this.itemLabels = [];
-        for(let i = 0; i < this.itemIcons.length; i++) this.itemIcons[i].destroy();
-        this.itemIcons = [];
-    }
+		this.btnCancel = new TextButton(0, 0, 'Cancel', scene, () => this.hide(null));
+		this.btnCancel.setDepth(20002);
+		this.btnCancel.setVisible(false);
 
-    getMetrics()
-    {
-        const w = this.scene.scale.width;
-        const h = this.scene.scale.height;
+		this.layout();
+	}
 
-        const shortSide = Math.min(w, h);
-        const scale = Phaser.Math.Clamp(shortSide / 720, 0.75, 1.45);
+	clearItemRows()
+	{
+		for(let i = 0; i < this.itemButtons.length; i++) this.itemButtons[i].destroy();
+		this.itemButtons = [];
 
-        const panelW = Math.round(Phaser.Math.Clamp(w * 0.52, 280, 520));
-        const panelH = Math.round(Phaser.Math.Clamp(h * 0.50, 240, 430));
+		for(let i = 0; i < this.itemRowBgs.length; i++) this.itemRowBgs[i].destroy();
+		this.itemRowBgs = [];
 
-        const padding = Math.round(12 * scale);
-        const titleFont = Math.round(20 * scale);
-        const infoFont = Math.round(14 * scale);
-        const itemFont = Math.round(14 * scale);
-        const rowHeight = Math.round(34 * scale);
-        const rowBgHeight = Math.round(28 * scale);
-        const iconSize = Math.round(20 * scale);
+		for(let i = 0; i < this.itemLabels.length; i++) this.itemLabels[i].destroy();
+		this.itemLabels = [];
 
-        const headerHeight = Math.round(78 * scale);
-        const footerHeight = Math.round(48 * scale);
+		for(let i = 0; i < this.itemIcons.length; i++) this.itemIcons[i].destroy();
+		this.itemIcons = [];
+	}
 
-        let maxVisibleItems = Math.floor((panelH - headerHeight - footerHeight) / rowHeight);
-        if(maxVisibleItems < 3) maxVisibleItems = 3;
+	getMetrics()
+	{
+		const w = this.scene.scale.width;
+		const h = this.scene.scale.height;
 
-        return {
-            w,
-            h,
-            scale,
-            panelW,
-            panelH,
-            padding,
-            titleFont,
-            infoFont,
-            itemFont,
-            rowHeight,
-            rowBgHeight,
-            iconSize,
-            headerHeight,
-            footerHeight,
-            maxVisibleItems
-        };
-    }
+		const shortSide = Math.min(w, h);
 
-    layout()
-    {
-        const m = this.getMetrics();
-        this.metrics = m;
-        this.maxVisibleItems = m.maxVisibleItems;
+		// Чем меньше базовая короткая сторона, тем сильнее растёт интерфейс
+		const baseShortSide = 560;
+		const scale = Phaser.Math.Clamp(shortSide / baseShortSide, 1.05, 2.10);
 
-        this.overlay.setSize(m.w, m.h);
+		const panelW = Math.round(Phaser.Math.Clamp(w * 0.72, 380, 760));
+		const panelH = Math.round(Phaser.Math.Clamp(h * 0.68, 320, 620));
 
-        const x = Math.round((m.w - m.panelW) / 2);
-        const y = Math.round((m.h - m.panelH) / 2);
+		const padding = Math.round(16 * scale);
 
-        this.bg.setPosition(x, y);
-        this.bg.setSize(m.panelW, m.panelH);
-        this.bg.setDisplaySize(m.panelW, m.panelH);
+		const titleFont = Math.round(26 * scale);
+		const infoFont = Math.round(18 * scale);
+		const itemFont = Math.round(20 * scale);
 
-        this.title.setPosition(x + m.padding, y + Math.round(10 * m.scale));
-        this.title.setFontSize(m.titleFont);
+		const rowHeight = Math.round(50 * scale);
+		const rowBgHeight = Math.round(42 * scale);
 
-        this.capacityText.setPosition(x + m.padding, y + Math.round(38 * m.scale));
-        this.capacityText.setFontSize(m.infoFont);
+		// Иконки в панели должны быть явно крупнее, чем на карте
+		const iconSize = Math.round(40 * scale);
 
-        this.btnUp.setPosition(x + m.panelW - Math.round(24 * m.scale), y + Math.round(56 * m.scale));
-        this.btnDown.setPosition(x + m.panelW - Math.round(24 * m.scale), y + m.panelH - Math.round(56 * m.scale));
-        this.btnCancel.setPosition(x + m.panelW / 2, y + m.panelH - Math.round(22 * m.scale));
+		const arrowWidth = Math.round(94 * scale);
+		const arrowHeight = Math.round(34 * scale);
+		const arrowGap = Math.round(10 * scale);
 
-        this.renderItems();
-    }
+		const topInfoBlockHeight = Math.round(84 * scale);
+		const bottomBlockHeight = Math.round(66 * scale);
 
-    show(itemEntity, unit, callbackObject)
-    {
-        this.itemEntity = itemEntity;
-        this.unit = unit;
-        this.callbackObject = callbackObject;
-        this.scrollOffset = 0;
-        this.visible = true;
-        pointerBlocked = true;
+		const cancelButtonScale = Phaser.Math.Clamp(scale * 1.12, 1.05, 2.20);
 
-        this.overlay.setVisible(true);
-        this.bg.setVisible(true);
-        this.title.setVisible(true);
-        this.capacityText.setVisible(true);
-        this.btnCancel.setVisible(true);
+		let maxVisibleItems = Math.floor(
+			(panelH - topInfoBlockHeight - bottomBlockHeight - arrowHeight * 2 - arrowGap * 2) / rowHeight
+		);
+		if(maxVisibleItems < 3) maxVisibleItems = 3;
 
-        this.layout();
-        this.renderItems();
-    }
+		return {
+			w,
+			h,
+			scale,
+			panelW,
+			panelH,
+			padding,
+			titleFont,
+			infoFont,
+			itemFont,
+			rowHeight,
+			rowBgHeight,
+			iconSize,
+			arrowWidth,
+			arrowHeight,
+			arrowGap,
+			topInfoBlockHeight,
+			bottomBlockHeight,
+			cancelButtonScale,
+			maxVisibleItems
+		};
+	}
 
-    hide(result)
-    {
-        this.visible = false;
-        pointerBlocked = false;
+	applyButtonScale(btn, scale)
+	{
+		if(btn == null) return;
 
-        this.overlay.setVisible(false);
-        this.bg.setVisible(false);
-        this.title.setVisible(false);
-        this.capacityText.setVisible(false);
-        this.btnUp.setVisible(false);
-        this.btnDown.setVisible(false);
-        this.btnCancel.setVisible(false);
+		if(typeof btn.setScale === 'function')
+		{
+			btn.setScale(scale);
+		}
+		else if(btn.container && typeof btn.container.setScale === 'function')
+		{
+			btn.container.setScale(scale);
+		}
+	}
 
-        this.clearItemRows();
+	setArrowHover(arrow, hovered)
+	{
+		if(arrow == null) return;
 
-        const cb = this.callbackObject;
-        this.callbackObject = null;
-        this.itemEntity = null;
-        this.unit = null;
+		if(hovered)
+		{
+			arrow.setFillStyle(0xffffff, 1.0);
+			arrow.setAlpha(1.0);
+		}
+		else
+		{
+			arrow.setFillStyle(0xd8d8d8, 0.92);
+			arrow.setAlpha(0.92);
+		}
+	}
 
-        if(cb != null && typeof cb.onCallback === 'function')
-        {
-            cb.onCallback(result);
-        }
-    }
+	layout()
+	{
+		const m = this.getMetrics();
+		this.metrics = m;
+		this.maxVisibleItems = m.maxVisibleItems;
 
-    scroll(delta)
-    {
-        if(this.itemEntity == null) return;
+		this.overlay.setSize(m.w, m.h);
 
-        const items = this.itemEntity.getItems();
-        const maxOffset = Math.max(0, items.length - this.maxVisibleItems);
+		const x = Math.round((m.w - m.panelW) / 2);
+		const y = Math.round((m.h - m.panelH) / 2);
 
-        this.scrollOffset += delta;
-        if(this.scrollOffset < 0) this.scrollOffset = 0;
-        if(this.scrollOffset > maxOffset) this.scrollOffset = maxOffset;
+		this.bg.setPosition(x, y);
+		this.bg.setSize(m.panelW, m.panelH);
+		this.bg.setDisplaySize(m.panelW, m.panelH);
 
-        this.renderItems();
-    }
+		this.title.setPosition(x + m.padding, y + Math.round(12 * m.scale));
+		this.title.setFontSize(m.titleFont);
 
-    renderItems()
-    {
-        this.clearItemRows();
+		this.capacityText.setPosition(x + m.padding, y + Math.round(50 * m.scale));
+		this.capacityText.setFontSize(m.infoFont);
 
-        if(!this.visible || this.itemEntity == null || this.unit == null) return;
+		this.scrollInfoText.setPosition(
+			x + m.panelW - Math.round(130 * m.scale),
+			y + Math.round(50 * m.scale)
+		);
+		this.scrollInfoText.setFontSize(m.infoFont);
 
-        const items = this.itemEntity.getItems();
-        const m = this.metrics || this.getMetrics();
+		const listStartY = y + m.topInfoBlockHeight + m.arrowHeight + m.arrowGap + Math.round(m.rowBgHeight / 2);
+		const lastVisibleRowY = listStartY + (m.maxVisibleItems - 1) * m.rowHeight;
 
-        const panelX = this.bg.x;
-        const panelY = this.bg.y;
+		const arrowX = x + m.panelW / 2;
+		const topArrowY = listStartY - Math.round(m.rowBgHeight / 2) - m.arrowGap - Math.round(m.arrowHeight / 2);
+		const bottomArrowY = lastVisibleRowY + Math.round(m.rowBgHeight / 2) + m.arrowGap + Math.round(m.arrowHeight / 2);
 
-        const rowX = panelX + m.padding;
-        const rowWidth = m.panelW - m.padding * 2 - Math.round(20 * m.scale);
-        const listStartY = panelY + m.headerHeight;
-        const iconX = rowX + Math.round(14 * m.scale);
-        const textX = rowX + Math.round(30 * m.scale);
+		// Масштабируем треугольники по ширине и высоте отдельно
+		this.btnUpArrow.setPosition(arrowX, topArrowY);
+		this.btnUpArrow.setScale(m.arrowWidth / 100, m.arrowHeight / 50);
 
-        this.capacityText.setText('Capacity: ' + this.unit.getItemCount() + '/' + this.unit.getItemCapacity());
+		this.btnDownArrow.setPosition(arrowX, bottomArrowY);
+		this.btnDownArrow.setScale(m.arrowWidth / 100, m.arrowHeight / 50);
 
-        const maxOffset = Math.max(0, items.length - this.maxVisibleItems);
-        this.btnUp.setVisible(this.scrollOffset > 0);
-        this.btnDown.setVisible(this.scrollOffset < maxOffset);
+		this.btnCancel.setPosition(
+			x + m.panelW / 2,
+			y + m.panelH - Math.round(30 * m.scale)
+		);
+		this.applyButtonScale(this.btnCancel, m.cancelButtonScale);
 
-        for(let i = 0; i < this.maxVisibleItems; i++)
-        {
-            const itemIndex = this.scrollOffset + i;
-            if(itemIndex >= items.length) break;
+		this.renderItems();
+	}
 
-            const item = items[itemIndex];
-            const rowY = listStartY + i * m.rowHeight;
-            const label = item.getDisplayName();
+	show(itemEntity, unit, callbackObject)
+	{
+		this.itemEntity = itemEntity;
+		this.unit = unit;
+		this.callbackObject = callbackObject;
+		this.scrollOffset = 0;
+		this.visible = true;
+		pointerBlocked = true;
 
-            const rowBg = this.scene.add.rectangle(rowX + rowWidth / 2, rowY, rowWidth, m.rowBgHeight, 0x1a1a1a, 0.95);
-            rowBg.setStrokeStyle(1, 0x4b5563, 1);
-            rowBg.setDepth(20002);
-            rowBg.setInteractive({ useHandCursor: true });
-            rowBg.on('pointerover', () => {rowBg.setFillStyle(0x2a2a2a, 0.98);});
-            rowBg.on('pointerout', () => {rowBg.setFillStyle(0x1a1a1a, 0.95);});
-            rowBg.on('pointerdown', () => {this.hide({ itemIndex: itemIndex });});
+		this.overlay.setVisible(true);
+		this.bg.setVisible(true);
+		this.title.setVisible(true);
+		this.capacityText.setVisible(true);
+		this.scrollInfoText.setVisible(true);
+		this.btnUpArrow.setVisible(true);
+		this.btnDownArrow.setVisible(true);
+		this.btnCancel.setVisible(true);
 
-            this.itemRowBgs.push(rowBg);
-            this.itemButtons.push(rowBg);
+		this.layout();
+		this.renderItems();
+	}
 
-            if(item.config != null && item.config.sprite != null && item.config.sprite !== '' && this.scene.textures.exists(item.config.sprite))
-            {
-                const icon = this.scene.add.image(iconX, rowY, item.config.sprite);
-                icon.setOrigin(0.5, 0.5);
+	hide(result)
+	{
+		this.visible = false;
+		pointerBlocked = false;
 
-                const frame = icon.texture ? icon.texture.get() : null;
-                if(frame != null && frame.width > 0 && frame.height > 0)
-                {
-                    const scale = Math.min(m.iconSize / frame.width, m.iconSize / frame.height);
-                    icon.setScale(scale);
-                }
+		this.overlay.setVisible(false);
+		this.bg.setVisible(false);
+		this.title.setVisible(false);
+		this.capacityText.setVisible(false);
+		this.scrollInfoText.setVisible(false);
+		this.btnUpArrow.setVisible(false);
+		this.btnDownArrow.setVisible(false);
+		this.btnCancel.setVisible(false);
 
-                icon.setDepth(20003);
-                this.itemIcons.push(icon);
-            }
+		this.clearItemRows();
 
-            const text = this.scene.add.text(textX, rowY - Math.round(m.itemFont * 0.55), label, {
-                fontSize: m.itemFont + 'px',
-                color: '#ffffff',
-                wordWrap: { width: rowWidth - Math.round(42 * m.scale) }
-            });
-            text.setOrigin(0, 0);
-            text.setDepth(20003);
-            this.itemLabels.push(text);
-        }
-    }
+		const cb = this.callbackObject;
+		this.callbackObject = null;
+		this.itemEntity = null;
+		this.unit = null;
 
+		if(cb != null && typeof cb.onCallback === 'function')
+		{
+			cb.onCallback(result);
+		}
+	}
+
+	scroll(delta)
+	{
+		if(this.itemEntity == null) return;
+
+		const items = this.itemEntity.getItems();
+		const maxOffset = Math.max(0, items.length - this.maxVisibleItems);
+
+		this.scrollOffset += delta;
+		if(this.scrollOffset < 0) this.scrollOffset = 0;
+		if(this.scrollOffset > maxOffset) this.scrollOffset = maxOffset;
+
+		this.renderItems();
+	}
+
+	renderItems()
+	{
+		this.clearItemRows();
+
+		if(!this.visible || this.itemEntity == null || this.unit == null) return;
+
+		const items = this.itemEntity.getItems();
+		const m = this.metrics || this.getMetrics();
+
+		const panelX = this.bg.x;
+		const panelY = this.bg.y;
+
+		const rowX = panelX + m.padding;
+		const rowWidth = m.panelW - m.padding * 2;
+		const listStartY = panelY + m.topInfoBlockHeight + m.arrowHeight + m.arrowGap + Math.round(m.rowBgHeight / 2);
+		const iconX = rowX + Math.round(28 * m.scale);
+		const textX = rowX + Math.round(58 * m.scale);
+
+		this.capacityText.setText('Capacity: ' + this.unit.getItemCount() + '/' + this.unit.getItemCapacity());
+
+		const maxOffset = Math.max(0, items.length - this.maxVisibleItems);
+		const canScrollUp = this.scrollOffset > 0;
+		const canScrollDown = this.scrollOffset < maxOffset;
+
+		this.btnUpArrow.setVisible(canScrollUp);
+		this.btnDownArrow.setVisible(canScrollDown);
+
+		if(items.length > 0)
+		{
+			const from = this.scrollOffset + 1;
+			const to = Math.min(this.scrollOffset + this.maxVisibleItems, items.length);
+			this.scrollInfoText.setText(from + '-' + to + ' / ' + items.length);
+		}
+		else
+		{
+			this.scrollInfoText.setText('0 / 0');
+		}
+
+		for(let i = 0; i < this.maxVisibleItems; i++)
+		{
+			const itemIndex = this.scrollOffset + i;
+			if(itemIndex >= items.length) break;
+
+			const item = items[itemIndex];
+			const rowY = listStartY + i * m.rowHeight;
+
+			// Индекс помогает понять, что список реально скроллится
+			const label = (itemIndex + 1).toString() + '. ' + item.getDisplayName();
+
+			const rowBg = this.scene.add.rectangle(
+				rowX + rowWidth / 2,
+				rowY,
+				rowWidth,
+				m.rowBgHeight,
+				0x1a1a1a,
+				0.95
+			);
+			rowBg.setStrokeStyle(1, 0x4b5563, 1);
+			rowBg.setDepth(20002);
+			rowBg.setInteractive({ useHandCursor: true });
+
+			rowBg.on('pointerover', () => { rowBg.setFillStyle(0x2a2a2a, 0.98); });
+			rowBg.on('pointerout', () => { rowBg.setFillStyle(0x1a1a1a, 0.95); });
+			rowBg.on('pointerdown', () => { this.hide({ itemIndex: itemIndex }); });
+
+			this.itemRowBgs.push(rowBg);
+			this.itemButtons.push(rowBg);
+
+			if(item.config != null && item.config.sprite != null && item.config.sprite !== '' && this.scene.textures.exists(item.config.sprite))
+			{
+				const icon = this.scene.add.image(iconX, rowY, item.config.sprite);
+				icon.setOrigin(0.5, 0.5);
+
+				const frame = icon.texture ? icon.texture.get() : null;
+				if(frame != null && frame.width > 0 && frame.height > 0)
+				{
+					const scale = Math.min(m.iconSize / frame.width, m.iconSize / frame.height);
+					icon.setScale(scale);
+				}
+
+				icon.setDepth(20003);
+				this.itemIcons.push(icon);
+			}
+
+			const text = this.scene.add.text(textX, rowY - Math.round(m.itemFont * 0.55), label, {
+				fontSize: m.itemFont + 'px',
+				color: '#ffffff',
+				wordWrap: { width: rowWidth - Math.round(80 * m.scale) }
+			});
+			text.setOrigin(0, 0);
+			text.setDepth(20003);
+			this.itemLabels.push(text);
+		}
+	}
 }
 
 //---------------------------- RangeRenderer class ----------------------------
