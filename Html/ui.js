@@ -100,13 +100,11 @@ class TextButton extends Phaser.GameObjects.Container
 
 		this.bg.on('pointerdown', () =>
 		{
-			if(pointerBlocked) return;
 			if(this.callback != null) this.callback();
 		});
 
 		this.bg.on('pointerover', () =>
 		{
-			if(pointerBlocked) return;
 			this.bg.setFillStyle(this.bgHoverFill, this.bgHoverAlpha);
 			this.bg.setStrokeStyle(1, this.bgHoverStroke, 1);
 		});
