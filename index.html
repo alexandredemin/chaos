@@ -906,6 +906,11 @@
             if (elm.visible === true) elm.resize();
         });
 
+        if(uiScene && uiScene.pickupPanel && uiScene.pickupPanel.visible === true)
+        {
+            uiScene.pickupPanel.resize();
+        }
+
         if(uiScene && uiScene.smokeContainer && uiScene.smokeContainer.visible === true){
             uiScene.resizeSmokeContainer();
         }   

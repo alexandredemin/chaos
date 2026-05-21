@@ -159,6 +159,7 @@ const unitConfigs = {
             attackCost: 2,
             mana: 4,
             manaIncome: 1,
+            itemCapacity: 4,
         },
         abilities: {
             conjure: {
@@ -182,7 +183,15 @@ const unitConfigs = {
                              'lightning':0,
                              'pentagram':0}, 
                 }
-            }
+            },
+            use: {
+                type: 'use',
+                config: {}
+            },
+            pickup: {
+                type: 'pickup',
+                config: {}
+            } 
         }
     },
 
@@ -198,6 +207,17 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 2,
+            itemCapacity: 3,
+        },
+        abilities: {
+            use: {
+                type: 'use',
+                config: {}
+            },
+            pickup: {
+                type: 'pickup',
+                config: {}
+            } 
         }
     },
 
@@ -213,6 +233,17 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 2,
+            itemCapacity: 4,
+        },
+        abilities: {
+            use: {
+                type: 'use',
+                config: {}
+            },
+            pickup: {
+                type: 'pickup',
+                config: {}
+            } 
         }
     },
 
@@ -228,6 +259,7 @@ const unitConfigs = {
             abilityPoints: 1,
             attackPoints: 1,
             attackCost: 3,
+            itemCapacity: 1,
         },
         abilities: {
             jump: {
@@ -236,7 +268,15 @@ const unitConfigs = {
                     range: 5,
                     damage: 5
                 }
-            }
+            },
+            use: {
+                type: 'use',
+                config: {}
+            },
+            pickup: {
+                type: 'pickup',
+                config: {}
+            } 
         }
     },
 
@@ -279,6 +319,7 @@ const unitConfigs = {
             attackPoints: 1,
             attackCost: 2,
             manaUpkeep: 1,
+            itemCapacity: 2,
         },
         abilities: {
             fire: {
@@ -287,7 +328,15 @@ const unitConfigs = {
                     range: 10,
                     damage: 3
                 }
-            }
+            },
+            use: {
+                type: 'use',
+                config: {}
+            },
+            pickup: {
+                type: 'pickup',
+                config: {}
+            } 
         }
     },
 
@@ -391,6 +440,17 @@ const unitConfigs = {
             attackCost: 2,
             gasImmunity: true,
             infectionImmunity: true,
+            itemCapacity: 2,
+        },
+        abilities: {
+            use: {
+                type: 'use',
+                config: {}
+            },
+            pickup: {
+                type: 'pickup',
+                config: {}
+            }   
         }
     },
 };

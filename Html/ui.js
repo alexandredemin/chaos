@@ -853,6 +853,11 @@ class PickUpPanel
 			this.itemLabels.push(text);
 		}
 	}
+
+    resize()
+	{
+		this.layout();
+	}
 }
 
 //---------------------------- RangeRenderer class ----------------------------

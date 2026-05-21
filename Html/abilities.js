@@ -810,12 +810,12 @@ class PickUpAbility extends UnitAbility
         this.itemEntity = null;
         this.selectedItemIndex = -1;
 
-        if(pickupPanel != null && pickupPanel.visible)
+        if(uiScene && uiScene.pickupPanel != null && uiScene.pickupPanel.visible)
         {
-            const cb = pickupPanel.callbackObject;
-            pickupPanel.callbackObject = null;
-            pickupPanel.hide(null);
-            pickupPanel.callbackObject = cb;
+            const cb = uiScene.pickupPanel.callbackObject;
+            uiScene.pickupPanel.callbackObject = null;
+            uiScene.pickupPanel.hide(null);
+            uiScene.pickupPanel.callbackObject = cb;
         }
 
         super.stop(unit);
@@ -853,7 +853,7 @@ class PickUpAbility extends UnitAbility
                     this.stop(this.unit);
                     return true;
                 }
-                pickupPanel.show(this.itemEntity, this.unit, this);
+                uiScene.pickupPanel.show(this.itemEntity, this.unit, this);
                 this.step = 1;
                 return false;
             case 1:
