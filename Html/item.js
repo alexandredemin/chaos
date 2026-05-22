@@ -78,8 +78,7 @@ class Item
 						return unit.features.health < unit.config.features.health;
 
 					case 'mana_potion':
-						if(unit.features.mana == null || unit.config.features.mana == null) return false;
-						return unit.features.mana < unit.config.features.mana;
+						return unit.features.mana != null;
 
 					case 'spell_scroll':
 						return unit.config.name === 'wizard' && this.params != null && this.params.spell != null;
@@ -161,9 +160,13 @@ class Item
 
 					case 'mana_potion':
 					{
-						const maxMana = unit.config.features.mana || 0;
 						const value = this.config.effectValue || 1;
-						unit.features.mana = Math.min(maxMana, unit.features.mana + value);
+						if(unit.features.mana == null) return {
+							success: false,
+							spendAP: false,
+							consumeItem: false
+						};
+						unit.features.mana += value;
 						return {
 							success: true,
 							spendAP: actionCfg.spendAP === true,

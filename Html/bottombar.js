@@ -438,63 +438,31 @@ class BottomBar extends Phaser.GameObjects.Container
         return null;
     }
 
-/*
-    layout()
-    {
-        const displayWidth = (this.scene.scale.displaySize && this.scene.scale.displaySize.width)
-            ? this.scene.scale.displaySize.width
-            : this.scene.scale.width;
+	_getInventoryItemCount(unit)
+	{
+		if(unit == null) return 0;
+		if(typeof unit.getItemCount === 'function') return unit.getItemCount();
+		if(Array.isArray(unit.features?.items)) return unit.features.items.length;
+		return 0;
+	}
 
-        const displayHeight = (this.scene.scale.displaySize && this.scene.scale.displaySize.height)
-            ? this.scene.scale.displaySize.height
-            : this.scene.scale.height;
-
-        const margin = 6;
-        const innerPadding = 8;
-        const minRightWidth = 120;
-        const minCenterWidth = 255;
-        const preferredCenterWidth = 300;
-
-        this.barHeight = 88;
-        this.barWidth = Math.min(displayWidth - margin * 2, 1180);
-        this.barWidth = Math.max(this.barWidth, 320);
-
-        this.setPosition((displayWidth - this.barWidth) / 2, displayHeight - this.barHeight - margin);
-
-        this.background.setSize(this.barWidth, this.barHeight);
-        this.background.setDisplaySize(this.barWidth, this.barHeight);
-        this.background.setStrokeStyle(1, 0x334155, 1);
-
-        let nextX = innerPadding;
-
-        this.leftSectionX = nextX;
-        this.gameButtonsPanel.setPosition(this.leftSectionX, (this.barHeight - 52) / 2);
-
-        nextX += this.gameButtonsPanel.getContentWidth() + innerPadding;
-
-        const maxCenterWidth = Math.max(
-            minCenterWidth,
-            this.barWidth - nextX - innerPadding - minRightWidth
-        );
-        this.centerWidth = Math.min(preferredCenterWidth, maxCenterWidth);
-
-        this.centerSectionX = nextX;
-        this.unitInfoPanel.setPosition(this.centerSectionX, (this.barHeight - 76) / 2);
-        this.unitInfoPanel.panelWidth = this.centerWidth;
-        this.unitInfoPanel.background.setSize(this.centerWidth, 76);
-        this.unitInfoPanel.background.setDisplaySize(this.centerWidth, 76);
-        this.unitInfoPanel.background.setStrokeStyle(1, 0x2b3442, 1);
-
-        nextX += this.centerWidth + innerPadding;
-
-        this.rightSectionX = nextX;
-        this.rightWidth = Math.max(0, this.barWidth - this.rightSectionX - innerPadding);
-
-        this.abilityButtonsPanel.setPosition(this.rightSectionX, (this.barHeight - 52) / 2);
-
-        this.lastViewportSignature = displayWidth + 'x' + displayHeight;
-    }
-*/
+	_getGroundItemCountAtUnit(unit)
+	{
+		if(unit == null) return 0;
+		const ents = Entity.getEntitiesAtMap(unit.mapX, unit.mapY);
+		if(ents == null || ents.length <= 0) return 0;
+		for(let i = 0; i < ents.length; i++)
+		{
+			const ent = ents[i];
+			if(ent instanceof ItemEntity)
+			{
+				if(typeof ent.getItemCount === 'function') return ent.getItemCount();
+				if(Array.isArray(ent.features?.items)) return ent.features.items.length;
+				return 0;
+			}
+		}
+		return 0;
+	}
 
     layout(autoWidth = false)
     {
@@ -607,7 +575,7 @@ class BottomBar extends Phaser.GameObjects.Container
             abilities[abilityEntry.type].ability === unit.processedAbility;
 
         return {
-            width: 72,
+            width: 92,
             height: 52,
             text: abilityEntry.title || abilityEntry.type,
             icon: abilityEntry.icon,
@@ -668,7 +636,7 @@ class BottomBar extends Phaser.GameObjects.Container
         const contentWidth = this.abilityButtonsPanel.getContentWidth();
         if (contentWidth > this.rightWidth && this.abilityButtonsPanel.buttons.length > 0)
         {
-            const narrowWidth = 60;
+            const narrowWidth = 92; // minimal width for buttons in narrow mode
             for (let i = 0; i < buttonConfigs.length; i++)
             {
                 buttonConfigs[i].width = narrowWidth;
@@ -677,69 +645,8 @@ class BottomBar extends Phaser.GameObjects.Container
             this.abilityButtonsPanel.setButtons(buttonConfigs);
         }
 
-        // после пересборки всегда прижимаем влево
         this.abilityButtonsPanel.setPosition(this.rightSectionX, (this.barHeight - 52) / 2);
     }
-    
-    /*
-    refresh(force = false)
-    {
-        const displayWidth = (this.scene.scale.displaySize && this.scene.scale.displaySize.width)
-            ? this.scene.scale.displaySize.width
-            : this.scene.scale.width;
-
-        const displayHeight = (this.scene.scale.displaySize && this.scene.scale.displaySize.height)
-            ? this.scene.scale.displaySize.height
-            : this.scene.scale.height;
-
-        const viewportSignature = displayWidth + 'x' + displayHeight;
-        if (force || viewportSignature !== this.lastViewportSignature)
-        {
-            this.layout();
-            force = true;
-        }
-
-        const currentPlayer = players != null ? players[playerInd] : null;
-        const isHumanTurn = currentPlayer != null && currentPlayer.control === PlayerControl.human;
-        const canControlUnit = isHumanTurn && selectedUnit != null && selectedUnit.player === currentPlayer;
-        const activeAbilityType = this._getAbilityTypeForProcessed(selectedUnit);
-        const unitKey = this._getUnitKey(selectedUnit);
-
-        const infoSignature = [
-            isHumanTurn ? 'human' : 'ai',
-            pointerBlocked ? 'blocked' : 'free',
-            unitKey,
-            selectedUnit ? selectedUnit.features.health : '-',
-            selectedUnit ? selectedUnit.features.move : '-',
-            selectedUnit ? selectedUnit.features.abilityPoints : '-'
-        ].join(';');
-
-        if (force || infoSignature !== this.lastInfoSignature)
-        {
-            this.lastInfoSignature = infoSignature;
-            this._refreshGameButtons(isHumanTurn);
-            this.unitInfoPanel.setUnit(selectedUnit, force);
-        }
-
-        const abilityStateSignature = [
-            isHumanTurn ? 'human' : 'ai',
-            pointerBlocked ? 'blocked' : 'free',
-            unitKey,
-            selectedUnit ? selectedUnit.mapX : '-',
-            selectedUnit ? selectedUnit.mapY : '-',
-            selectedUnit ? selectedUnit.features.move : '-',
-            selectedUnit ? selectedUnit.features.abilityPoints : '-',
-            activeAbilityType || '-'
-        ].join(';');
-
-        if (force || this.dirty || abilityStateSignature !== this.lastAbilityStateSignature)
-        {
-            this.lastAbilityStateSignature = abilityStateSignature;
-            this._refreshAbilityButtons(selectedUnit, canControlUnit);
-            this.dirty = false;
-        }
-    }
-    */
 
     refresh(force = false)
     {
@@ -780,16 +687,20 @@ class BottomBar extends Phaser.GameObjects.Container
             this.unitInfoPanel.setUnit(selectedUnit, force);
         }
 
+        const inventoryItemCount = this._getInventoryItemCount(selectedUnit);
+		const groundItemCount = this._getGroundItemCountAtUnit(selectedUnit);
         const abilityStateSignature = [
-            isHumanTurn ? 'human' : 'ai',
-            pointerBlocked ? 'blocked' : 'free',
-            unitKey,
-            selectedUnit ? selectedUnit.mapX : '-',
-            selectedUnit ? selectedUnit.mapY : '-',
-            selectedUnit ? selectedUnit.features.move : '-',
-            selectedUnit ? selectedUnit.features.abilityPoints : '-',
-            activeAbilityType || '-'
-        ].join(';');
+			isHumanTurn ? 'human' : 'ai',
+			pointerBlocked ? 'blocked' : 'free',
+			unitKey,
+			selectedUnit ? selectedUnit.mapX : '-',
+			selectedUnit ? selectedUnit.mapY : '-',
+			selectedUnit ? selectedUnit.features.move : '-',
+			selectedUnit ? selectedUnit.features.abilityPoints : '-',
+			activeAbilityType || '-',
+			inventoryItemCount,
+			groundItemCount
+		].join(';');
 
         if (force || this.dirty || abilityStateSignature !== this.lastAbilityStateSignature)
         {
