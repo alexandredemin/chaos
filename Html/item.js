@@ -50,9 +50,163 @@ class Item
         }
         return this.config.name;
     }
+
+	getActionTitle(actionId)
+	{
+		if(this.config == null || this.config.actions == null) return actionId;
+		return this.config.actions[actionId]?.title || actionId;
+	}
+
+	canDoAction(actionId, unit)
+	{
+		if(unit == null) return false;
+		if(this.config == null || this.config.actions == null) return false;
+		if(this.config.actions[actionId] == null) return false;
+
+		const actionCfg = this.config.actions[actionId];
+		if(actionCfg.spendAP === true && unit.features.abilityPoints <= 0) return false;
+
+		switch(actionId)
+		{
+			case 'drop':
+				return true;
+
+			case 'use':
+				switch(this.configName)
+				{
+					case 'healing_potion':
+						return unit.features.health < unit.config.features.health;
+
+					case 'mana_potion':
+						if(unit.features.mana == null || unit.config.features.mana == null) return false;
+						return unit.features.mana < unit.config.features.mana;
+
+					case 'spell_scroll':
+						return unit.config.name === 'wizard' && this.params != null && this.params.spell != null;
+
+					default:
+						return false;
+				}
+		}
+
+		return false;
+	}
+
+	getAvailableActions(unit)
+	{
+		let result = [];
+		if(this.config == null || this.config.actions == null) return result;
+		for(const actionId in this.config.actions)
+		{
+			if(this.canDoAction(actionId, unit))
+			{
+				result.push({
+					id: actionId,
+					title: this.getActionTitle(actionId),
+					config: this.config.actions[actionId]
+				});
+			}
+		}
+		return result;
+	}
+
+	doAction(actionId, unit, context = {})
+	{
+		if(!this.canDoAction(actionId, unit))
+		{
+			return {
+				success: false,
+				spendAP: false,
+				consumeItem: false
+			};
+		}
+
+		const actionCfg = this.config.actions[actionId] || {};
+
+		switch(actionId)
+		{
+			case 'drop':
+			{
+				let itemEntity = getGroundItemEntityAtMap(unit.mapX, unit.mapY);
+				if(itemEntity == null)
+				{
+					itemEntity = ItemEntity.create(unit.scene, 0, 0, true);
+					itemEntity.setPositionFromMap(unit.mapX, unit.mapY);
+					itemEntity.start(false);
+					entities.push(itemEntity);
+				}
+				itemEntity.addItem(this);
+				return {
+					success: true,
+					spendAP: actionCfg.spendAP === true,
+					consumeItem: actionCfg.consumeItem === true
+				};
+			}
+
+			case 'use':
+			{
+				switch(this.configName)
+				{
+					case 'healing_potion':
+					{
+						const maxHealth = unit.config.features.health;
+						const value = this.config.effectValue || 1;
+						unit.features.health = Math.min(maxHealth, unit.features.health + value);
+						return {
+							success: true,
+							spendAP: actionCfg.spendAP === true,
+							consumeItem: actionCfg.consumeItem === true
+						};
+					}
+
+					case 'mana_potion':
+					{
+						const maxMana = unit.config.features.mana || 0;
+						const value = this.config.effectValue || 1;
+						unit.features.mana = Math.min(maxMana, unit.features.mana + value);
+						return {
+							success: true,
+							spendAP: actionCfg.spendAP === true,
+							consumeItem: actionCfg.consumeItem === true
+						};
+					}
+
+					case 'spell_scroll':
+					{
+						console.log('Read scroll with spell: ' + this.params.spell);
+                        //+
+                        // TO DO
+                        //-
+						return {
+							success: true,
+							spendAP: actionCfg.spendAP === true,
+							consumeItem: actionCfg.consumeItem === true
+						};
+					}
+				}
+			}
+		}
+
+		return {
+			success: false,
+			spendAP: false,
+			consumeItem: false
+		};
+	}
 }
 
 //---------------------------- ItemEntity class ----------------------------
+function getGroundItemEntityAtMap(mapX, mapY)
+{
+	const ents = Entity.getEntitiesAtMap(mapX, mapY);
+	if(ents == null || ents.length <= 0) return null;
+	for(let i = 0; i < ents.length; i++)
+	{
+		const ent = ents[i];
+		if(ent instanceof ItemEntity) return ent;
+	}
+	return null;
+}
 
 class ItemEntity extends Entity
 {

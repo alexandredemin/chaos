@@ -20,6 +20,7 @@ const UIScene = new Phaser.Class({
 
         book = new MagicBook(this);
         this.pickupPanel = new PickUpPanel(this);
+        this.inventoryPanel = new InventoryPanel(this);
         startTurn();
     },
 

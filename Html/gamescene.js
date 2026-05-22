@@ -65,6 +65,7 @@ var GameScene = new Phaser.Class({
         abilities['jump'].ability = new JumpAbility();
         abilities['use'].ability = new UseAbility();
         abilities['pickup'].ability = new PickUpAbility();
+        abilities['inventory'].ability = new InventoryAbility();
 
         initActionRegistry();
 

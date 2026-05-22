@@ -884,3 +884,112 @@ class PickUpAbility extends UnitAbility
         return true;
     }
 }
+
+class InventoryAbility extends UnitAbility
+{
+	step = 0;
+	unit = null;
+	selectedItemIndex = -1;
+	selectedActionId = null;
+
+	constructor()
+	{
+		super();
+	}
+
+	start(unit)
+	{
+		this.step = 0;
+		this.unit = unit;
+		this.selectedItemIndex = -1;
+		this.selectedActionId = null;
+	}
+
+	stop(unit)
+	{
+		this.step = 0;
+		this.unit = null;
+		this.selectedItemIndex = -1;
+		this.selectedActionId = null;
+
+		if(uiScene && uiScene.inventoryPanel != null && uiScene.inventoryPanel.visible)
+		{
+			const cb = uiScene.inventoryPanel.callbackObject;
+			uiScene.inventoryPanel.callbackObject = null;
+			uiScene.inventoryPanel.hide(null);
+			uiScene.inventoryPanel.callbackObject = cb;
+		}
+
+		super.stop(unit);
+	}
+
+	canActivate(unit)
+	{
+		if(unit == null) return false;
+		return typeof unit.hasItems === 'function' && unit.hasItems();
+	}
+
+	onCallback(result)
+	{
+		if(result == null)
+		{
+			this.stop(this.unit);
+			return;
+		}
+
+		this.selectedItemIndex = result.itemIndex;
+		this.selectedActionId = result.actionId;
+		this.next();
+	}
+
+	next()
+	{
+		switch(this.step)
+		{
+			case 0:
+				if(this.unit == null || !this.unit.hasItems())
+				{
+					this.stop(this.unit);
+					return true;
+				}
+				uiScene.inventoryPanel.show(this.unit, this);
+				this.step = 1;
+				return false;
+
+			case 1:
+				if(this.unit == null || this.selectedItemIndex < 0 || this.selectedActionId == null)
+				{
+					this.stop(this.unit);
+					return true;
+				}
+				const item = this.unit.getItem(this.selectedItemIndex);
+				if(item == null)
+				{
+					this.stop(this.unit);
+					return true;
+				}
+				const result = item.doAction(this.selectedActionId, this.unit, {scene: this.unit.scene, mapX: this.unit.mapX, mapY: this.unit.mapY});
+				if(result != null && result.success === true)
+				{
+					if(result.consumeItem === true)
+					{
+						this.unit.removeItem(this.selectedItemIndex);
+					}
+					if(result.spendAP === true)
+					{
+						this.unit.features.abilityPoints--;
+						if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
+					}
+					if(uiScene && uiScene.bottomBar != null)
+					{
+						uiScene.bottomBar.markDirty();
+						uiScene.bottomBar.refresh(true);
+					}
+				}
+				this.stop(this.unit);
+				return true;
+		}
+
+		return true;
+	}
+}

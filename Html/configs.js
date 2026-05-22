@@ -118,29 +118,43 @@ const entityConfigs = {
 
 //---------------------------- Item configs ----------------------------
 const itemConfigs = {
-    'spell_scroll': {
-        id: 'spell_scroll',
-        name: 'Spell scroll',
-        sprite: 'spell_scroll',
-        scale: 0.12,
-        stackOffset: { x: 0, y: 0 },
-    },
+	'spell_scroll': {
+		id: 'spell_scroll',
+		name: 'Spell scroll',
+		sprite: 'spell_scroll',
+		scale: 0.12,
+		stackOffset: { x: 0, y: 0 },
+		actions: {
+			use: { title: 'Read', spendAP: true, consumeItem: true },
+			drop: { title: 'Drop', spendAP: true, consumeItem: true }
+		}
+	},
 
-    'healing_potion': {
-        id: 'healing_potion',
-        name: 'Healing potion',
-        sprite: 'fireball',
-        scale: 0.18,
-        stackOffset: { x: 0, y: 0 },
-    },
+	'healing_potion': {
+		id: 'healing_potion',
+		name: 'Healing potion',
+		sprite: 'fireball',
+		scale: 0.18,
+		stackOffset: { x: 0, y: 0 },
+		effectValue: 2,
+		actions: {
+			use: { title: 'Drink', spendAP: true, consumeItem: true },
+			drop: { title: 'Drop', spendAP: true, consumeItem: true }
+		}
+	},
 
-    'mana_potion': {
-        id: 'mana_potion',
-        name: 'Mana potion',
-        sprite: 'mushroom',
-        scale: 0.75,
-        stackOffset: { x: 0, y: 0 },
-    },
+	'mana_potion': {
+		id: 'mana_potion',
+		name: 'Mana potion',
+		sprite: 'mushroom',
+		scale: 0.75,
+		stackOffset: { x: 0, y: 0 },
+		effectValue: 2,
+		actions: {
+			use: { title: 'Drink', spendAP: true, consumeItem: true },
+			drop: { title: 'Drop', spendAP: true, consumeItem: true }
+		}
+	},
 };
 
 //---------------------------- Unit configs ----------------------------
@@ -191,7 +205,11 @@ const unitConfigs = {
             pickup: {
                 type: 'pickup',
                 config: {}
-            } 
+            }, 
+            inventory: {
+			    type: 'inventory',
+				config: {}
+			}
         }
     },
 
@@ -217,7 +235,11 @@ const unitConfigs = {
             pickup: {
                 type: 'pickup',
                 config: {}
-            } 
+            },
+            inventory: {
+			    type: 'inventory',
+				config: {}
+			} 
         }
     },
 
@@ -243,7 +265,11 @@ const unitConfigs = {
             pickup: {
                 type: 'pickup',
                 config: {}
-            } 
+            },
+            inventory: {
+			    type: 'inventory',
+				config: {}
+			} 
         }
     },
 
@@ -276,7 +302,11 @@ const unitConfigs = {
             pickup: {
                 type: 'pickup',
                 config: {}
-            } 
+            },
+            inventory: {
+			    type: 'inventory',
+				config: {}
+			} 
         }
     },
 
@@ -302,7 +332,11 @@ const unitConfigs = {
             pickup: {
                 type: 'pickup',
                 config: {}
-            }   
+            },
+            inventory: {
+			    type: 'inventory',
+				config: {}
+			}   
         }
     },
 
@@ -336,7 +370,11 @@ const unitConfigs = {
             pickup: {
                 type: 'pickup',
                 config: {}
-            } 
+            },
+            inventory: {
+			    type: 'inventory',
+				config: {}
+			} 
         }
     },
 
@@ -450,7 +488,11 @@ const unitConfigs = {
             pickup: {
                 type: 'pickup',
                 config: {}
-            }   
+            },
+            inventory: {
+			    type: 'inventory',
+				config: {}
+			}   
         }
     },
 };
@@ -684,6 +726,12 @@ const abilities = {
         title: 'Pick up',
         icon: null,
         order: 90,
+        ability: null,
+    },
+    'inventory': {
+        title: 'Inventory',
+        icon: null,
+        order: 95,
         ability: null,
     },
 };

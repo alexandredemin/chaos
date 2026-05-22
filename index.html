@@ -910,6 +910,10 @@
         {
             uiScene.pickupPanel.resize();
         }
+        if(uiScene && uiScene.inventoryPanel && uiScene.inventoryPanel.visible === true)
+        {
+            uiScene.inventoryPanel.resize();
+        }
 
         if(uiScene && uiScene.smokeContainer && uiScene.smokeContainer.visible === true){
             uiScene.resizeSmokeContainer();
