@@ -897,6 +897,25 @@ class InventoryAbility extends UnitAbility
 		super();
 	}
 
+    beginAsyncActionLock()
+	{
+		pointerBlocked = true;
+		hideArrows();
+	}
+
+	endAsyncActionLock()
+	{
+		pointerBlocked = false;
+
+		if(this.unit != null &&
+			this.unit.player != null &&
+			this.unit.player.control === PlayerControl.human &&
+			selectedUnit === this.unit)
+		{
+			showArrows(selectedUnit);
+		}
+	}
+
 	start(unit)
 	{
 		this.step = 0;
@@ -964,6 +983,7 @@ class InventoryAbility extends UnitAbility
 			}
 		}
 
+		this.endAsyncActionLock();
 		this.stop(this.unit);
 	}
 
@@ -988,21 +1008,19 @@ class InventoryAbility extends UnitAbility
 					this.stop(this.unit);
 					return true;
 				}
-
 				const item = this.unit.getItem(this.selectedItemIndex);
 				if(item == null)
 				{
 					this.stop(this.unit);
 					return true;
 				}
-
+				this.beginAsyncActionLock();
 				this.step = 2;
 				item.doAction(this.selectedActionId, this.unit, {
 					scene: this.unit.scene,
 					mapX: this.unit.mapX,
 					mapY: this.unit.mapY
 				}, this);
-
 				return false;
 
 			case 2:

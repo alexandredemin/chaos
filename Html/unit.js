@@ -191,23 +191,6 @@ class Unit extends BaseUnit
         hideArrows();
     }
 
-    /*
-    checkEntityStepOut()
-    {
-        let canStep = true;
-        const ents = Entity.getEntitiesAtMap(this.mapX, this.mapY);
-        if (ents && ents.length > 0) {
-            for (const ent of ents) {
-                if (!ent.onStepOut(this)) {
-                    canStep = false;
-                    break;
-                }
-            }
-        }
-        return canStep;
-    }
-    */
-
     processEntityStepOut(entities, callback, canStep = true)
     {
         while(canStep && entities.length > 0){

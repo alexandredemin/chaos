@@ -75,7 +75,7 @@ class Item
 				switch(this.configName)
 				{
 					case 'healing_potion':
-						return unit.features.health < unit.config.features.health;
+						return true; //unit.features.health < unit.config.features.health;
 
 					case 'mana_potion':
 						return unit.features.mana != null;
@@ -155,7 +155,7 @@ class Item
 				{
 					case 'healing_potion':
 					{
-						playDrinkItemEffect(unit.scene, unit, this, 0x55ff77, () =>
+						playDrinkItemEffect(unit.scene, unit, this, 0x59c01a, () =>
 						{
 							const maxHealth = unit.config.features.health;
 							const value = this.config.effectValue || 1;
@@ -250,27 +250,54 @@ function fitEffectSpriteSize(sprite, pixelSize)
 	sprite.setScale(scale);
 }
 
-function flashUnitTint(unit, color, flashCount = 4, onComplete = null)
+function flashUnitTint(unit, color, flashCount = 3, onComplete = null)
 {
-	let step = 0;
+	const scene = unit.scene;
+	const frameName = unit.frame ? unit.frame.name : undefined;
 
-	const tick = () =>
+	const flash = scene.add.image(unit.x, unit.y, unit.texture.key, frameName);
+	flash.setOrigin(unit.originX, unit.originY);
+	flash.setScale(unit.scaleX, unit.scaleY);
+	flash.setRotation(unit.rotation);
+	flash.setFlip(unit.flipX, unit.flipY);
+	flash.setDepth(unit.depth + 0.1);
+	flash.setAlpha(0);
+	flash.setTintFill(color);
+
+	const baseScaleX = unit.scaleX;
+	const baseScaleY = unit.scaleY;
+
+	let tweens = [];
+
+	for(let i = 0; i < flashCount; i++)
 	{
-		if(step >= flashCount * 2)
+		tweens.push({
+			targets: flash,
+			alpha: 0.95,
+			scaleX: baseScaleX * 1.12,
+			scaleY: baseScaleY * 1.12,
+			duration: 80,
+			ease: 'Quad.Out'
+		});
+
+		tweens.push({
+			targets: flash,
+			alpha: 0.0,
+			scaleX: baseScaleX * 0.98,
+			scaleY: baseScaleY * 0.98,
+			duration: 95,
+			ease: 'Quad.In'
+		});
+	}
+
+	scene.tweens.timeline({
+		tweens: tweens,
+		onComplete: () =>
 		{
-			unit.clearTint();
+			flash.destroy();
 			if(onComplete != null) onComplete();
-			return;
 		}
-
-		if(step % 2 === 0) unit.setTintFill(color);
-		else unit.clearTint();
-
-		step++;
-		unit.scene.time.delayedCall(70, tick);
-	};
-
-	tick();
+	});
 }
 
 function playDrinkItemEffect(scene, unit, item, color, onComplete)
@@ -280,22 +307,35 @@ function playDrinkItemEffect(scene, unit, item, color, onComplete)
 	sprite.setDepth(unit.depth + 5);
 	sprite.setAlpha(1);
 
-	fitEffectSpriteSize(sprite, 14);
+	fitEffectSpriteSize(sprite, 16);
 
 	const startScaleX = sprite.scaleX;
 	const startScaleY = sprite.scaleY;
 
 	scene.tweens.add({
 		targets: sprite,
-		scaleX: startScaleX * 2.2,
-		scaleY: startScaleY * 2.2,
-		alpha: 0,
-		duration: 180,
-		ease: 'Cubic.Out',
+		y: unit.y - 18,
+		scaleX: startScaleX * 2.6,
+		scaleY: startScaleY * 2.6,
+		alpha: 1,
+		duration: 540, //180,
+		ease: 'Back.Out',
 		onComplete: () =>
 		{
-			sprite.destroy();
-			flashUnitTint(unit, color, 4, onComplete);
+			scene.tweens.add({
+				targets: sprite,
+				scaleX: startScaleX * 3.4,
+				scaleY: startScaleY * 3.4,
+				alpha: 0,
+				angle: 18,
+				duration: 330, //110,
+				ease: 'Cubic.Out',
+				onComplete: () =>
+				{
+					sprite.destroy();
+					flashUnitTint(unit, color, 3, onComplete);
+				}
+			});
 		}
 	});
 }
