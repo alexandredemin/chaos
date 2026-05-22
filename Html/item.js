@@ -109,15 +109,18 @@ class Item
 		return result;
 	}
 
-	doAction(actionId, unit, context = {})
+	doAction(actionId, unit, context = {}, callbackObject = null)
 	{
 		if(!this.canDoAction(actionId, unit))
 		{
-			return {
+			const result = {
 				success: false,
 				spendAP: false,
 				consumeItem: false
 			};
+
+			finishItemAction(callbackObject, result);
+			return false;
 		}
 
 		const actionCfg = this.config.actions[actionId] || {};
@@ -126,20 +129,24 @@ class Item
 		{
 			case 'drop':
 			{
-				let itemEntity = getGroundItemEntityAtMap(unit.mapX, unit.mapY);
-				if(itemEntity == null)
+				playDropItemEffect(unit.scene, unit, this, () =>
 				{
-					itemEntity = ItemEntity.create(unit.scene, 0, 0, true);
-					itemEntity.setPositionFromMap(unit.mapX, unit.mapY);
-					itemEntity.start(false);
-					entities.push(itemEntity);
-				}
-				itemEntity.addItem(this);
-				return {
-					success: true,
-					spendAP: actionCfg.spendAP === true,
-					consumeItem: actionCfg.consumeItem === true
-				};
+					let itemEntity = getGroundItemEntityAtMap(unit.mapX, unit.mapY);
+					if(itemEntity == null)
+					{
+						itemEntity = ItemEntity.create(unit.scene, 0, 0, true, []);
+						itemEntity.setPositionFromMap(unit.mapX, unit.mapY);
+						itemEntity.start(false);
+						entities.push(itemEntity);
+					}
+					itemEntity.addItem(this);
+					finishItemAction(callbackObject, {
+						success: true,
+						spendAP: actionCfg.spendAP === true,
+						consumeItem: actionCfg.consumeItem === true
+					});
+				});
+				return false;
 			}
 
 			case 'use':
@@ -148,57 +155,72 @@ class Item
 				{
 					case 'healing_potion':
 					{
-						const maxHealth = unit.config.features.health;
-						const value = this.config.effectValue || 1;
-						unit.features.health = Math.min(maxHealth, unit.features.health + value);
-						return {
-							success: true,
-							spendAP: actionCfg.spendAP === true,
-							consumeItem: actionCfg.consumeItem === true
-						};
+						playDrinkItemEffect(unit.scene, unit, this, 0x55ff77, () =>
+						{
+							const maxHealth = unit.config.features.health;
+							const value = this.config.effectValue || 1;
+							unit.features.health = Math.min(maxHealth, unit.features.health + value);
+							finishItemAction(callbackObject, {
+								success: true,
+								spendAP: actionCfg.spendAP === true,
+								consumeItem: actionCfg.consumeItem === true
+							});
+						});
+						return false;
 					}
 
 					case 'mana_potion':
 					{
-						const value = this.config.effectValue || 1;
-						if(unit.features.mana == null) return {
-							success: false,
-							spendAP: false,
-							consumeItem: false
-						};
-						unit.features.mana += value;
-						return {
-							success: true,
-							spendAP: actionCfg.spendAP === true,
-							consumeItem: actionCfg.consumeItem === true
-						};
+						playDrinkItemEffect(unit.scene, unit, this, 0x66aaff, () =>
+						{
+							const value = this.config.effectValue || 1;
+							if(unit.features.mana == null)
+							{
+								finishItemAction(callbackObject, {
+									success: false,
+									spendAP: false,
+									consumeItem: false
+								});
+								return;
+							}
+							unit.features.mana += value;
+							finishItemAction(callbackObject, {
+								success: true,
+								spendAP: actionCfg.spendAP === true,
+								consumeItem: actionCfg.consumeItem === true
+							});
+						});
+						return false;
 					}
 
 					case 'spell_scroll':
 					{
-						console.log('Read scroll with spell: ' + this.params.spell);
-                        //+
-                        // TO DO
-                        //-
-						return {
-							success: true,
-							spendAP: actionCfg.spendAP === true,
-							consumeItem: actionCfg.consumeItem === true
-						};
+						unit.scene.time.delayedCall(10, () =>
+						{
+							console.log('Read scroll with spell: ' + this.params.spell);
+							finishItemAction(callbackObject, {
+								success: true,
+								spendAP: actionCfg.spendAP === true,
+								consumeItem: actionCfg.consumeItem === true
+							});
+						});
+						return false;
 					}
 				}
 			}
 		}
 
-		return {
+		finishItemAction(callbackObject, {
 			success: false,
 			spendAP: false,
 			consumeItem: false
-		};
+		});
+
+		return false;
 	}
 }
 
-//---------------------------- ItemEntity class ----------------------------
+//---------------------------- Help functions ----------------------------
 function getGroundItemEntityAtMap(mapX, mapY)
 {
 	const ents = Entity.getEntitiesAtMap(mapX, mapY);
@@ -211,6 +233,102 @@ function getGroundItemEntityAtMap(mapX, mapY)
 	return null;
 }
 
+function finishItemAction(callbackObject, result)
+{
+	if(callbackObject != null && typeof callbackObject.onItemActionComplete === 'function')
+	{
+		callbackObject.onItemActionComplete(result);
+	}
+}
+
+function fitEffectSpriteSize(sprite, pixelSize)
+{
+	const frame = sprite.texture ? sprite.texture.get() : null;
+	if(frame == null || frame.width <= 0 || frame.height <= 0) return;
+
+	const scale = pixelSize / Math.max(frame.width, frame.height);
+	sprite.setScale(scale);
+}
+
+function flashUnitTint(unit, color, flashCount = 4, onComplete = null)
+{
+	let step = 0;
+
+	const tick = () =>
+	{
+		if(step >= flashCount * 2)
+		{
+			unit.clearTint();
+			if(onComplete != null) onComplete();
+			return;
+		}
+
+		if(step % 2 === 0) unit.setTintFill(color);
+		else unit.clearTint();
+
+		step++;
+		unit.scene.time.delayedCall(70, tick);
+	};
+
+	tick();
+}
+
+function playDrinkItemEffect(scene, unit, item, color, onComplete)
+{
+	let sprite = scene.add.image(unit.x, unit.y - 8, item.config.sprite);
+	sprite.setOrigin(0.5, 0.5);
+	sprite.setDepth(unit.depth + 5);
+	sprite.setAlpha(1);
+
+	fitEffectSpriteSize(sprite, 14);
+
+	const startScaleX = sprite.scaleX;
+	const startScaleY = sprite.scaleY;
+
+	scene.tweens.add({
+		targets: sprite,
+		scaleX: startScaleX * 2.2,
+		scaleY: startScaleY * 2.2,
+		alpha: 0,
+		duration: 180,
+		ease: 'Cubic.Out',
+		onComplete: () =>
+		{
+			sprite.destroy();
+			flashUnitTint(unit, color, 4, onComplete);
+		}
+	});
+}
+
+function playDropItemEffect(scene, unit, item, onComplete)
+{
+	let sprite = scene.add.image(unit.x, unit.y - 8, item.config.sprite);
+	sprite.setOrigin(0.5, 0.5);
+	sprite.setDepth(unit.depth + 5);
+	sprite.setAlpha(1);
+
+	fitEffectSpriteSize(sprite, 26);
+
+	const startScaleX = sprite.scaleX;
+	const startScaleY = sprite.scaleY;
+
+	scene.tweens.add({
+		targets: sprite,
+		y: unit.y + 14,
+		scaleX: startScaleX * 0.25,
+		scaleY: startScaleY * 0.25,
+		alpha: 0,
+		duration: 220,
+		ease: 'Quad.In',
+		onComplete: () =>
+		{
+			sprite.destroy();
+			if(onComplete != null) onComplete();
+		}
+	});
+}
+
+//---------------------------- ItemEntity class ----------------------------
 class ItemEntity extends Entity
 {
     constructor(scene, x, y, visible=true, items=[])

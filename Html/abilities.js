@@ -942,6 +942,31 @@ class InventoryAbility extends UnitAbility
 		this.next();
 	}
 
+	onItemActionComplete(result)
+	{
+		if(result != null && result.success === true && this.unit != null)
+		{
+			if(result.consumeItem === true)
+			{
+				this.unit.removeItem(this.selectedItemIndex);
+			}
+
+			if(result.spendAP === true)
+			{
+				this.unit.features.abilityPoints--;
+				if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
+			}
+
+			if(uiScene && uiScene.bottomBar != null)
+			{
+				uiScene.bottomBar.markDirty();
+				uiScene.bottomBar.refresh(true);
+			}
+		}
+
+		this.stop(this.unit);
+	}
+
 	next()
 	{
 		switch(this.step)
@@ -952,6 +977,7 @@ class InventoryAbility extends UnitAbility
 					this.stop(this.unit);
 					return true;
 				}
+
 				uiScene.inventoryPanel.show(this.unit, this);
 				this.step = 1;
 				return false;
@@ -962,32 +988,25 @@ class InventoryAbility extends UnitAbility
 					this.stop(this.unit);
 					return true;
 				}
+
 				const item = this.unit.getItem(this.selectedItemIndex);
 				if(item == null)
 				{
 					this.stop(this.unit);
 					return true;
 				}
-				const result = item.doAction(this.selectedActionId, this.unit, {scene: this.unit.scene, mapX: this.unit.mapX, mapY: this.unit.mapY});
-				if(result != null && result.success === true)
-				{
-					if(result.consumeItem === true)
-					{
-						this.unit.removeItem(this.selectedItemIndex);
-					}
-					if(result.spendAP === true)
-					{
-						this.unit.features.abilityPoints--;
-						if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
-					}
-					if(uiScene && uiScene.bottomBar != null)
-					{
-						uiScene.bottomBar.markDirty();
-						uiScene.bottomBar.refresh(true);
-					}
-				}
-				this.stop(this.unit);
-				return true;
+
+				this.step = 2;
+				item.doAction(this.selectedActionId, this.unit, {
+					scene: this.unit.scene,
+					mapX: this.unit.mapX,
+					mapY: this.unit.mapY
+				}, this);
+
+				return false;
+
+			case 2:
+				return false;
 		}
 
 		return true;

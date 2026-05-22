@@ -34,7 +34,8 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
         //this.body.setSize(16, 16);
         //this.body.setOffset(0, 12);
         this.config = config;
-        for (let key in config.features) {this.features[key] = config.features[key];}
+        //for (let key in config.features) {this.features[key] = config.features[key];}
+        this.features = clone(config.features || {});
         this.abilities = clone(config.abilities);
     }
 
