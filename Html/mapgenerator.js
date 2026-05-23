@@ -1034,7 +1034,7 @@ class MapGenerator {
                     x: x * 16,
                     y: y * 16,
                     properties: [],
-                    items: [createItemData(itemName, {}), createItemData(itemName, {}), createItemData(itemName, {}), createItemData(itemName, {}), createItemData(itemName, {}), createItemData(itemName, {}),  createItemData(itemName, {})]
+                    items: [createItemData(itemName, {})]
                 });
                 occupied.add(key);
                 placed++;

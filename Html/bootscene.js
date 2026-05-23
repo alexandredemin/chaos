@@ -35,6 +35,9 @@ var BootScene = new Phaser.Class({
         this.load.spritesheet('door', 'img/doors.png', { frameWidth: 27, frameHeight: 30 } );
         this.load.spritesheet('mushroom', 'img/mushroom2.png', { frameWidth: 16, frameHeight: 16 } );
         this.load.spritesheet('spell_scroll', 'img/spell_scroll.png', { frameWidth: 110, frameHeight: 110 } );
+        this.load.spritesheet('spell_scroll2', 'img/spell_scroll2.png', { frameWidth: 200, frameHeight: 164 } );
+        this.load.spritesheet('healing_potion', 'img/healing_potion.png', { frameWidth: 67, frameHeight: 103 } );
+        this.load.spritesheet('mana_potion', 'img/mana_potion.png', { frameWidth: 66, frameHeight: 103 } );
 
         this.load.spritesheet('wizard', 'img/wizard.png', { frameWidth: 16, frameHeight: 21 } );
         this.load.spritesheet('chort', 'img/chort.png', { frameWidth: 16, frameHeight: 23 } );

@@ -121,8 +121,8 @@ const itemConfigs = {
 	'spell_scroll': {
 		id: 'spell_scroll',
 		name: 'Spell scroll',
-		sprite: 'spell_scroll',
-		scale: 0.12,
+		sprite: 'spell_scroll2',
+		scale: 0.07,
 		stackOffset: { x: 0, y: 0 },
 		actions: {
 			use: { title: 'Read', spendAP: true, consumeItem: true },
@@ -133,8 +133,8 @@ const itemConfigs = {
 	'healing_potion': {
 		id: 'healing_potion',
 		name: 'Healing potion',
-		sprite: 'fireball',
-		scale: 0.18,
+		sprite: 'healing_potion',
+		scale: 0.1,
 		stackOffset: { x: 0, y: 0 },
 		effectValue: 2,
 		actions: {
@@ -146,8 +146,8 @@ const itemConfigs = {
 	'mana_potion': {
 		id: 'mana_potion',
 		name: 'Mana potion',
-		sprite: 'mushroom',
-		scale: 0.75,
+		sprite: 'mana_potion',
+		scale: 0.1,
 		stackOffset: { x: 0, y: 0 },
 		effectValue: 2,
 		actions: {
