@@ -719,6 +719,64 @@ class FrogEntity extends Entity
 }
 
 
+function finishUseAction(callbackObject, result)
+{
+	if(callbackObject != null && typeof callbackObject.onUseComplete === 'function')
+	{
+		callbackObject.onUseComplete(result);
+	}
+}
+
+function playDoorToggleEffect(door, nextOpen, onComplete = null)
+{
+	const scene = door.scene;
+	const prevAlpha = door.alpha;
+	const prevDepth = door.depth;
+
+	const oldFrame = door.getFrameIndex();
+
+	const oldOpen = door.features.open;
+	door.features.open = nextOpen;
+	const newFrame = door.getFrameIndex();
+	door.features.open = oldOpen;
+
+	const overlay = scene.add.sprite(door.x, door.y, door.texture.key, newFrame);
+	overlay.setOrigin(door.originX, door.originY);
+	overlay.setDisplayOrigin(door.displayOriginX, door.displayOriginY);
+	overlay.setScale(door.scaleX, door.scaleY);
+	overlay.setRotation(door.rotation);
+	overlay.setFlip(door.flipX, door.flipY);
+	overlay.setDepth(prevDepth + 0.01);
+	overlay.setAlpha(0);
+
+	door.setFrame(oldFrame);
+	door.setAlpha(prevAlpha);
+
+	scene.tweens.add({
+		targets: door,
+		alpha: 0,
+		duration: 340,
+		ease: 'Linear'
+	});
+
+	scene.tweens.add({
+		targets: overlay,
+		alpha: prevAlpha,
+		duration: 340,
+		ease: 'Linear',
+		onComplete: () =>
+		{
+			overlay.destroy();
+
+			door.features.open = nextOpen;
+			door.updateSprite();
+			door.setAlpha(prevAlpha);
+
+			if(onComplete != null) onComplete();
+		}
+	});
+}
+
 class DoorEntity extends Entity
 {
     constructor(scene, x, y, visible=true)
@@ -844,6 +902,7 @@ class DoorEntity extends Entity
         return true;
     }
 
+    /*
     use(unit)
     {
         if(!this.canUse(unit)) return false;
@@ -851,6 +910,30 @@ class DoorEntity extends Entity
         else this.open();
         return true;
     }
+    */
+	use(unit, context = {}, callbackObject = null)
+	{
+		if(!this.canUse(unit))
+		{
+			finishUseAction(callbackObject, {
+				success: false,
+				spendAP: false
+			});
+			return false;
+		}
+
+		const nextOpen = !this.features.open;
+
+		playDoorToggleEffect(this, nextOpen, () =>
+		{
+			finishUseAction(callbackObject, {
+				success: true,
+				spendAP: false
+			});
+		});
+
+		return false;
+	}
 }
 
 

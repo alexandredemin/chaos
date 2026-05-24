@@ -650,242 +650,184 @@ class JumpAbility extends UnitAbility
 
 class UseAbility extends UnitAbility
 {
-    step = 0;
-    unit = null;
-    targets = null;
-    placeX = -1;
-    placeY = -1;
+	step = 0;
+	unit = null;
+	targets = null;
+	placeX = -1;
+	placeY = -1;
 
-    constructor()
-    {
-        super();
-    }
+	constructor()
+	{
+		super();
+	}
 
-    onCallback()
-    {
-        cam.stopFollow();
-        this.next();
-    }
+	onCallback()
+	{
+		cam.stopFollow();
+		this.next();
+	}
 
-    start(unit)
-    {
-        this.step = 0;
-        this.unit = unit;
-        this.targets = null;
-        this.placeX = -1;
-        this.placeY = -1;
-    }
+	start(unit)
+	{
+		this.step = 0;
+		this.unit = unit;
+		this.targets = null;
+		this.placeX = -1;
+		this.placeY = -1;
+	}
 
-    stop(unit)
-    {
-        placeSelector.hide();
-        setInteractionScenario(userInteractionScenario.movement);
-        this.step = 0;
-        this.unit = null;
-        this.targets = null;
-        this.placeX = -1;
-        this.placeY = -1;
-        super.stop(unit);
-    }
+	stop(unit)
+	{
+		placeSelector.hide();
+		setInteractionScenario(userInteractionScenario.movement);
 
-    canActivate(unit)
-    {
-        if(unit == null) return false;
-        //if(unit.features.abilityPoints <= 0) return false;
-        return getAdjacentUsableEntities(unit).length > 0;
-    }
+		this.step = 0;
+		this.unit = null;
+		this.targets = null;
+		this.placeX = -1;
+		this.placeY = -1;
 
-    setPlace(mapX, mapY)
-    {
-        this.placeX = mapX;
-        this.placeY = mapY;
-        this.next();
-    }
+		super.stop(unit);
+	}
 
-    next()
-    {
-        switch(this.step)
-        {
-            case 0:
-            {
-                this.targets = getAdjacentUsableEntities(this.unit);
-                if(this.targets.length <= 0)
-                {
-                    this.stop(this.unit);
-                    return true;
-                }
-                if(this.targets.length > 1)
-                {
-                    let places = [];
-                    for(let i = 0; i < this.targets.length; i++)
-                    {
-                        places.push([this.targets[i].mapX, this.targets[i].mapY]);
-                    }
+	beginAsyncActionLock()
+	{
+		pointerBlocked = true;
+		hideArrows();
+	}
 
-                    if(this.unit.player.control === PlayerControl.human)
-                    {
-                        setInteractionScenario(userInteractionScenario.placeSelection);
-                        this.step++;
-                        placeSelector.show(places, this);
-                        return false;
-                    }
-                    else
-                    {
-                        const targetPlace = this.unit.player.aiControl.selectUseTarget(this.unit, this.targets);
-                        if(targetPlace == null)
-                        {
-                            this.stop(this.unit);
-                            return true;
-                        }
-                        else
-                        {
-                            this.placeX = targetPlace.x;
-                            this.placeY = targetPlace.y;
-                            this.step++;
-                            this.next();
-                            return false;
-                        }
-                    }
-                }
-                else
-                {
-                    this.placeX = this.targets[0].mapX;
-                    this.placeY = this.targets[0].mapY;
-                    this.step++;
-                    this.next();
-                    return false;
-                }
-            }
-            case 1:
-            {
-                if(this.targets !== null)
-                {
-                    let target = null;
-                    for(let i = 0; i < this.targets.length; i++)
-                    {
-                        if(this.targets[i].mapX === this.placeX && this.targets[i].mapY === this.placeY)
-                        {
-                            target = this.targets[i];
-                            break;
-                        }
-                    }
-                    if(target != null)
-                    {
-                        //this.unit.features.abilityPoints--;
-                        target.use(this.unit);
-                    }
-                }
-                this.stop(this.unit);
-                return true;
-            }
-        }
-        return false;
-    }
+	endAsyncActionLock()
+	{
+		pointerBlocked = false;
+
+		if(this.unit != null &&
+			this.unit.player != null &&
+			this.unit.player.control === PlayerControl.human &&
+			selectedUnit === this.unit)
+		{
+			showArrows(selectedUnit);
+		}
+	}
+
+	onUseComplete(result)
+	{
+		if(uiScene && uiScene.bottomBar != null)
+		{
+			uiScene.bottomBar.markDirty();
+			uiScene.bottomBar.refresh(true);
+		}
+
+		this.endAsyncActionLock();
+		this.stop(this.unit);
+	}
+
+	canActivate(unit)
+	{
+		if(unit == null) return false;
+		return getAdjacentUsableEntities(unit).length > 0;
+	}
+
+	setPlace(mapX, mapY)
+	{
+		this.placeX = mapX;
+		this.placeY = mapY;
+		this.next();
+	}
+
+	next()
+	{
+		switch(this.step)
+		{
+			case 0:
+			{
+				this.targets = getAdjacentUsableEntities(this.unit);
+
+				if(this.targets.length <= 0)
+				{
+					this.stop(this.unit);
+					return true;
+				}
+
+				if(this.targets.length > 1)
+				{
+					let places = [];
+
+					for(let i = 0; i < this.targets.length; i++)
+					{
+						places.push([this.targets[i].mapX, this.targets[i].mapY]);
+					}
+
+					if(this.unit.player.control === PlayerControl.human)
+					{
+						setInteractionScenario(userInteractionScenario.placeSelection);
+						this.step++;
+						placeSelector.show(places, this);
+						return false;
+					}
+					else
+					{
+						const targetPlace = this.unit.player.aiControl.selectUseTarget(this.unit, this.targets);
+
+						if(targetPlace == null)
+						{
+							this.stop(this.unit);
+							return true;
+						}
+						else
+						{
+							this.placeX = targetPlace.x;
+							this.placeY = targetPlace.y;
+							this.step++;
+							this.next();
+							return false;
+						}
+					}
+				}
+				else
+				{
+					this.placeX = this.targets[0].mapX;
+					this.placeY = this.targets[0].mapY;
+					this.step++;
+					this.next();
+					return false;
+				}
+			}
+
+			case 1:
+			{
+				if(this.targets !== null)
+				{
+					let target = null;
+
+					for(let i = 0; i < this.targets.length; i++)
+					{
+						if(this.targets[i].mapX === this.placeX && this.targets[i].mapY === this.placeY)
+						{
+							target = this.targets[i];
+							break;
+						}
+					}
+
+					if(target != null)
+					{
+						this.beginAsyncActionLock();
+						this.step = 2;
+						target.use(this.unit, {}, this);
+						return false;
+					}
+				}
+
+				this.stop(this.unit);
+				return true;
+			}
+
+			case 2:
+				return false;
+		}
+
+		return false;
+	}
 }
-
-/*
-class PickUpAbility extends UnitAbility
-{
-    step = 0;
-    unit = null;
-    itemEntity = null;
-    selectedItemIndex = -1;
-
-    constructor()
-    {
-        super();
-    }
-
-    start(unit)
-    {
-        this.step = 0;
-        this.unit = unit;
-        this.itemEntity = getItemEntityAtUnit(unit);
-        this.selectedItemIndex = -1;
-    }
-
-    stop(unit)
-    {
-        this.step = 0;
-        this.unit = null;
-        this.itemEntity = null;
-        this.selectedItemIndex = -1;
-
-        if(uiScene && uiScene.pickupPanel != null && uiScene.pickupPanel.visible)
-        {
-            const cb = uiScene.pickupPanel.callbackObject;
-            uiScene.pickupPanel.callbackObject = null;
-            uiScene.pickupPanel.hide(null);
-            uiScene.pickupPanel.callbackObject = cb;
-        }
-
-        super.stop(unit);
-    }
-
-    canActivate(unit)
-    {
-        if(unit == null) return false;
-        if(unit.features.abilityPoints <= 0) return false;
-        if(typeof unit.hasFreeItemSlot === 'function' && !unit.hasFreeItemSlot()) return false;
-
-        const itemEntity = getItemEntityAtUnit(unit);
-        return itemEntity != null && itemEntity.getItemCount() > 0;
-    }
-
-    onCallback(result)
-    {
-        if(result == null)
-        {
-            this.stop(this.unit);
-            return;
-        }
-
-        this.selectedItemIndex = result.itemIndex;
-        this.next();
-    }
-
-    next()
-    {
-        switch(this.step)
-        {
-            case 0:
-                if(this.itemEntity == null)
-                {
-                    this.stop(this.unit);
-                    return true;
-                }
-                uiScene.pickupPanel.show(this.itemEntity, this.unit, this);
-                this.step = 1;
-                return false;
-            case 1:
-                if(this.itemEntity == null || this.selectedItemIndex < 0)
-                {
-                    this.stop(this.unit);
-                    return true;
-                }
-                if(!this.unit.hasFreeItemSlot())
-                {
-                    this.stop(this.unit);
-                    return true;
-                }
-                const item = this.itemEntity.removeItem(this.selectedItemIndex);
-                if(item != null)
-                {
-                    const added = this.unit.addItem(item);
-                    if(added)
-                    {
-                        this.unit.features.abilityPoints--;
-                        if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
-                    }
-                }
-                this.stop(this.unit);
-                return true;
-        }
-
-        return true;
-    }
-}
-*/
 
 class PickUpAbility extends UnitAbility
 {

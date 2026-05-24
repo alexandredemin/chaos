@@ -342,39 +342,10 @@ function playDrinkItemEffect(scene, unit, item, color, onComplete)
 
 function playDropItemEffect(scene, unit, item, onComplete)
 {
-	let sprite = scene.add.image(unit.x, unit.y - 8, item.config.sprite);
+	let sprite = scene.add.image(unit.x, unit.y - 6, item.config.sprite);
 	sprite.setOrigin(0.5, 0.5);
 	sprite.setDepth(unit.depth + 5);
-	sprite.setAlpha(1);
-
-	fitEffectSpriteSize(sprite, 26);
-
-	const startScaleX = sprite.scaleX;
-	const startScaleY = sprite.scaleY;
-
-	scene.tweens.add({
-		targets: sprite,
-		y: unit.y + 14,
-		scaleX: startScaleX * 0.25,
-		scaleY: startScaleY * 0.25,
-		alpha: 0,
-		duration: 220,
-		ease: 'Quad.In',
-		onComplete: () =>
-		{
-			sprite.destroy();
-			if(onComplete != null) onComplete();
-		}
-	});
-}
-
-/*
-function playPickupItemEffect(scene, unit, item, onComplete)
-{
-	let sprite = scene.add.image(unit.x, unit.y + 10, item.config.sprite);
-	sprite.setOrigin(0.5, 0.5);
-	sprite.setDepth(unit.depth + 5);
-	sprite.setAlpha(1);
+	sprite.setAlpha(0);
 
 	fitEffectSpriteSize(sprite, 18);
 
@@ -383,22 +354,36 @@ function playPickupItemEffect(scene, unit, item, onComplete)
 
 	scene.tweens.add({
 		targets: sprite,
-		y: unit.y - 18,
-		scaleX: startScaleX * 1.35,
-		scaleY: startScaleY * 1.35,
-		alpha: 0,
-		angle: 10,
-		duration: 440,
+		x: unit.x,
+		y: unit.y - 10,
+		scaleX: startScaleX * 1.45,
+		scaleY: startScaleY * 1.45,
+		alpha: 1,
+		angle: 8,
+		duration: 180,
 		ease: 'Cubic.Out',
 		onComplete: () =>
 		{
-			sprite.destroy();
-			if(onComplete != null) onComplete();
+			scene.tweens.add({
+				targets: sprite,
+				x: unit.x,
+				y: unit.y + 16,
+				scaleX: startScaleX * 0.35,
+				scaleY: startScaleY * 0.35,
+				alpha: 0,
+				angle: -10,
+				duration: 280,
+				ease: 'Quad.In',
+				onComplete: () =>
+				{
+					sprite.destroy();
+					if(onComplete != null) onComplete();
+				}
+			});
 		}
 	});
 }
-*/
-/*
+
 function playPickupItemEffect(scene, unit, item, onComplete)
 {
 	let sprite = scene.add.image(unit.x, unit.y + 10, item.config.sprite);
@@ -436,7 +421,8 @@ function playPickupItemEffect(scene, unit, item, onComplete)
 				onComplete: () =>
 				{
 					sprite.destroy();
-
+					if(onComplete != null) onComplete();
+					/*
 					const flash = scene.add.circle(unit.x, unit.y - 4, 6, 0xffffff, 0.95);
 					flash.setDepth(unit.depth + 5);
 
@@ -452,86 +438,7 @@ function playPickupItemEffect(scene, unit, item, onComplete)
 							if(onComplete != null) onComplete();
 						}
 					});
-				}
-			});
-		}
-	});
-}
-*/
-
-function playPickupItemEffect(scene, unit, item, onComplete)
-{
-	let sprite = scene.add.image(unit.x, unit.y + 10, item.config.sprite);
-	sprite.setOrigin(0.5, 0.5);
-	sprite.setDepth(unit.depth + 5);
-	sprite.setAlpha(1);
-
-	fitEffectSpriteSize(sprite, 18);
-
-	const startScaleX = sprite.scaleX;
-	const startScaleY = sprite.scaleY;
-
-	const startX = unit.x;
-	const startY = unit.y + 10;
-
-	const midX = unit.x - 6;
-	const midY = unit.y - 18;
-
-	const endX = unit.x;
-	const endY = unit.y - 4;
-
-	// Небольшой физический "подскок" от пола
-	scene.tweens.add({
-		targets: sprite,
-		y: startY - 8,
-		scaleX: startScaleX * 1.08,
-		scaleY: startScaleY * 1.08,
-		duration: 90,
-		ease: 'Quad.Out',
-		onComplete: () =>
-		{
-			// Основной полёт дугой к юниту
-			scene.tweens.addCounter({
-				from: 0,
-				to: 1,
-				duration: 220,
-				ease: 'Sine.Out',
-				onUpdate: (tween) =>
-				{
-					const t = tween.getValue();
-
-					// Квадратичная bezier-like дуга
-					const x =
-						(1 - t) * (1 - t) * startX +
-						2 * (1 - t) * t * midX +
-						t * t * endX;
-
-					const y =
-						(1 - t) * (1 - t) * (startY - 8) +
-						2 * (1 - t) * t * midY +
-						t * t * endY;
-
-					sprite.x = x;
-					sprite.y = y;
-
-					sprite.angle = -18 + 28 * t;
-				},
-				onComplete: () =>
-				{
-					// Финальное втягивание в юнита
-					scene.tweens.add({
-						targets: sprite,
-						scaleX: startScaleX * 0.22,
-						scaleY: startScaleY * 0.22,
-						alpha: 0,
-						duration: 90,
-						ease: 'Quad.In',
-						onComplete: () =>
-						{
-							sprite.destroy();
-							if(onComplete != null) onComplete();
-						}
-					});
+					*/
 				}
 			});
 		}
