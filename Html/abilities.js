@@ -783,6 +783,7 @@ class UseAbility extends UnitAbility
     }
 }
 
+/*
 class PickUpAbility extends UnitAbility
 {
     step = 0;
@@ -883,6 +884,174 @@ class PickUpAbility extends UnitAbility
 
         return true;
     }
+}
+*/
+
+class PickUpAbility extends UnitAbility
+{
+	step = 0;
+	unit = null;
+	itemEntity = null;
+	selectedItemIndex = -1;
+
+	constructor()
+	{
+		super();
+	}
+
+	start(unit)
+	{
+		this.step = 0;
+		this.unit = unit;
+		this.itemEntity = getItemEntityAtUnit(unit);
+		this.selectedItemIndex = -1;
+	}
+
+	stop(unit)
+	{
+		this.step = 0;
+		this.unit = null;
+		this.itemEntity = null;
+		this.selectedItemIndex = -1;
+
+		if(uiScene && uiScene.pickupPanel != null && uiScene.pickupPanel.visible)
+		{
+			const cb = uiScene.pickupPanel.callbackObject;
+			uiScene.pickupPanel.callbackObject = null;
+			uiScene.pickupPanel.hide(null);
+			uiScene.pickupPanel.callbackObject = cb;
+		}
+
+		super.stop(unit);
+	}
+
+	canActivate(unit)
+	{
+		if(unit == null) return false;
+		if(unit.features.abilityPoints <= 0) return false;
+		if(typeof unit.hasFreeItemSlot === 'function' && !unit.hasFreeItemSlot()) return false;
+
+		const itemEntity = getItemEntityAtUnit(unit);
+		return itemEntity != null && itemEntity.getItemCount() > 0;
+	}
+
+	onCallback(result)
+	{
+		if(result == null)
+		{
+			this.stop(this.unit);
+			return;
+		}
+
+		this.selectedItemIndex = result.itemIndex;
+		this.next();
+	}
+
+	beginAsyncActionLock()
+	{
+		pointerBlocked = true;
+		hideArrows();
+	}
+
+	endAsyncActionLock()
+	{
+		pointerBlocked = false;
+
+		if(this.unit != null &&
+			this.unit.player != null &&
+			this.unit.player.control === PlayerControl.human &&
+			selectedUnit === this.unit)
+		{
+			showArrows(selectedUnit);
+		}
+	}
+
+	onPickupEffectComplete()
+	{
+		if(this.unit == null || this.itemEntity == null)
+		{
+			this.endAsyncActionLock();
+			this.stop(this.unit);
+			return;
+		}
+
+		const item = this.itemEntity.removeItem(this.selectedItemIndex);
+
+		if(item != null)
+		{
+			const added = this.unit.addItem(item);
+
+			if(added)
+			{
+				this.unit.features.abilityPoints--;
+				if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
+			}
+		}
+
+		if(uiScene && uiScene.bottomBar != null)
+		{
+			uiScene.bottomBar.markDirty();
+			uiScene.bottomBar.refresh(true);
+		}
+
+		this.endAsyncActionLock();
+		this.stop(this.unit);
+	}
+
+	next()
+	{
+		switch(this.step)
+		{
+			case 0:
+				if(this.itemEntity == null)
+				{
+					this.stop(this.unit);
+					return true;
+				}
+
+				uiScene.pickupPanel.show(this.itemEntity, this.unit, this);
+				this.step = 1;
+				return false;
+
+			case 1:
+				if(this.itemEntity == null || this.selectedItemIndex < 0)
+				{
+					this.stop(this.unit);
+					return true;
+				}
+
+				if(typeof this.unit.hasFreeItemSlot === 'function' && !this.unit.hasFreeItemSlot())
+				{
+					this.stop(this.unit);
+					return true;
+				}
+
+				const items = this.itemEntity.getItems();
+				if(items == null || this.selectedItemIndex >= items.length)
+				{
+					this.stop(this.unit);
+					return true;
+				}
+
+				const item = items[this.selectedItemIndex];
+				if(item == null)
+				{
+					this.stop(this.unit);
+					return true;
+				}
+
+				this.beginAsyncActionLock();
+
+				this.step = 2;
+				playPickupItemEffect(this.unit.scene, this.unit, item, () => this.onPickupEffectComplete());
+				return false;
+
+			case 2:
+				return false;
+		}
+
+		return true;
+	}
 }
 
 class InventoryAbility extends UnitAbility

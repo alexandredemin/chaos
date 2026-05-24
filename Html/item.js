@@ -368,6 +368,35 @@ function playDropItemEffect(scene, unit, item, onComplete)
 	});
 }
 
+function playPickupItemEffect(scene, unit, item, onComplete)
+{
+	let sprite = scene.add.image(unit.x, unit.y + 10, item.config.sprite);
+	sprite.setOrigin(0.5, 0.5);
+	sprite.setDepth(unit.depth + 5);
+	sprite.setAlpha(1);
+
+	fitEffectSpriteSize(sprite, 18);
+
+	const startScaleX = sprite.scaleX;
+	const startScaleY = sprite.scaleY;
+
+	scene.tweens.add({
+		targets: sprite,
+		y: unit.y - 18,
+		scaleX: startScaleX * 1.35,
+		scaleY: startScaleY * 1.35,
+		alpha: 0,
+		angle: 10,
+		duration: 440,
+		ease: 'Cubic.Out',
+		onComplete: () =>
+		{
+			sprite.destroy();
+			if(onComplete != null) onComplete();
+		}
+	});
+}
+
 //---------------------------- ItemEntity class ----------------------------
 class ItemEntity extends Entity
 {
