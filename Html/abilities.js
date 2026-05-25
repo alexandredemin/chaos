@@ -692,18 +692,16 @@ class UseAbility extends UnitAbility
 
 	beginAsyncActionLock()
 	{
-		pointerBlocked = true;
+		if(!shouldShowActionAnimation(this.unit)) return;
+        pointerBlocked = true;
 		hideArrows();
 	}
 
 	endAsyncActionLock()
 	{
-		pointerBlocked = false;
-
-		if(this.unit != null &&
-			this.unit.player != null &&
-			this.unit.player.control === PlayerControl.human &&
-			selectedUnit === this.unit)
+		if(!shouldShowActionAnimation(this.unit)) return;
+        pointerBlocked = false;
+		if(this.unit != null && this.unit.player != null && this.unit.player.control === PlayerControl.human && selectedUnit === this.unit)
 		{
 			showArrows(selectedUnit);
 		}
@@ -891,18 +889,16 @@ class PickUpAbility extends UnitAbility
 
 	beginAsyncActionLock()
 	{
-		pointerBlocked = true;
+		if(!shouldShowActionAnimation(this.unit)) return;
+        pointerBlocked = true;
 		hideArrows();
 	}
 
 	endAsyncActionLock()
 	{
-		pointerBlocked = false;
-
-		if(this.unit != null &&
-			this.unit.player != null &&
-			this.unit.player.control === PlayerControl.human &&
-			selectedUnit === this.unit)
+		if(!shouldShowActionAnimation(this.unit)) return;
+        pointerBlocked = false;
+		if(this.unit != null && this.unit.player != null && this.unit.player.control === PlayerControl.human && selectedUnit === this.unit)
 		{
 			showArrows(selectedUnit);
 		}
@@ -950,10 +946,28 @@ class PickUpAbility extends UnitAbility
 					this.stop(this.unit);
 					return true;
 				}
-
-				uiScene.pickupPanel.show(this.itemEntity, this.unit, this);
-				this.step = 1;
-				return false;
+				if(this.unit.player.control === PlayerControl.human)
+				{
+					uiScene.pickupPanel.show(this.itemEntity, this.unit, this);
+					this.step = 1;
+					return false;
+				}
+				else
+				{
+					const targetItem = this.unit.player.aiControl.selectPickupItem(this.unit, this.itemEntity);
+					if(targetItem == null)
+					{
+						this.stop(this.unit);
+						return true;
+					}
+					else
+					{
+						this.selectedItemIndex = targetItem.itemIndex;
+						this.step = 1;
+						this.next();
+						return false;
+					}
+				}
 
 			case 1:
 				if(this.itemEntity == null || this.selectedItemIndex < 0)
@@ -1010,18 +1024,16 @@ class InventoryAbility extends UnitAbility
 
     beginAsyncActionLock()
 	{
-		pointerBlocked = true;
+		if(!shouldShowActionAnimation(this.unit)) return;
+        pointerBlocked = true;
 		hideArrows();
 	}
 
 	endAsyncActionLock()
 	{
-		pointerBlocked = false;
-
-		if(this.unit != null &&
-			this.unit.player != null &&
-			this.unit.player.control === PlayerControl.human &&
-			selectedUnit === this.unit)
+		if(!shouldShowActionAnimation(this.unit)) return;
+        pointerBlocked = false;
+		if(this.unit != null && this.unit.player != null && this.unit.player.control === PlayerControl.human && selectedUnit === this.unit)
 		{
 			showArrows(selectedUnit);
 		}
@@ -1108,10 +1120,29 @@ class InventoryAbility extends UnitAbility
 					this.stop(this.unit);
 					return true;
 				}
-
-				uiScene.inventoryPanel.show(this.unit, this);
-				this.step = 1;
-				return false;
+				if(this.unit.player.control === PlayerControl.human)
+				{
+					uiScene.inventoryPanel.show(this.unit, this);
+					this.step = 1;
+					return false;
+				}
+				else
+				{
+					const targetAction = this.unit.player.aiControl.selectInventoryAction(this.unit);
+					if(targetAction == null)
+					{
+						this.stop(this.unit);
+						return true;
+					}
+					else
+					{
+						this.selectedItemIndex = targetAction.itemIndex;
+						this.selectedActionId = targetAction.actionId;
+						this.step = 1;
+						this.next();
+						return false;
+					}
+				}
 
 			case 1:
 				if(this.unit == null || this.selectedItemIndex < 0 || this.selectedActionId == null)

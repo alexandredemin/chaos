@@ -252,6 +252,12 @@ function fitEffectSpriteSize(sprite, pixelSize)
 
 function flashUnitTint(unit, color, flashCount = 3, onComplete = null)
 {
+	if(!shouldShowActionAnimation(unit))
+	{
+		if(onComplete != null) onComplete();
+		return;
+	}
+	
 	const scene = unit.scene;
 	const frameName = unit.frame ? unit.frame.name : undefined;
 
@@ -302,6 +308,12 @@ function flashUnitTint(unit, color, flashCount = 3, onComplete = null)
 
 function playDrinkItemEffect(scene, unit, item, color, onComplete)
 {
+	if(!shouldShowActionAnimation(unit))
+	{
+		if(onComplete != null) onComplete();
+		return;
+	}
+	
 	let sprite = scene.add.image(unit.x, unit.y - 8, item.config.sprite);
 	sprite.setOrigin(0.5, 0.5);
 	sprite.setDepth(unit.depth + 5);
@@ -342,6 +354,12 @@ function playDrinkItemEffect(scene, unit, item, color, onComplete)
 
 function playDropItemEffect(scene, unit, item, onComplete)
 {
+	if(!shouldShowActionAnimation(unit))
+	{
+		if(onComplete != null) onComplete();
+		return;
+	}
+	
 	let sprite = scene.add.image(unit.x, unit.y - 6, item.config.sprite);
 	sprite.setOrigin(0.5, 0.5);
 	sprite.setDepth(unit.depth + 5);
@@ -386,6 +404,12 @@ function playDropItemEffect(scene, unit, item, onComplete)
 
 function playPickupItemEffect(scene, unit, item, onComplete)
 {
+	if(!shouldShowActionAnimation(unit))
+	{
+		if(onComplete != null) onComplete();
+		return;
+	}
+	
 	let sprite = scene.add.image(unit.x, unit.y + 10, item.config.sprite);
 	sprite.setOrigin(0.5, 0.5);
 	sprite.setDepth(unit.depth + 5);

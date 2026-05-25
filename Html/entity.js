@@ -111,8 +111,9 @@ class Entity extends BaseUnit
         return 1;
     }
 
-    onBeforeStepIn(unit)
+    onBeforeStepIn(unit, callback=null)
     {
+        return true;
     }
 
     onStepIn(unit)
@@ -729,7 +730,15 @@ function finishUseAction(callbackObject, result)
 
 function playDoorToggleEffect(door, nextOpen, onComplete = null)
 {
-	const scene = door.scene;
+	if(!shouldShowActionAnimation())
+	{
+		door.features.open = nextOpen;
+		door.updateSprite();
+		if(onComplete != null) onComplete();
+		return;
+	}
+    
+    const scene = door.scene;
 	const prevAlpha = door.alpha;
 	const prevDepth = door.depth;
 
@@ -859,20 +868,27 @@ class DoorEntity extends Entity
         this.updateSprite();
     }
 
-    onBeforeStepIn(unit)
+    onBeforeStepIn(unit, callback=null)
     {
-        this.open();
+        if(this.features.open)
+        {
+            if(callback != null) callback(true);
+            return true;
+        }
+        playDoorToggleEffect(this, true, () =>
+        {
+            if(callback != null) callback(true);
+        });
+        return null;
     }
 
     onStepIn(unit)
     {
-        //this.open();
         return null;
     }
 
     onStepOut(unit, callback=null)
     {
-        //this.close();
         return true;
     }
 
@@ -902,15 +918,6 @@ class DoorEntity extends Entity
         return true;
     }
 
-    /*
-    use(unit)
-    {
-        if(!this.canUse(unit)) return false;
-        if(this.features.open) this.close();
-        else this.open();
-        return true;
-    }
-    */
 	use(unit, context = {}, callbackObject = null)
 	{
 		if(!this.canUse(unit))

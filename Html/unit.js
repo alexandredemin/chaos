@@ -156,6 +156,23 @@ class Unit extends BaseUnit
         }
     }
 
+    beginAsyncStepLock()
+    {
+        if(!shouldShowActionAnimation(this)) return;
+        pointerBlocked = true;
+        hideArrows();
+    }
+
+    endAsyncStepLock()
+    {
+        if(!shouldShowActionAnimation(this)) return;
+        pointerBlocked = false;
+        if(this.player != null && this.player.control === PlayerControl.human && selectedUnit === this)
+        {
+            showArrows(selectedUnit);
+        }
+    }
+
     turnTo(x, y)
     {
         if(x<this.x)
@@ -218,30 +235,73 @@ class Unit extends BaseUnit
         }
     }
 
-    beforeEntityStepIn(mapX, mapY)
+    processBeforeEntityStepIn(entities, callback, canStep = true)
+    {
+        while(canStep && entities.length > 0)
+        {
+            const ent = entities.pop();
+            const result = ent.onBeforeStepIn(this, this.processBeforeEntityStepIn.bind(this, entities, callback));
+
+            if(result != null)
+            {
+                if(result !== true)
+                {
+                    canStep = false;
+                    break;
+                }
+            }
+            else
+            {
+                return;
+            }
+        }
+
+        if(callback) callback(canStep);
+    }
+
+    beforeEntityStepIn(mapX, mapY, callback)
     {
         const ents = Entity.getEntitiesAtMap(mapX, mapY);
-        if (ents && ents.length > 0) {
-            for (const ent of ents) {
-                ent.onBeforeStepIn(this);
-            }
+
+        if(ents && ents.length > 0)
+        {
+            this.processBeforeEntityStepIn(ents, callback);
+            return;
+        }
+        else
+        {
+            if(callback) callback(true);
         }
     }
 
-    stepTo(mapX, mapY, canStep = null)
+   stepTo(mapX, mapY, canStep = null, beforeStepInAllowed = null)
     {
-        if(canStep === null){
-            this.checkEntityStepOut(this.stepTo.bind(this, mapX, mapY)); //async call
+        if(canStep === null)
+        {
+            this.checkEntityStepOut(this.stepTo.bind(this, mapX, mapY));
             return;
         }
-        if(canStep)
+        if(!canStep)
         {
-            this.beforeEntityStepIn(mapX, mapY);
-            this.features.move--;
-            let targetXY = map.tileToWorldXY(mapX, mapY);
-            this.moveTo(targetXY.x + 8, targetXY.y + 8);
+            this.onCallback();
+            return;
         }
-        else this.onCallback();
+        if(beforeStepInAllowed === null)
+        {
+            this.beginAsyncStepLock();
+            this.beforeEntityStepIn(mapX, mapY, this.stepTo.bind(this, mapX, mapY, true));
+            return;
+        }
+        if(beforeStepInAllowed !== true)
+        {
+            this.endAsyncStepLock();
+            this.onCallback();
+            return;
+        }
+        this.features.move--;
+        let targetXY = map.tileToWorldXY(mapX, mapY);
+        this.endAsyncStepLock();
+        this.moveTo(targetXY.x + 8, targetXY.y + 8);
     }
 
     processEntityStepIn(entities, callback)

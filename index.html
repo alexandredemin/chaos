@@ -295,6 +295,23 @@
         }
         return objClone;
     }
+
+    function shouldShowActionAnimation(unit = null)
+    {
+        if(gameSettings.showEnemyMoves === true) return true;
+
+        if(players != null && players[playerInd] != null)
+        {
+            return players[playerInd].control === PlayerControl.human;
+        }
+
+        if(unit != null && unit.player != null)
+        {
+            return unit.player.control === PlayerControl.human;
+        }
+
+        return true;
+    }
     
     const userInteractionScenario = {
         movement: 'movement',
