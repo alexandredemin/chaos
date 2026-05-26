@@ -135,6 +135,24 @@ class Unit extends BaseUnit
     die()
     {
         this.died = true;
+        // Drop items on the ground
+        if(Array.isArray(this.features.items) && this.features.items.length > 0)
+        {
+            let itemEntity = getGroundItemEntityAtMap(this.mapX, this.mapY);
+            if(itemEntity == null)
+            {
+                itemEntity = ItemEntity.create(this.scene, 0, 0, true, []);
+                itemEntity.setPositionFromMap(this.mapX, this.mapY);
+                itemEntity.start(false);
+                entities.push(itemEntity);
+            }
+            while(this.features.items.length > 0)
+            {
+                const item = this.removeItem(0);
+                if(item != null) itemEntity.addItem(item);
+            }
+        }
+
         if(this.player != null)this.player.removeUnit(this);
         units.splice(units.indexOf(this),1);
         this.destroy();

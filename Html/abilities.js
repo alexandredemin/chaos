@@ -709,12 +709,15 @@ class UseAbility extends UnitAbility
 
 	onUseComplete(result)
 	{
-		if(uiScene && uiScene.bottomBar != null)
+		if(result != null && result.success === true && this.unit != null)
+        {
+            this.unit.updateVisability();
+        }
+        if(uiScene && uiScene.bottomBar != null)
 		{
 			uiScene.bottomBar.markDirty();
 			uiScene.bottomBar.refresh(true);
 		}
-
 		this.endAsyncActionLock();
 		this.stop(this.unit);
 	}
