@@ -489,6 +489,11 @@ class ItemEntity extends Entity
         return new ItemEntity(scene, x, y, visible, items);
     }
 
+	transformFeatures(unit, features)
+    {
+        return features;
+    }
+
     start(showStart=true)
     {
         if(!Array.isArray(this.features.items)) this.features.items = [];

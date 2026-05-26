@@ -99,10 +99,16 @@ class Entity extends BaseUnit
 
     transformFeatures(unit, features)
     {
-        features.strength = Math.round(this.features.tfStrength * features.strength);
-        if(features.strength < 1.0)features.strength=1.0;
-        features.defense = Math.round(this.features.tfDefense * features.defense);
-        if(features.defense < 1.0)features.defense=1.0;
+        if(this.features.hasOwnProperty('tfStrength'))
+        {
+            features.strength = Math.round(this.features.tfStrength * features.strength);
+            if(features.strength < 1.0) features.strength = 1.0;
+        }
+        if(this.features.hasOwnProperty('tfDefense'))
+        {
+            features.defense = Math.round(this.features.tfDefense * features.defense);
+            if(features.defense < 1.0) features.defense = 1.0;
+        }
         return features;
     }
 
