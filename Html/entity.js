@@ -876,15 +876,13 @@ class DoorEntity extends Entity
 
     onBeforeStepIn(unit, callback=null)
     {
-        if(this.features.open)
-        {
-            if(callback != null) callback(true);
-            return true;
-        }
+        if(this.features.open) return true;
+
         playDoorToggleEffect(this, true, () =>
         {
             if(callback != null) callback(true);
         });
+
         return null;
     }
 
