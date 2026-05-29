@@ -42,14 +42,23 @@ class Item
         return new Item(data);
     }
 
-    getDisplayName()
-    {
-        if(this.configName === 'spell_scroll' && this.params?.spell)
-        {
-            return this.config.name + ' (' + this.params.spell + ')';
-        }
-        return this.config.name;
-    }
+	getDisplayName()
+	{
+		if(this.configName === 'spell_scroll')
+		{
+			const spellName = this.params?.spell;
+			const amount = this.params?.amount;
+			if(spellName != null && amount != null)
+			{
+				return this.config.name + ' (' + spellName + ' x' + amount + ')';
+			}
+			if(spellName != null)
+			{
+				return this.config.name + ' (' + spellName + ')';
+			}
+		}
+		return this.config.name;
+	}
 
 	getActionTitle(actionId)
 	{
@@ -81,7 +90,7 @@ class Item
 						return unit.features.mana != null;
 
 					case 'spell_scroll':
-						return unit.config.name === 'wizard' && this.params != null && this.params.spell != null;
+						return unit.abilities != null && unit.abilities.conjure != null && unit.abilities.conjure.config != null && unit.abilities.conjure.config.spells != null;
 
 					default:
 						return false;
@@ -195,9 +204,27 @@ class Item
 
 					case 'spell_scroll':
 					{
-						unit.scene.time.delayedCall(10, () =>
+						playReadScrollEffect(unit.scene, unit, this, () =>
 						{
-							console.log('Read scroll with spell: ' + this.params.spell);
+							const reward = resolveSpellScrollParams(this, unit);
+							if(reward == null ||
+								unit.abilities == null ||
+								unit.abilities.conjure == null ||
+								unit.abilities.conjure.config == null ||
+								unit.abilities.conjure.config.spells == null)
+							{
+								finishItemAction(callbackObject, {
+									success: false,
+									spendAP: false,
+									consumeItem: false
+								});
+								return;
+							}
+							if(unit.abilities.conjure.config.spells[reward.spell] == null)
+							{
+								unit.abilities.conjure.config.spells[reward.spell] = 0;
+							}
+							unit.abilities.conjure.config.spells[reward.spell] += reward.amount;
 							finishItemAction(callbackObject, {
 								success: true,
 								spendAP: actionCfg.spendAP === true,
@@ -248,6 +275,72 @@ function fitEffectSpriteSize(sprite, pixelSize)
 
 	const scale = pixelSize / Math.max(frame.width, frame.height);
 	sprite.setScale(scale);
+}
+
+function chooseWeightedSpellFromList(spellIds)
+{
+	if(spellIds == null || spellIds.length <= 0) return null;
+	let weighted = [];
+	let totalWeight = 0;
+
+	for(let i = 0; i < spellIds.length; i++)
+	{
+		const spellId = spellIds[i];
+		const cfg = spellConfigs[spellId];
+		if(cfg == null) continue;
+		const weight = Math.max(1, Math.round(Math.pow(cfg.cost || 1, 1.6)));
+		weighted.push({ id: spellId, weight: weight });
+		totalWeight += weight;
+	}
+	if(weighted.length <= 0) return null;
+
+	let roll = randomInt(1, totalWeight);
+	for(let i = 0; i < weighted.length; i++)
+	{
+		roll -= weighted[i].weight;
+		if(roll <= 0) return weighted[i].id;
+	}
+	return weighted[weighted.length - 1].id;
+}
+
+function rollSpellScrollReward(unit)
+{
+	if(unit == null || unit.abilities == null || unit.abilities.conjure == null || unit.abilities.conjure.config == null || unit.abilities.conjure.config.spells == null)
+	{
+		return null;
+	}
+
+	const spellIds = Object.keys(unit.abilities.conjure.config.spells);
+	if(spellIds.length <= 0) return null;
+
+	const spellId = chooseWeightedSpellFromList(spellIds);
+	if(spellId == null) return null;
+
+	const spellCfg = spellConfigs[spellId];
+	if(spellCfg == null) return null;
+
+	const scrollPoints = randomInt(8, 20);
+	let amount = Math.max(1, Math.round(scrollPoints / Math.max(1, spellCfg.cost)));
+
+	if(amount > 12) amount = 12;
+
+	return { spell: spellId, amount: amount };
+}
+
+function resolveSpellScrollParams(item, unit)
+{
+	if(item.params == null) item.params = {};
+
+	if(item.params.spell != null && item.params.amount != null) return { spell: item.params.spell, amount: item.params.amount };
+
+	const reward = rollSpellScrollReward(unit);
+	if(reward == null) return null;
+
+	item.params.spell = reward.spell;
+	item.params.amount = reward.amount;
+	item.data.params = clone(item.params);
+
+	return reward;
 }
 
 function flashUnitTint(unit, color, flashCount = 3, onComplete = null)
@@ -346,6 +439,54 @@ function playDrinkItemEffect(scene, unit, item, color, onComplete)
 				{
 					sprite.destroy();
 					flashUnitTint(unit, color, 3, onComplete);
+				}
+			});
+		}
+	});
+}
+
+function playReadScrollEffect(scene, unit, item, onComplete)
+{
+	if(!shouldShowActionAnimation(unit))
+	{
+		if(onComplete != null) onComplete();
+		return;
+	}
+
+	let sprite = scene.add.image(unit.x, unit.y - 8, item.config.sprite);
+	sprite.setOrigin(0.5, 0.5);
+	sprite.setDepth(unit.depth + 5);
+	sprite.setAlpha(1);
+
+	fitEffectSpriteSize(sprite, 18);
+
+	const startScaleX = sprite.scaleX;
+	const startScaleY = sprite.scaleY;
+
+	scene.tweens.add({
+		targets: sprite,
+		y: unit.y - 28,
+		scaleX: startScaleX * 2.2,
+		scaleY: startScaleY * 2.2,
+		alpha: 1,
+		angle: -12,
+		duration: 540, //220,
+		ease: 'Back.Out',
+		onComplete: () =>
+		{
+			scene.tweens.add({
+				targets: sprite,
+				y: unit.y - 42,
+				scaleX: startScaleX * 2.9,
+				scaleY: startScaleY * 2.9,
+				alpha: 0,
+				angle: 14,
+				duration: 330, //180,
+				ease: 'Cubic.Out',
+				onComplete: () =>
+				{
+					sprite.destroy();
+					if(onComplete != null) onComplete();
 				}
 			});
 		}
