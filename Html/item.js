@@ -252,11 +252,16 @@ function getGroundItemEntityAtMap(mapX, mapY)
 {
 	const ents = Entity.getEntitiesAtMap(mapX, mapY);
 	if(ents == null || ents.length <= 0) return null;
+
 	for(let i = 0; i < ents.length; i++)
 	{
 		const ent = ents[i];
-		if(ent instanceof ItemEntity) return ent;
+		if(ent instanceof ItemEntity && !(ent instanceof ContainerEntity))
+		{
+			return ent;
+		}
 	}
+
 	return null;
 }
 
@@ -613,22 +618,25 @@ function playPickupItemEffect(scene, unit, item, onComplete)
 //---------------------------- ItemEntity class ----------------------------
 class ItemEntity extends Entity
 {
-    constructor(scene, x, y, visible=true, items=[])
-    {
-        super(entityConfigs['item'], scene, x, y, visible);
-        this.stackSprites = [];
-        this.setOrigin(0.5, 0.5);
-        if(!Array.isArray(this.features.items)) this.features.items = [];
-        for(let i = 0; i < items.length; i++)
-        {
-            this.addItem(items[i]);
-        }
-    }
+	constructor(scene, x, y, visible=true, items=[], configName='item')
+	{
+		super(entityConfigs[configName], scene, x, y, visible);
 
-    static create(scene, x, y, visible=true, items=[])
-    {
-        return new ItemEntity(scene, x, y, visible, items);
-    }
+		this.stackSprites = [];
+		this.setOrigin(0.5, 0.5);
+
+		if(!Array.isArray(this.features.items)) this.features.items = [];
+
+		for(let i = 0; i < items.length; i++)
+		{
+			this.addItem(items[i]);
+		}
+	}
+
+	static create(scene, x, y, visible=true, items=[], configName='item')
+	{
+		return new ItemEntity(scene, x, y, visible, items, configName);
+	}
 
 	transformFeatures(unit, features)
     {
@@ -664,22 +672,29 @@ class ItemEntity extends Entity
         this.syncVisuals();
     }
 
-    removeItem(index=0)
-    {
-        if(!Array.isArray(this.features.items)) this.features.items = [];
-        if(index < 0 || index >= this.features.items.length) return null;
-        const itemData = this.features.items.splice(index, 1)[0];
-        const item = Item.deserialize(itemData);
-        if(this.features.items.length <= 0)
-        {
-            this.die();
-        }
-        else
-        {
-            this.syncVisuals();
-        }
-        return item;
-    }
+	removeItem(index=0)
+	{
+		if(!Array.isArray(this.features.items)) this.features.items = [];
+		if(index < 0 || index >= this.features.items.length) return null;
+		const itemData = this.features.items.splice(index, 1)[0];
+		const item = Item.deserialize(itemData);
+		if(this.features.items.length <= 0)
+		{
+			if(this.features.destroyWhenEmpty === false)
+			{
+				this.syncVisuals();
+			}
+			else
+			{
+				this.die();
+			}
+		}
+		else
+		{
+			this.syncVisuals();
+		}
+		return item;
+	}
 
     getTopItem()
     {
@@ -699,15 +714,30 @@ class ItemEntity extends Entity
         return this.features.items.length;
     }
 
-    syncVisuals()
-    {
-        const topItem = this.getTopItem();
-        if(topItem == null || topItem.config == null) return;
-        this.setTexture(topItem.config.sprite);
-        this.setScale(topItem.config.scale || this.config.scale);
-        this.setDepthFromBottom();
-        this.syncStackSprites();
-    }
+	canAccessItems(unit)
+	{
+		if(unit == null) return false;
+		return unit.mapX === this.mapX && unit.mapY === this.mapY;
+	}
+
+	canStepOn(unit)
+	{
+		return true;
+	}
+
+	syncVisuals()
+	{
+		const topItem = this.getTopItem();
+		if(topItem == null || topItem.config == null)
+		{
+			this.syncStackSprites();
+			return;
+		}
+		this.setTexture(topItem.config.sprite);
+		this.setScale(topItem.config.scale || this.config.scale);
+		this.setDepthFromBottom();
+		this.syncStackSprites();
+	}
 
     syncStackSprites()
     {
@@ -772,4 +802,200 @@ class ItemEntity extends Entity
         super.makeMove();
         super.endMove();
     }
+}
+
+//---------------------------- Help functions ----------------------------
+function playContainerToggleEffect(container, nextOpen, onComplete = null)
+{
+	if(!shouldShowActionAnimation())
+	{
+		container.features.open = nextOpen;
+		container.updateSprite();
+		if(onComplete != null) onComplete();
+		return;
+	}
+
+	const scene = container.scene;
+	const prevAlpha = container.alpha;
+	const prevTexture = container.texture.key;
+	const nextTexture = container.getSpriteKeyForState(nextOpen);
+
+	const overlay = scene.add.image(container.x, container.y, nextTexture);
+	overlay.setOrigin(container.originX, container.originY);
+	overlay.setScale(container.scaleX, container.scaleY);
+	overlay.setRotation(container.rotation);
+	overlay.setFlip(container.flipX, container.flipY);
+	overlay.setDepth(container.depth + 0.01);
+	overlay.setAlpha(0);
+
+	scene.tweens.add({
+		targets: container,
+		alpha: 0,
+		duration: 170,
+		ease: 'Linear'
+	});
+
+	scene.tweens.add({
+		targets: overlay,
+		alpha: prevAlpha,
+		duration: 170,
+		ease: 'Linear',
+		onComplete: () =>
+		{
+			overlay.destroy();
+			container.features.open = nextOpen;
+			container.updateSprite();
+			container.setAlpha(prevAlpha);
+
+			if(onComplete != null) onComplete();
+		}
+	});
+}
+
+//---------------------------- ContainerEntity class ----------------------------
+class ContainerEntity extends ItemEntity
+{
+	constructor(scene, x, y, visible=true, items=[], configName='chest')
+	{
+		super(scene, x, y, visible, items, configName);
+		this.updateSprite();
+	}
+
+	static create(scene, x, y, visible=true, items=[], configName='chest')
+	{
+		return new ContainerEntity(scene, x, y, visible, items, configName);
+	}
+
+	getSpriteKeyForState(isOpen)
+	{
+		return isOpen ? this.config.spriteOpen : this.config.spriteClosed;
+	}
+
+	start(showStart=true)
+	{
+		super.start(showStart);
+		this.updateSprite();
+	}
+
+	syncVisuals()
+	{
+		this.updateSprite();
+	}
+
+	syncStackSprites()
+	{
+		for(let i = 0; i < this.stackSprites.length; i++)
+		{
+			this.stackSprites[i].destroy();
+		}
+		this.stackSprites = [];
+	}
+
+	updateSprite()
+	{
+		const textureKey = this.getSpriteKeyForState(this.features.open);
+		if(textureKey != null && textureKey !== '')
+		{
+			this.setTexture(textureKey);
+		}
+
+		this.setScale(this.config.scale || 1.0);
+
+		if(this.features.containerType === 'tall')
+		{
+			this.setDepthFromBottom(-2.5);
+		}
+		else
+		{
+			this.setDepthFromBottom();
+		}
+	}
+
+	canAccessItems(unit)
+	{
+		if(unit == null) return false;
+		if(this.features.open !== true) return false;
+
+		if(this.features.containerType === 'low')
+		{
+			return unit.mapX === this.mapX && unit.mapY === this.mapY;
+		}
+
+		return false;
+	}
+
+	canStepOn(unit)
+	{
+		return this.features.containerType !== 'tall';
+	}
+
+	canUse(unit)
+	{
+		if(unit == null) return false;
+
+		const dx = Math.abs(this.mapX - unit.mapX);
+		const dy = Math.abs(this.mapY - unit.mapY);
+
+		if(dx > 1 || dy > 1) return false;
+		if(dx === 0 && dy === 0) return false;
+
+		return true;
+	}
+
+	spillItemsToMap(mapX, mapY)
+	{
+		let groundItems = getGroundItemEntityAtMap(mapX, mapY);
+
+		if(groundItems == null)
+		{
+			groundItems = ItemEntity.create(this.scene, 0, 0, true, [], 'item');
+			groundItems.setPositionFromMap(mapX, mapY);
+			groundItems.start(false);
+			entities.push(groundItems);
+		}
+
+		while(this.getItemCount() > 0)
+		{
+			const item = this.removeItem(0);
+			if(item != null)
+			{
+				groundItems.addItem(item);
+			}
+		}
+	}
+
+	use(unit, context = {}, callbackObject = null)
+	{
+		if(!this.canUse(unit))
+		{
+			finishUseAction(callbackObject, {
+				success: false,
+				spendAP: false
+			});
+			return false;
+		}
+
+		const nextOpen = !this.features.open;
+
+		playContainerToggleEffect(this, nextOpen, () =>
+		{
+			if(nextOpen === true &&
+				this.features.containerType === 'tall' &&
+				this.features.spillOnOpen === true &&
+				this.features.spilled !== true &&
+				this.getItemCount() > 0)
+			{
+				this.spillItemsToMap(unit.mapX, unit.mapY);
+				this.features.spilled = true;
+				this.updateSprite();
+			}
+
+			finishUseAction(callbackObject, {
+				success: true,
+				spendAP: false
+			});
+		});
+
+		return false;
+	}
 }

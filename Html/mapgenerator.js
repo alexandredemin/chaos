@@ -76,8 +76,11 @@ class MapGenerator {
 
         // items
         const items = this._placeItems(objects.concat(doors));
+
+        // chests
+		const chests = this._placeChests(objects.concat(doors, items));
         
-        objects = objects.concat(doors, items);
+        objects = objects.concat(doors, items, chests);
 
         return {
             width: this.width,
@@ -993,55 +996,108 @@ class MapGenerator {
     }
 
     //--- place items ---
-    _placeItems(occupiedObjects = [])
-    {
-        const objects = [];
-        const itemNames = Object.keys(itemConfigs);
-        if(itemNames.length <= 0) return objects;
+	_placeItems(occupiedObjects = [])
+	{
+		const objects = [];
+		const itemNames = Object.keys(itemConfigs);
+		if(itemNames.length <= 0) return objects;
 
-        const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
-        if(candidateRooms.length <= 0) return objects;
+		const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
+		if(candidateRooms.length <= 0) return objects;
+		const occupied = new Set();
+		for(let i = 0; i < occupiedObjects.length; i++)
+		{
+			const obj = occupiedObjects[i];
+			const ox = Math.floor(obj.x / 16);
+			const oy = Math.floor(obj.y / 16);
+			occupied.add(ox + ':' + oy);
+		}
+		for(let r = 0; r < candidateRooms.length; r++)
+		{
+			const room = candidateRooms[r];
 
-        const occupied = new Set();
+			// Only 70% chance to place items in a room
+			if(randomInt(1, 100) > 70) continue;
+			const itemCount = randomInt(1, 2);
+			let placed = 0;
+			let attempts = 0;
+			while(placed < itemCount && attempts < 20)
+			{
+				attempts++;
+				const x = randomInt(room.x, room.x + room.w - 1);
+				const y = randomInt(room.y, room.y + room.h - 1);
+				const key = x + ':' + y;
+				if(occupied.has(key)) continue;
+				const itemName = itemNames[randomInt(0, itemNames.length - 1)];
+				objects.push({
+					type: "entity",
+					name: "item",
+					x: x * 16,
+					y: y * 16,
+					properties: [],
+					items: [
+						createItemData(itemName, {})
+					]
+				});
+				occupied.add(key);
+				placed++;
+			}
+		}
+		return objects;
+	}
 
-        for(let i = 0; i < occupiedObjects.length; i++)
-        {
-            const obj = occupiedObjects[i];
-            const ox = Math.floor(obj.x / 16);
-            const oy = Math.floor(obj.y / 16);
-            occupied.add(ox + ':' + oy);
-        }
+    //--- place chests---
+	_placeChests(occupiedObjects = [])
+	{
+		const objects = [];
+		const itemNames = Object.keys(itemConfigs);
+		if(itemNames.length <= 0) return objects;
 
-        for(let r = 0; r < candidateRooms.length; r++)
-        {
-            const room = candidateRooms[r];
-            const itemCount = this._rand(1, 2);
-            let placed = 0;
-            let attempts = 0;
+		const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
+		if(candidateRooms.length <= 0) return objects;
+		const occupied = new Set();
+		for(let i = 0; i < occupiedObjects.length; i++)
+		{
+			const obj = occupiedObjects[i];
+			const ox = Math.floor(obj.x / 16);
+			const oy = Math.floor(obj.y / 16);
+			occupied.add(ox + ':' + oy);
+		}
+		for(let r = 0; r < candidateRooms.length; r++)
+		{
+			const room = candidateRooms[r];
 
-            while(placed < itemCount && attempts < 20)
-            {
-                attempts++;
-                const x = this._rand(room.x, room.x + room.w - 1);
-                const y = this._rand(room.y, room.y + room.h - 1);
-                const key = x + ':' + y;
-                if(occupied.has(key)) continue;
-
-                const itemName = itemNames[this._rand(0, itemNames.length - 1)];
-                objects.push({
-                    type: "entity",
-                    name: "item",
-                    x: x * 16,
-                    y: y * 16,
-                    properties: [],
-                    items: [createItemData(itemName, {})]
-                });
-                occupied.add(key);
-                placed++;
-            }
-        }
-    return objects;
-    }
+			// Only 30% chance to place a chest in a room
+			if(randomInt(1, 100) > 30) continue;
+			let attempts = 0;
+			while(attempts < 20)
+			{
+				attempts++;
+				const x = randomInt(room.x, room.x + room.w - 1);
+				const y = randomInt(room.y, room.y + room.h - 1);
+				const key = x + ':' + y;
+				if(occupied.has(key)) continue;
+				const chestItemCount = randomInt(1, 5);
+				let chestItems = [];
+				for(let i = 0; i < chestItemCount; i++)
+				{
+					const itemName = itemNames[randomInt(0, itemNames.length - 1)];
+					chestItems.push(createItemData(itemName, {}));
+				}
+				objects.push({
+					type: "entity",
+					name: "chest",
+					x: x * 16,
+					y: y * 16,
+					properties: [],
+					items: chestItems
+				});
+				occupied.add(key);
+				break;
+			}
+		}
+		return objects;
+	}
 
     //--- start positions ---
     _generateStartPositions(count = 8) {

@@ -480,24 +480,36 @@ class Unit extends BaseUnit
         return false;
     }
 
-    canStepTo(offsetX, offsetY)
-    {
-        if(this.features.move <= 0)return false;
-        let x = this.mapX + offsetX;
-        let y = this.mapY + offsetY;
-        if((x<0)||(x>=map.width)||(y<0)||(y>=map.height))return false;
-        let unitAtPos = getUnitAtMap(x, y);
-        if(unitAtPos!=null)return false;
-        let wallTile = wallsLayer.getTileAt(x, y);
-        if(wallTile != null)
-        {
-            if(wallTile.properties['collides'] === true)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
+	canStepTo(offsetX, offsetY)
+	{
+		if(this.features.move <= 0) return false;
+		let x = this.mapX + offsetX;
+		let y = this.mapY + offsetY;
+		if((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height)) return false;
+		let unitAtPos = getUnitAtMap(x, y);
+		if(unitAtPos != null) return false;
+		let wallTile = wallsLayer.getTileAt(x, y);
+		if(wallTile != null)
+		{
+			if(wallTile.properties['collides'] === true)
+			{
+				return false;
+			}
+		}
+		const ents = Entity.getEntitiesAtMap(x, y);
+		if(ents != null && ents.length > 0)
+		{
+			for(let i = 0; i < ents.length; i++)
+			{
+				const ent = ents[i];
+				if(typeof ent.canStepOn === 'function' && ent.canStepOn(this) !== true)
+				{
+					return false;
+				}
+			}
+		}
+		return true;
+	}
 
     processStates()
     {

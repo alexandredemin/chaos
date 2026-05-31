@@ -114,6 +114,24 @@ const entityConfigs = {
         },
         createFunction: (scene, x, y, visible=true) => ItemEntity.create(scene, x, y, visible)
     },
+
+	'chest': {
+		name: 'chest',
+		spriteClosed: 'scroll',
+		spriteOpen: 'book',
+		scale: 0.85,
+		features: {
+			health: 1,
+			blocksLOS: false,
+			items: [],
+			open: false,
+			destroyWhenEmpty: false,
+			containerType: 'low',
+			spillOnOpen: false,
+			spilled: false
+		},
+		createFunction: (scene, x, y, visible=true) => ContainerEntity.create(scene, x, y, visible, [], 'chest')
+	},
 };
 
 //---------------------------- Item configs ----------------------------

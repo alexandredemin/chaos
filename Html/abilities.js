@@ -50,15 +50,23 @@ function getAdjacentUsableEntities(unit)
 
 function getItemEntityAtUnit(unit)
 {
-    if(unit == null) return null;
-    const ents = Entity.getEntitiesAtMap(unit.mapX, unit.mapY);
-    if(ents == null || ents.length <= 0) return null;
-    for(let i = 0; i < ents.length; i++)
-    {
-        const ent = ents[i];
-        if(ent instanceof ItemEntity && ent.getItemCount() > 0) return ent;
-    }
-    return null;
+	if(unit == null) return null;
+	const ents = Entity.getEntitiesAtMap(unit.mapX, unit.mapY);
+	if(ents == null || ents.length <= 0) return null;
+	let fallback = null;
+	for(let i = 0; i < ents.length; i++)
+	{
+		const ent = ents[i];
+		if(!(ent instanceof ItemEntity)) continue;
+		if(ent.getItemCount() <= 0) continue;
+
+		if(typeof ent.canAccessItems === 'function' && ent.canAccessItems(unit))
+		{
+			if(!(ent instanceof ContainerEntity)) return ent;
+			if(fallback == null) fallback = ent;
+		}
+	}
+	return fallback;
 }
 
 //----------------------------abilities----------------------------
