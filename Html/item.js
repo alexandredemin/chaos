@@ -817,16 +817,23 @@ function playContainerToggleEffect(container, nextOpen, onComplete = null)
 
 	const scene = container.scene;
 	const prevAlpha = container.alpha;
-	const prevTexture = container.texture.key;
-	const nextTexture = container.getSpriteKeyForState(nextOpen);
 
-	const overlay = scene.add.image(container.x, container.y, nextTexture);
+	const oldTexture = container.getTextureKeyForState(container.features.open);
+	const oldFrame = container.getFrameForState(container.features.open);
+
+	const newTexture = container.getTextureKeyForState(nextOpen);
+	const newFrame = container.getFrameForState(nextOpen);
+
+	const overlay = scene.add.image(container.x, container.y, newTexture, newFrame);
 	overlay.setOrigin(container.originX, container.originY);
 	overlay.setScale(container.scaleX, container.scaleY);
 	overlay.setRotation(container.rotation);
 	overlay.setFlip(container.flipX, container.flipY);
 	overlay.setDepth(container.depth + 0.01);
 	overlay.setAlpha(0);
+
+	container.setTexture(oldTexture, oldFrame);
+	container.setAlpha(prevAlpha);
 
 	scene.tweens.add({
 		targets: container,
@@ -843,6 +850,7 @@ function playContainerToggleEffect(container, nextOpen, onComplete = null)
 		onComplete: () =>
 		{
 			overlay.destroy();
+
 			container.features.open = nextOpen;
 			container.updateSprite();
 			container.setAlpha(prevAlpha);
@@ -891,16 +899,25 @@ class ContainerEntity extends ItemEntity
 		this.stackSprites = [];
 	}
 
+	getTextureKeyForState(isOpen)
+	{
+		if(isOpen && this.config.spriteOpen != null) return this.config.spriteOpen;
+		if(!isOpen && this.config.spriteClosed != null) return this.config.spriteClosed;
+		return this.config.sprite;
+	}
+
+	getFrameForState(isOpen)
+	{
+		if(isOpen) return this.config.frameOpen ?? 0;
+		return this.config.frameClosed ?? 0;
+	}
+
 	updateSprite()
 	{
-		const textureKey = this.getSpriteKeyForState(this.features.open);
-		if(textureKey != null && textureKey !== '')
-		{
-			this.setTexture(textureKey);
-		}
-
+		const textureKey = this.getTextureKeyForState(this.features.open);
+		const frame = this.getFrameForState(this.features.open);
+		this.setTexture(textureKey, frame);
 		this.setScale(this.config.scale || 1.0);
-
 		if(this.features.containerType === 'tall')
 		{
 			this.setDepthFromBottom(-2.5);
