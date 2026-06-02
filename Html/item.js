@@ -924,7 +924,8 @@ class ContainerEntity extends ItemEntity
 		}
 		else
 		{
-			this.setDepthFromBottom();
+			//this.setDepthFromBottom();
+			this.setDepthFromBottom(-6);
 		}
 	}
 

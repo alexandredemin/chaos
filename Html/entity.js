@@ -553,8 +553,9 @@ class PentagramEntity extends Entity
     start(showStart=true)
     {
         this.scale = this.config.scale;
-        let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
-        if(unitAtPos && unitAtPos.config.name === 'wizard') this.wizard = unitAtPos;
+	    this.setDepthFromBottom(-20);
+	    let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
+	    if(unitAtPos && unitAtPos.config.name === 'wizard') this.wizard = unitAtPos;
     }
 
     onCallback()

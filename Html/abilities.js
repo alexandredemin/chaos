@@ -48,6 +48,7 @@ function getAdjacentUsableEntities(unit)
     return result;
 }
 
+/*
 function getItemEntityAtUnit(unit)
 {
 	if(unit == null) return null;
@@ -67,6 +68,84 @@ function getItemEntityAtUnit(unit)
 		}
 	}
 	return fallback;
+}
+*/
+function getItemEntityAtUnit(unit)
+{
+	if(unit == null) return null;
+
+	const ents = Entity.getEntitiesAtMap(unit.mapX, unit.mapY);
+	if(ents == null || ents.length <= 0) return null;
+
+	let pickupSources = [];
+	let looseSources = [];
+	let containerSources = [];
+
+	for(let i = 0; i < ents.length; i++)
+	{
+		const ent = ents[i];
+		if(!(ent instanceof ItemEntity)) continue;
+		if(ent.getItemCount() <= 0) continue;
+
+		if(typeof ent.canAccessItems === 'function' && ent.canAccessItems(unit))
+		{
+			if(ent instanceof ContainerEntity) containerSources.push(ent);
+			else looseSources.push(ent);
+		}
+	}
+
+	pickupSources = looseSources.concat(containerSources);
+
+	if(pickupSources.length <= 0) return null;
+	if(pickupSources.length === 1) return pickupSources[0];
+
+	return {
+		sources: pickupSources,
+
+		getItems()
+		{
+			let result = [];
+			for(let i = 0; i < this.sources.length; i++)
+			{
+				const items = this.sources[i].getItems();
+				for(let j = 0; j < items.length; j++)
+				{
+					result.push(items[j]);
+				}
+			}
+			return result;
+		},
+
+		getItemCount()
+		{
+			let count = 0;
+			for(let i = 0; i < this.sources.length; i++)
+			{
+				count += this.sources[i].getItemCount();
+			}
+			return count;
+		},
+
+		removeItem(index=0)
+		{
+			let localIndex = index;
+
+			for(let i = 0; i < this.sources.length; i++)
+			{
+				const source = this.sources[i];
+				const count = source.getItemCount();
+
+				if(localIndex < count)
+				{
+					return source.removeItem(localIndex);
+				}
+
+				localIndex -= count;
+			}
+
+			return null;
+		}
+	};
 }
 
 //----------------------------abilities----------------------------
