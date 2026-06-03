@@ -140,15 +140,17 @@ class Item
 			{
 				playDropItemEffect(unit.scene, unit, this, () =>
 				{
-					let itemEntity = getGroundItemEntityAtMap(unit.mapX, unit.mapY);
+					let itemEntity = getOpenContainerAtUnit(unit);
+					if(itemEntity == null) itemEntity = getGroundItemEntityAtMap(unit.mapX, unit.mapY);
 					if(itemEntity == null)
 					{
-						itemEntity = ItemEntity.create(unit.scene, 0, 0, true, []);
+						itemEntity = ItemEntity.create(unit.scene, 0, 0, true, [], 'item');
 						itemEntity.setPositionFromMap(unit.mapX, unit.mapY);
 						itemEntity.start(false);
 						entities.push(itemEntity);
 					}
 					itemEntity.addItem(this);
+
 					finishItemAction(callbackObject, {
 						success: true,
 						spendAP: actionCfg.spendAP === true,
@@ -257,6 +259,29 @@ function getGroundItemEntityAtMap(mapX, mapY)
 	{
 		const ent = ents[i];
 		if(ent instanceof ItemEntity && !(ent instanceof ContainerEntity))
+		{
+			return ent;
+		}
+	}
+
+	return null;
+}
+
+function getOpenContainerAtUnit(unit)
+{
+	if(unit == null) return null;
+
+	const ents = Entity.getEntitiesAtMap(unit.mapX, unit.mapY);
+	if(ents == null || ents.length <= 0) return null;
+
+	for(let i = 0; i < ents.length; i++)
+	{
+		const ent = ents[i];
+
+		if(!(ent instanceof ContainerEntity)) continue;
+		if(ent.features.open !== true) continue;
+
+		if(typeof ent.canAccessItems === 'function' && ent.canAccessItems(unit))
 		{
 			return ent;
 		}
