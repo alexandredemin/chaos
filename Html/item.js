@@ -910,6 +910,12 @@ class ContainerEntity extends ItemEntity
 		this.updateSprite();
 	}
 
+	setDepthFromBottom(offset=0)
+    {
+        //this.setDepth(1);
+		super.setDepthFromBottom(-20);
+    }
+
 	syncVisuals()
 	{
 		this.updateSprite();
@@ -946,11 +952,13 @@ class ContainerEntity extends ItemEntity
 		if(this.features.containerType === 'tall')
 		{
 			this.setDepthFromBottom(-2.5);
+			//this.setDepth(-20);
 		}
 		else
 		{
 			//this.setDepthFromBottom();
 			this.setDepthFromBottom(-6);
+			//this.setDepth(-20);
 		}
 	}
 
