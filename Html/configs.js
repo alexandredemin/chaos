@@ -52,6 +52,7 @@ const entityConfigs = {
         name: 'pentagram',
         sprite: 'pentagram',
         scale: 0.15,
+        depthOffset: -40,
         features: {
             health: 1,
             blocksLOS: false,
@@ -121,6 +122,7 @@ const entityConfigs = {
         frameClosed: 0,
         frameOpen: 1,
         scale: 1.0,
+        depthOffset: -20,
         features: {
             health: 1,
             blocksLOS: false,

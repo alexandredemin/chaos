@@ -910,12 +910,6 @@ class ContainerEntity extends ItemEntity
 		this.updateSprite();
 	}
 
-	setDepthFromBottom(offset=0)
-    {
-        //this.setDepth(1);
-		super.setDepthFromBottom(-20);
-    }
-
 	syncVisuals()
 	{
 		this.updateSprite();
@@ -949,17 +943,6 @@ class ContainerEntity extends ItemEntity
 		const frame = this.getFrameForState(this.features.open);
 		this.setTexture(textureKey, frame);
 		this.setScale(this.config.scale || 1.0);
-		if(this.features.containerType === 'tall')
-		{
-			this.setDepthFromBottom(-2.5);
-			//this.setDepth(-20);
-		}
-		else
-		{
-			//this.setDepthFromBottom();
-			this.setDepthFromBottom(-6);
-			//this.setDepth(-20);
-		}
 	}
 
 	canAccessItems(unit)

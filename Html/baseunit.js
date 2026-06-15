@@ -42,7 +42,13 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
     setDepthFromBottom(offset=0)
     {
         const bottomY = this.y + this.displayHeight * (1 - this.originY);
-        super.setDepth(bottomY + offset);
+        let depthOffset = offset;
+        if(depthOffset === 0)
+        {
+            if(this.features && this.features.depthOffset != null) depthOffset += this.features.depthOffset;
+            else if(this.config && this.config.depthOffset != null) depthOffset += this.config.depthOffset;
+        }
+        super.setDepth(bottomY + depthOffset);
     }
 
     setMapPosition(x,y)

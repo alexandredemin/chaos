@@ -46,8 +46,8 @@ class Entity extends BaseUnit
     setDepthFromBottom(offset=0)
     {
         if(offset != 0) super.setDepthFromBottom(offset);
+        else if(this.config && this.config.depthOffset != null) super.setDepthFromBottom(this.config.depthOffset);
         else super.setDepthFromBottom(-16);
-
     }
 
     start(showStart=true)
@@ -553,7 +553,7 @@ class PentagramEntity extends Entity
     start(showStart=true)
     {
         this.scale = this.config.scale;
-	    this.setDepthFromBottom(-20);
+	    this.setDepthFromBottom();
 	    let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
 	    if(unitAtPos && unitAtPos.config.name === 'wizard') this.wizard = unitAtPos;
     }
