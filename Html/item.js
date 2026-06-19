@@ -101,10 +101,19 @@ class Item
 				switch(this.configName)
 				{
 					case 'healing_potion':
-						return true; //unit.features.health < unit.config.features.health;
+						return true;
 
 					case 'mana_potion':
 						return unit.features.mana != null;
+
+					case 'strength_potion':
+						return true;
+
+					case 'defense_potion':
+						return true;
+
+					case 'speed_potion':
+						return true;
 
 					case 'spell_scroll':
 						return unit.abilities != null && unit.abilities.conjure != null && unit.abilities.conjure.config != null && unit.abilities.conjure.config.spells != null;
@@ -224,6 +233,57 @@ class Item
 							}
 
 							unit.features.mana += value;
+
+							finishItemAction(callbackObject, {
+								success: true,
+								abilityPointCost: cost.abilityPointCost,
+								movePointCost: cost.movePointCost,
+								consumeItem: actionCfg.consumeItem === true
+							});
+						});
+
+						return false;
+					}
+
+					case 'strength_potion':
+					{
+						playDrinkItemEffect(unit.scene, unit, this, 0xc84b3a, () =>
+						{
+							StrengthState.apply(unit);
+
+							finishItemAction(callbackObject, {
+								success: true,
+								abilityPointCost: cost.abilityPointCost,
+								movePointCost: cost.movePointCost,
+								consumeItem: actionCfg.consumeItem === true
+							});
+						});
+
+						return false;
+					}
+
+					case 'defense_potion':
+					{
+						playDrinkItemEffect(unit.scene, unit, this, 0x274c9b, () =>
+						{
+							DefenseState.apply(unit);
+
+							finishItemAction(callbackObject, {
+								success: true,
+								abilityPointCost: cost.abilityPointCost,
+								movePointCost: cost.movePointCost,
+								consumeItem: actionCfg.consumeItem === true
+							});
+						});
+
+						return false;
+					}
+
+					case 'speed_potion':
+					{
+						playDrinkItemEffect(unit.scene, unit, this, 0xb58a2a, () =>
+						{
+							SpeedState.apply(unit);
 
 							finishItemAction(callbackObject, {
 								success: true,

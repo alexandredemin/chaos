@@ -1,5 +1,80 @@
-//---------------------------- temporalStates classes ----------------------------
+//---------------------------- helper functions ----------------------------
+const exclusiveBuffStateNames = ['gigantic', 'strength', 'defense', 'speed'];
 
+function clearExclusiveBuffStates(unit, exceptName = null)
+{
+	const statesCopy = unit.states.slice();
+
+	for(let i = 0; i < statesCopy.length; i++)
+	{
+		const st = statesCopy[i];
+		if(exclusiveBuffStateNames.indexOf(st.name) >= 0 && st.name !== exceptName)
+		{
+			st.stop();
+		}
+	}
+}
+
+function createStateAura(state, color)
+{
+	const unit = state.unit;
+	const frameName = unit.frame ? unit.frame.name : 0;
+
+	state.aura = unit.scene.add.image(unit.x, unit.y, unit.texture.key, frameName);
+	state.aura.setOrigin(unit.originX, unit.originY);
+	state.aura.setScale(unit.scaleX * 1.14, unit.scaleY * 1.14);
+	state.aura.setRotation(unit.rotation);
+	state.aura.setFlip(unit.flipX, unit.flipY);
+	state.aura.setDepth(unit.depth - 0.05);
+	state.aura.setAlpha(0.22);
+	state.aura.setTintFill(color);
+	state.aura.visible = unit.visible;
+
+	state.auraTween = unit.scene.tweens.add({
+		targets: state.aura,
+		alpha: { from: 0.18, to: 0.34 },
+		scaleX: unit.scaleX * 1.18,
+		scaleY: unit.scaleY * 1.18,
+		duration: 550,
+		yoyo: true,
+		repeat: -1,
+		ease: 'Sine.InOut'
+	});
+}
+
+function updateStateAura(state)
+{
+	if(state.aura == null) return;
+
+	const unit = state.unit;
+	const frameName = unit.frame ? unit.frame.name : 0;
+
+	state.aura.setTexture(unit.texture.key, frameName);
+	state.aura.setOrigin(unit.originX, unit.originY);
+	state.aura.setPosition(unit.x, unit.y);
+	state.aura.setScale(unit.scaleX * 1.14, unit.scaleY * 1.14);
+	state.aura.setRotation(unit.rotation);
+	state.aura.setFlip(unit.flipX, unit.flipY);
+	state.aura.setDepth(unit.depth - 0.05);
+	state.aura.visible = unit.visible;
+}
+
+function destroyStateAura(state)
+{
+	if(state.auraTween != null)
+	{
+		state.auraTween.stop();
+		state.auraTween = null;
+	}
+
+	if(state.aura != null)
+	{
+		state.aura.destroy();
+		state.aura = null;
+	}
+}
+
+//---------------------------- temporalStates classes ----------------------------
 class UnitState
 {
     name = '';
@@ -33,6 +108,10 @@ class UnitState
     onStep()
     {
     }
+
+    updateVisual()
+	{
+	}
 }
 
 class InfectedState extends UnitState
@@ -160,6 +239,7 @@ class GiganticState extends UnitState
     static apply(unit, stateData=null)
     {
         if(unit.hasState('gigantic') === false){
+            clearExclusiveBuffStates(unit, 'gigantic');
             let state = new GiganticState(unit);
             if(stateData == null){
                 state.data.init_originY = unit.originY;
@@ -255,4 +335,248 @@ class GiganticState extends UnitState
         this.unit.removeState(this);
     }
 
+}
+
+class StrengthState extends UnitState
+{
+	aura = null;
+	auraTween = null;
+
+	data = {
+		init_strength: 0,
+		bonus: 0,
+		timeleft: 0
+	}
+
+	static duration = 4;
+
+	constructor(unit)
+	{
+		super(unit);
+		this.name = 'strength';
+	}
+
+	static apply(unit, stateData=null)
+	{
+		if(unit.hasState('strength'))
+		{
+			for(let i = 0; i < unit.states.length; i++)
+			{
+				if(unit.states[i].name === 'strength')
+				{
+					if(stateData != null) unit.states[i].data = clone(stateData);
+					else unit.states[i].data.timeleft = StrengthState.duration;
+					return;
+				}
+			}
+		}
+		clearExclusiveBuffStates(unit, 'strength');
+		let state = new StrengthState(unit);
+		if(stateData == null)
+		{
+			state.data.init_strength = unit.features.strength;
+			const baseStrength = unit.config.features.strength || 1;
+			state.data.bonus = Math.max(1, Math.round(4 / Math.max(1, baseStrength)));
+			state.data.timeleft = StrengthState.duration;
+			unit.features.strength += state.data.bonus;
+		}
+		else
+		{
+			state.data = clone(stateData);
+		}
+		unit.addState(state);
+		state.start();
+	}
+
+	start()
+	{
+		createStateAura(this, 0xc84b3a);
+	}
+
+	updateVisual()
+	{
+		updateStateAura(this);
+	}
+
+	onRecover()
+	{
+		this.processed = true;
+		this.data.timeleft--;
+		if(this.data.timeleft <= 0) this.stop();
+		this.unit.processStates();
+	}
+
+	stop()
+	{
+		destroyStateAura(this);
+		this.unit.features.strength = this.data.init_strength;
+		this.unit.removeState(this);
+	}
+}
+
+class DefenseState extends UnitState
+{
+	aura = null;
+	auraTween = null;
+
+	data = {
+		init_defense: 0,
+		bonus: 0,
+		timeleft: 0
+	}
+
+	static duration = 4;
+
+	constructor(unit)
+	{
+		super(unit);
+		this.name = 'defense';
+	}
+
+	static apply(unit, stateData=null)
+	{
+		if(unit.hasState('defense'))
+		{
+			for(let i = 0; i < unit.states.length; i++)
+			{
+				if(unit.states[i].name === 'defense')
+				{
+					if(stateData != null) unit.states[i].data = clone(stateData);
+					else unit.states[i].data.timeleft = DefenseState.duration;
+					return;
+				}
+			}
+		}
+		clearExclusiveBuffStates(unit, 'defense');
+		let state = new DefenseState(unit);
+		if(stateData == null)
+		{
+			state.data.init_defense = unit.features.defense;
+			const baseDefense = unit.config.features.defense || 1;
+			state.data.bonus = Math.max(1, Math.round(4 / Math.max(1, baseDefense)));
+			state.data.timeleft = DefenseState.duration;
+			unit.features.defense += state.data.bonus;
+		}
+		else
+		{
+			state.data = clone(stateData);
+		}
+		unit.addState(state);
+		state.start();
+	}
+
+	start()
+	{
+		createStateAura(this, 0x274c9b);
+	}
+
+	updateVisual()
+	{
+		updateStateAura(this);
+	}
+
+	onRecover()
+	{
+		this.processed = true;
+		this.data.timeleft--;
+		if(this.data.timeleft <= 0) this.stop();
+		this.unit.processStates();
+	}
+
+	stop()
+	{
+		destroyStateAura(this);
+		this.unit.features.defense = this.data.init_defense;
+		this.unit.removeState(this);
+	}
+}
+
+class SpeedState extends UnitState
+{
+	aura = null;
+	auraTween = null;
+
+	data = {
+		init_move: 0,
+		init_abilityPoints: 0,
+		multiplier: 2,
+		timeleft: 0
+	}
+
+	static duration = 4;
+
+	constructor(unit)
+	{
+		super(unit);
+		this.name = 'speed';
+	}
+
+	static apply(unit, stateData=null)
+	{
+		if(unit.hasState('speed'))
+		{
+			for(let i = 0; i < unit.states.length; i++)
+			{
+				if(unit.states[i].name === 'speed')
+				{
+					if(stateData != null) unit.states[i].data = clone(stateData);
+					else unit.states[i].data.timeleft = SpeedState.duration;
+					return;
+				}
+			}
+		}
+		clearExclusiveBuffStates(unit, 'speed');
+		let state = new SpeedState(unit);
+		if(stateData == null)
+		{
+			state.data.init_move = unit.features.move;
+			state.data.init_abilityPoints = unit.features.abilityPoints;
+			state.data.multiplier = 2;
+			state.data.timeleft = SpeedState.duration;
+			unit.features.move *= state.data.multiplier;
+			unit.features.abilityPoints *= state.data.multiplier;
+		}
+		else
+		{
+			state.data = clone(stateData);
+		}
+		unit.addState(state);
+		state.start();
+	}
+
+	start()
+	{
+		createStateAura(this, 0xb58a2a);
+	}
+
+	updateVisual()
+	{
+		updateStateAura(this);
+	}
+
+	onRecover()
+	{
+		this.processed = true;
+		this.data.timeleft--;
+		if(this.data.timeleft <= 0)
+		{
+			this.stop();
+			this.unit.processStates();
+			return;
+		}
+		this.unit.features.move = this.unit.config.features.move * this.data.multiplier;
+		this.unit.features.abilityPoints = this.unit.config.features.abilityPoints * this.data.multiplier;
+		this.unit.processStates();
+	}
+
+	stop()
+	{
+		destroyStateAura(this);
+		if(this.data.timeleft > 0)
+		{
+			this.unit.features.move = this.data.init_move;
+			this.unit.features.abilityPoints = this.data.init_abilityPoints;
+		}
+		this.unit.removeState(this);
+	}
 }

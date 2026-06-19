@@ -176,6 +176,42 @@ const itemConfigs = {
 	        drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }
 		}
 	},
+
+    'strength_potion': {
+        id: 'strength_potion',
+        name: 'Strength potion',
+        sprite: 'strength_potion',
+        scale: 0.1,
+        stackOffset: { x: 0, y: 0 },
+        actions: {
+            use: { title: 'Drink', abilityPointCost: 0, movePointCost: 1, consumeItem: true },
+            drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }
+        }
+    },
+
+    'defense_potion': {
+        id: 'defense_potion',
+        name: 'Defense potion',
+        sprite: 'defense_potion',
+        scale: 0.1,
+        stackOffset: { x: 0, y: 0 },
+        actions: {
+            use: { title: 'Drink', abilityPointCost: 0, movePointCost: 1, consumeItem: true },
+            drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }
+        }
+    },
+
+    'speed_potion': {
+        id: 'speed_potion',
+        name: 'Speed potion',
+        sprite: 'speed_potion',
+        scale: 0.1,
+        stackOffset: { x: 0, y: 0 },
+        actions: {
+            use: { title: 'Drink', abilityPointCost: 0, movePointCost: 1, consumeItem: true },
+            drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }
+        }
+    },
 };
 
 //---------------------------- Unit configs ----------------------------
@@ -759,12 +795,11 @@ const abilities = {
 
 //---------------------------- Unit states ----------------------------------
 const unitStates = {
-    'infected': {
-        applyFunction: (unit, stateData) => InfectedState.apply(unit, stateData)
-    },
-    'gigantic': {
-        applyFunction: (unit, stateData) => GiganticState.apply(unit, stateData)
-    }
+    'infected': { applyFunction: (unit, stateData) => InfectedState.apply(unit, stateData) },
+    'gigantic': { applyFunction: (unit, stateData) => GiganticState.apply(unit, stateData) },
+    'strength': { applyFunction: StrengthState.apply },
+    'defense': { applyFunction: DefenseState.apply },
+    'speed': { applyFunction: SpeedState.apply },
 };
 
 //---------------------------- Maps ---------------------------------------

@@ -135,6 +135,14 @@ class Unit extends BaseUnit
     die()
     {
         this.died = true;
+        const statesCopy = this.states.slice();
+        for(let i = 0; i < statesCopy.length; i++)
+        {
+            if(typeof statesCopy[i].stop === 'function')
+            {
+                statesCopy[i].stop();
+            }
+        }
         // Drop items on the ground
         if(Array.isArray(this.features.items) && this.features.items.length > 0)
         {
@@ -637,7 +645,13 @@ class Unit extends BaseUnit
 
     update()
     {
-
+        for(let i = 0; i < this.states.length; i++)
+        {
+            if(typeof this.states[i].updateVisual === 'function')
+            {
+                this.states[i].updateVisual();
+            }
+        }
         if(this.isMoving)
         {
             this.setDepthFromBottom();
