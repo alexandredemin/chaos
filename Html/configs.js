@@ -797,9 +797,9 @@ const abilities = {
 const unitStates = {
     'infected': { applyFunction: (unit, stateData) => InfectedState.apply(unit, stateData) },
     'gigantic': { applyFunction: (unit, stateData) => GiganticState.apply(unit, stateData) },
-    'strength': { applyFunction: StrengthState.apply },
-    'defense': { applyFunction: DefenseState.apply },
-    'speed': { applyFunction: SpeedState.apply },
+    'strength': { applyFunction: (unit, stateData) => StrengthState.apply(unit, stateData) },
+    'defense': { applyFunction: (unit, stateData) => DefenseState.apply(unit, stateData) },
+    'speed': { applyFunction: (unit, stateData) => SpeedState.apply(unit, stateData) }
 };
 
 //---------------------------- Maps ---------------------------------------
