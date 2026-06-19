@@ -48,28 +48,6 @@ function getAdjacentUsableEntities(unit)
     return result;
 }
 
-/*
-function getItemEntityAtUnit(unit)
-{
-	if(unit == null) return null;
-	const ents = Entity.getEntitiesAtMap(unit.mapX, unit.mapY);
-	if(ents == null || ents.length <= 0) return null;
-	let fallback = null;
-	for(let i = 0; i < ents.length; i++)
-	{
-		const ent = ents[i];
-		if(!(ent instanceof ItemEntity)) continue;
-		if(ent.getItemCount() <= 0) continue;
-
-		if(typeof ent.canAccessItems === 'function' && ent.canAccessItems(unit))
-		{
-			if(!(ent instanceof ContainerEntity)) return ent;
-			if(fallback == null) fallback = ent;
-		}
-	}
-	return fallback;
-}
-*/
 function getItemEntityAtUnit(unit)
 {
 	if(unit == null) return null;
@@ -958,7 +936,8 @@ class PickUpAbility extends UnitAbility
 	canActivate(unit)
 	{
 		if(unit == null) return false;
-		if(unit.features.abilityPoints <= 0) return false;
+		//if(unit.features.abilityPoints <= 0) return false;
+        if(unit.features.move < 0) return false;
 		if(typeof unit.hasFreeItemSlot === 'function' && !unit.hasFreeItemSlot()) return false;
 
 		const itemEntity = getItemEntityAtUnit(unit);
@@ -1011,8 +990,10 @@ class PickUpAbility extends UnitAbility
 
 			if(added)
 			{
-				this.unit.features.abilityPoints--;
-				if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
+				//this.unit.features.abilityPoints--;
+				//if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
+                this.unit.features.move --;
+                if(this.unit.features.move < 0) this.unit.features.move = 0;
 			}
 		}
 
@@ -1182,13 +1163,16 @@ class InventoryAbility extends UnitAbility
 			{
 				this.unit.removeItem(this.selectedItemIndex);
 			}
-
-			if(result.spendAP === true)
-			{
-				this.unit.features.abilityPoints--;
-				if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
-			}
-
+			if(result.abilityPointCost != null && result.abilityPointCost > 0)
+            {
+                this.unit.features.abilityPoints -= result.abilityPointCost;
+                if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
+            }
+            if(result.movePointCost != null && result.movePointCost > 0)
+            {
+                this.unit.features.move -= result.movePointCost;
+                if(this.unit.features.move < 0) this.unit.features.move = 0;
+            }
 			if(uiScene && uiScene.bottomBar != null)
 			{
 				uiScene.bottomBar.markDirty();

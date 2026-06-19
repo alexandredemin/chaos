@@ -66,14 +66,31 @@ class Item
 		return this.config.actions[actionId]?.title || actionId;
 	}
 
+	getActionCost(actionId)
+	{
+		if(this.config == null || this.config.actions == null || this.config.actions[actionId] == null)
+		{
+			return {
+				abilityPointCost: 0,
+				movePointCost: 0
+			};
+		}
+		const cfg = this.config.actions[actionId];
+		return {
+			abilityPointCost: cfg.abilityPointCost || 0,
+			movePointCost: cfg.movePointCost || 0
+		};
+	}
+
 	canDoAction(actionId, unit)
 	{
 		if(unit == null) return false;
 		if(this.config == null || this.config.actions == null) return false;
 		if(this.config.actions[actionId] == null) return false;
 
-		const actionCfg = this.config.actions[actionId];
-		if(actionCfg.spendAP === true && unit.features.abilityPoints <= 0) return false;
+		const cost = this.getActionCost(actionId);
+		if(unit.features.abilityPoints < cost.abilityPointCost) return false;
+		if(unit.features.move < cost.movePointCost) return false;
 
 		switch(actionId)
 		{
@@ -124,7 +141,8 @@ class Item
 		{
 			const result = {
 				success: false,
-				spendAP: false,
+				abilityPointCost: 0,
+				movePointCost: 0,
 				consumeItem: false
 			};
 
@@ -153,7 +171,8 @@ class Item
 
 					finishItemAction(callbackObject, {
 						success: true,
-						spendAP: actionCfg.spendAP === true,
+						abilityPointCost: cost.abilityPointCost,
+						movePointCost: cost.movePointCost,
 						consumeItem: actionCfg.consumeItem === true
 					});
 				});
@@ -173,7 +192,8 @@ class Item
 							unit.features.health = Math.min(maxHealth, unit.features.health + value);
 							finishItemAction(callbackObject, {
 								success: true,
-								spendAP: actionCfg.spendAP === true,
+								abilityPointCost: cost.abilityPointCost,
+								movePointCost: cost.movePointCost,
 								consumeItem: actionCfg.consumeItem === true
 							});
 						});
@@ -189,7 +209,8 @@ class Item
 							{
 								finishItemAction(callbackObject, {
 									success: false,
-									spendAP: false,
+									abilityPointCost: 0,
+									movePointCost: 0,
 									consumeItem: false
 								});
 								return;
@@ -197,7 +218,8 @@ class Item
 							unit.features.mana += value;
 							finishItemAction(callbackObject, {
 								success: true,
-								spendAP: actionCfg.spendAP === true,
+								abilityPointCost: cost.abilityPointCost,
+								movePointCost: cost.movePointCost,
 								consumeItem: actionCfg.consumeItem === true
 							});
 						});
@@ -217,7 +239,8 @@ class Item
 							{
 								finishItemAction(callbackObject, {
 									success: false,
-									spendAP: false,
+									abilityPointCost: 0,
+									movePointCost: 0,
 									consumeItem: false
 								});
 								return;
@@ -229,7 +252,8 @@ class Item
 							unit.abilities.conjure.config.spells[reward.spell] += reward.amount;
 							finishItemAction(callbackObject, {
 								success: true,
-								spendAP: actionCfg.spendAP === true,
+								abilityPointCost: cost.abilityPointCost,
+								movePointCost: cost.movePointCost,
 								consumeItem: actionCfg.consumeItem === true
 							});
 						});
@@ -241,7 +265,8 @@ class Item
 
 		finishItemAction(callbackObject, {
 			success: false,
-			spendAP: false,
+			abilityPointCost: 0,
+			movePointCost: 0,
 			consumeItem: false
 		});
 

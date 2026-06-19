@@ -146,8 +146,8 @@ const itemConfigs = {
 		scale: 0.07,
 		stackOffset: { x: 0, y: 0 },
 		actions: {
-			use: { title: 'Read', spendAP: true, consumeItem: true },
-			drop: { title: 'Drop', spendAP: true, consumeItem: true }
+			use: { title: 'Read', abilityPointCost: 1, movePointCost: 0, consumeItem: true },
+	        drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }
 		}
 	},
 
@@ -159,8 +159,8 @@ const itemConfigs = {
 		stackOffset: { x: 0, y: 0 },
 		effectValue: 2,
 		actions: {
-			use: { title: 'Drink', spendAP: true, consumeItem: true },
-			drop: { title: 'Drop', spendAP: true, consumeItem: true }
+			use: { title: 'Drink', abilityPointCost: 0, movePointCost: 1, consumeItem: true },
+			drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }
 		}
 	},
 
@@ -172,8 +172,8 @@ const itemConfigs = {
 		stackOffset: { x: 0, y: 0 },
 		effectValue: 2,
 		actions: {
-			use: { title: 'Drink', spendAP: true, consumeItem: true },
-			drop: { title: 'Drop', spendAP: true, consumeItem: true }
+			use: { title: 'Drink', abilityPointCost: 0, movePointCost: 1, consumeItem: true },
+	        drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }
 		}
 	},
 };
