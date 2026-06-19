@@ -937,7 +937,7 @@ class PickUpAbility extends UnitAbility
 	{
 		if(unit == null) return false;
 		//if(unit.features.abilityPoints <= 0) return false;
-        if(unit.features.move < 0) return false;
+        if(unit.features.move <= 0) return false;
 		if(typeof unit.hasFreeItemSlot === 'function' && !unit.hasFreeItemSlot()) return false;
 
 		const itemEntity = getItemEntityAtUnit(unit);

@@ -151,6 +151,7 @@ class Item
 		}
 
 		const actionCfg = this.config.actions[actionId] || {};
+		const cost = this.getActionCost(actionId);
 
 		switch(actionId)
 		{
@@ -160,6 +161,7 @@ class Item
 				{
 					let itemEntity = getOpenContainerAtUnit(unit);
 					if(itemEntity == null) itemEntity = getGroundItemEntityAtMap(unit.mapX, unit.mapY);
+
 					if(itemEntity == null)
 					{
 						itemEntity = ItemEntity.create(unit.scene, 0, 0, true, [], 'item');
@@ -167,6 +169,7 @@ class Item
 						itemEntity.start(false);
 						entities.push(itemEntity);
 					}
+
 					itemEntity.addItem(this);
 
 					finishItemAction(callbackObject, {
@@ -176,6 +179,7 @@ class Item
 						consumeItem: actionCfg.consumeItem === true
 					});
 				});
+
 				return false;
 			}
 
@@ -190,6 +194,7 @@ class Item
 							const maxHealth = unit.config.features.health;
 							const value = this.config.effectValue || 1;
 							unit.features.health = Math.min(maxHealth, unit.features.health + value);
+
 							finishItemAction(callbackObject, {
 								success: true,
 								abilityPointCost: cost.abilityPointCost,
@@ -197,6 +202,7 @@ class Item
 								consumeItem: actionCfg.consumeItem === true
 							});
 						});
+
 						return false;
 					}
 
@@ -205,6 +211,7 @@ class Item
 						playDrinkItemEffect(unit.scene, unit, this, 0x66aaff, () =>
 						{
 							const value = this.config.effectValue || 1;
+
 							if(unit.features.mana == null)
 							{
 								finishItemAction(callbackObject, {
@@ -215,7 +222,9 @@ class Item
 								});
 								return;
 							}
+
 							unit.features.mana += value;
+
 							finishItemAction(callbackObject, {
 								success: true,
 								abilityPointCost: cost.abilityPointCost,
@@ -223,6 +232,7 @@ class Item
 								consumeItem: actionCfg.consumeItem === true
 							});
 						});
+
 						return false;
 					}
 
@@ -231,6 +241,7 @@ class Item
 						playReadScrollEffect(unit.scene, unit, this, () =>
 						{
 							const reward = resolveSpellScrollParams(this, unit);
+
 							if(reward == null ||
 								unit.abilities == null ||
 								unit.abilities.conjure == null ||
@@ -245,11 +256,14 @@ class Item
 								});
 								return;
 							}
+
 							if(unit.abilities.conjure.config.spells[reward.spell] == null)
 							{
 								unit.abilities.conjure.config.spells[reward.spell] = 0;
 							}
+
 							unit.abilities.conjure.config.spells[reward.spell] += reward.amount;
+
 							finishItemAction(callbackObject, {
 								success: true,
 								abilityPointCost: cost.abilityPointCost,
@@ -257,6 +271,7 @@ class Item
 								consumeItem: actionCfg.consumeItem === true
 							});
 						});
+
 						return false;
 					}
 				}
