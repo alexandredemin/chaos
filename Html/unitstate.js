@@ -22,20 +22,21 @@ function createStateAura(state, color)
 
 	state.aura = unit.scene.add.image(unit.x, unit.y, unit.texture.key, frameName);
 	state.aura.setOrigin(unit.originX, unit.originY);
-	state.aura.setScale(unit.scaleX * 1.14, unit.scaleY * 1.14);
+	state.aura.setScale(unit.scaleX * 1.28, unit.scaleY * 1.28);
 	state.aura.setRotation(unit.rotation);
 	state.aura.setFlip(unit.flipX, unit.flipY);
 	state.aura.setDepth(unit.depth - 0.05);
-	state.aura.setAlpha(0.22);
+	state.aura.setAlpha(0.42);
 	state.aura.setTintFill(color);
+	state.aura.setBlendMode(Phaser.BlendModes.ADD);
 	state.aura.visible = unit.visible;
 
 	state.auraTween = unit.scene.tweens.add({
 		targets: state.aura,
-		alpha: { from: 0.18, to: 0.34 },
-		scaleX: unit.scaleX * 1.18,
-		scaleY: unit.scaleY * 1.18,
-		duration: 550,
+		alpha: { from: 0.34, to: 0.62 },
+		scaleX: unit.scaleX * 1.34,
+		scaleY: unit.scaleY * 1.34,
+		duration: 520,
 		yoyo: true,
 		repeat: -1,
 		ease: 'Sine.InOut'
@@ -52,7 +53,6 @@ function updateStateAura(state)
 	state.aura.setTexture(unit.texture.key, frameName);
 	state.aura.setOrigin(unit.originX, unit.originY);
 	state.aura.setPosition(unit.x, unit.y);
-	state.aura.setScale(unit.scaleX * 1.14, unit.scaleY * 1.14);
 	state.aura.setRotation(unit.rotation);
 	state.aura.setFlip(unit.flipX, unit.flipY);
 	state.aura.setDepth(unit.depth - 0.05);
