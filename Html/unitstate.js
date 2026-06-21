@@ -497,8 +497,7 @@ class SpeedState extends UnitState
 	auraTween = null;
 
 	data = {
-		init_move: 0,
-		init_abilityPoints: 0,
+		init_attackCost: 0,
 		multiplier: 2,
 		timeleft: 0
 	}
@@ -529,8 +528,7 @@ class SpeedState extends UnitState
 		let state = new SpeedState(unit);
 		if(stateData == null)
 		{
-			state.data.init_move = unit.features.move;
-			state.data.init_abilityPoints = unit.features.abilityPoints;
+			state.data.init_attackCost = unit.features.attackCost;
 			state.data.multiplier = 2;
 			state.data.timeleft = SpeedState.duration;
 			unit.features.move *= state.data.multiplier;
@@ -560,7 +558,7 @@ class SpeedState extends UnitState
 		this.data.timeleft--;
 		if(this.data.timeleft <= 0)
 		{
-			this.stop();
+			this.stop(false);
 			this.unit.processStates();
 			return;
 		}
@@ -569,14 +567,24 @@ class SpeedState extends UnitState
 		this.unit.processStates();
 	}
 
-	stop()
+	stop(restoreCurrentPoints = true)
 	{
 		destroyStateAura(this);
-		if(this.data.timeleft > 0)
+		this.unit.features.attackCost = this.data.init_attackCost;
+		if(restoreCurrentPoints)
 		{
-			this.unit.features.move = this.data.init_move;
-			this.unit.features.abilityPoints = this.data.init_abilityPoints;
+			const baseMove = this.unit.config.features.move;
+			const baseAP = this.unit.config.features.abilityPoints;
+			const mul = this.data.multiplier || 2;
+
+			this.unit.features.move = Math.round(this.unit.features.move / mul);
+			this.unit.features.abilityPoints = Math.round(this.unit.features.abilityPoints / mul);
+			if(this.unit.features.move > baseMove) this.unit.features.move = baseMove;
+			if(this.unit.features.abilityPoints > baseAP) this.unit.features.abilityPoints = baseAP;
+			if(this.unit.features.move < 0) this.unit.features.move = 0;
+			if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
 		}
+
 		this.unit.removeState(this);
 	}
 }
