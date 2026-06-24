@@ -588,3 +588,81 @@ class SpeedState extends UnitState
 		this.unit.removeState(this);
 	}
 }
+
+class InvisibleState extends UnitState
+{
+	data = {
+		timeleft: 0
+	}
+
+	static duration = 4;
+
+	constructor(unit)
+	{
+		super(unit);
+		this.name = 'invisible';
+	}
+
+	static apply(unit, stateData=null)
+	{
+		if(unit.hasState('invisible'))
+		{
+			for(let i = 0; i < unit.states.length; i++)
+			{
+				if(unit.states[i].name === 'invisible')
+				{
+					if(stateData != null) unit.states[i].data = clone(stateData);
+					else unit.states[i].data.timeleft = InvisibleState.duration;
+
+					unit.features.invisible = true;
+					unit.setAlpha(getUnitBaseAlpha(unit) * 0.45);
+					if(typeof updateCurrentPlayerVisibility === 'function') updateCurrentPlayerVisibility();
+					return;
+				}
+			}
+		}
+
+		let state = new InvisibleState(unit);
+
+		if(stateData == null)
+		{
+			state.data.timeleft = InvisibleState.duration;
+		}
+		else
+		{
+			state.data = clone(stateData);
+		}
+
+		unit.features.invisible = true;
+		unit.setAlpha(getUnitBaseAlpha(unit) * 0.45);
+
+		unit.addState(state);
+
+		if(typeof updateCurrentPlayerVisibility === 'function') updateCurrentPlayerVisibility();
+	}
+
+	onRecover()
+	{
+		this.processed = true;
+		this.data.timeleft--;
+
+		if(this.data.timeleft <= 0)
+		{
+			this.stop();
+			this.unit.processStates();
+			return;
+		}
+
+		this.unit.processStates();
+	}
+
+	stop()
+	{
+		this.unit.features.invisible = false;
+		this.unit.setAlpha(getUnitBaseAlpha(this.unit));
+
+		this.unit.removeState(this);
+
+		if(typeof updateCurrentPlayerVisibility === 'function') updateCurrentPlayerVisibility();
+	}
+}

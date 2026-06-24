@@ -574,33 +574,98 @@
         return res;
     }
 
-    function checkUnitVisibility(unit) {
+    function getUnitBaseAlpha(unit)
+    {
+        if(unit == null) return 1.0;
+        if(unit.features != null && unit.features.alpha != null) return unit.features.alpha;
+        if(unit.config != null && unit.config.features != null && unit.config.features.alpha != null) return unit.config.features.alpha;
+        return 1.0;
+    }
+
+    function isUnitInvisible(unit)
+    {
+        return unit != null && unit.features != null && unit.features.invisible === true;
+    }
+
+    function areUnitsAdjacent(unitA, unitB)
+    {
+        if(unitA == null || unitB == null) return false;
+        return Math.abs(unitA.mapX - unitB.mapX) <= 1 && Math.abs(unitA.mapY - unitB.mapY) <= 1;
+    }
+
+    function canSeeInvisibleUnit(observer, target)
+    {
+        return areUnitsAdjacent(observer, target);
+    }
+
+    function updateInvisibleUnitsVisibilityForPlayer(player)
+    {
+        if(player == null) return;
+        const observers = player.units || [];
+        for(let i = 0; i < units.length; i++)
+        {
+            const target = units[i];
+            if(target.player === player) continue;
+            if(!isUnitInvisible(target)) continue;
+            let visible = false;
+            for(let j = 0; j < observers.length; j++)
+            {
+                if(canSeeInvisibleUnit(observers[j], target))
+                {
+                    visible = true;
+                    break;
+                }
+            }
+            target.visible = visible;
+        }
+    }
+
+    function updateCurrentPlayerVisibility()
+    {
+        if(players == null || players[playerInd] == null) return;
+        const player = players[playerInd];
+        if(gameSettings.showEnemyMoves == false && player.control === PlayerControl.human)
+        {
+            player.units.forEach(unit => checkUnitVisibility(unit));
+            updateInvisibleUnitsVisibilityForPlayer(player);
+        }
+    }
+
+    function checkUnitVisibility(unit)
+    {
+        if(unit == null) return;
+        unit.visible = true;
         let enemies = [];
         players.forEach(pl => {
-            if (pl !== unit.player) enemies.push(pl);
+            if(pl !== unit.player) enemies.push(pl);
         });
-        //let targets = selectUnits(unit.mapX, unit.mapY, enemies, null, 20); //unit.config.abilities.fire.config.range);
         let targets = [];
         selectUnits(unit.mapX, unit.mapY, enemies, null, 20).forEach(unt => {
-            if (!unt.visible) targets.push(unt);
+            if(isUnitInvisible(unt))
+            {
+                if(canSeeInvisibleUnit(unit, unt)) unt.visible = true;
+                return;
+            }
+            if(!unt.visible) targets.push(unt);
         });
         targets = selectOnLineOfSight(unit.mapX, unit.mapY, targets, null, null, () => {
-            return true
+            return true;
         });
         targets.forEach(unt => {
             unt.visible = true;
         });
-        //entites
+        updateInvisibleUnitsVisibilityForPlayer(unit.player);
+        // entities
         targets = [];
         selectEntities(unit.mapX, unit.mapY, 20).forEach(ent => {
-            if (!ent.getVisability() && ent.active) targets.push(ent);
+            if(!ent.getVisability() && ent.active) targets.push(ent);
         });
         targets = selectOnLineOfSight(unit.mapX, unit.mapY, targets, null, null, () => {
-            return true
+            return true;
         });
         targets.forEach(ent => {
             ent.setVisability(true);
-        }); 
+        });
     }
 
     function updateFog(unit){

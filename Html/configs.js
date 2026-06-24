@@ -212,6 +212,18 @@ const itemConfigs = {
             drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }
         }
     },
+
+    'invisible_potion': {
+		id: 'invisible_potion',
+		name: 'Invisible potion',
+		sprite: 'invisible_potion',
+		scale: 0.1,
+		stackOffset: { x: 0, y: 0 },
+		actions: {
+			use: { title: 'Drink', abilityPointCost: 0, movePointCost: 1, consumeItem: true },
+			drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }
+		}
+	},
 };
 
 //---------------------------- Unit configs ----------------------------
@@ -799,7 +811,8 @@ const unitStates = {
     'gigantic': { applyFunction: (unit, stateData) => GiganticState.apply(unit, stateData) },
     'strength': { applyFunction: (unit, stateData) => StrengthState.apply(unit, stateData) },
     'defense': { applyFunction: (unit, stateData) => DefenseState.apply(unit, stateData) },
-    'speed': { applyFunction: (unit, stateData) => SpeedState.apply(unit, stateData) }
+    'speed': { applyFunction: (unit, stateData) => SpeedState.apply(unit, stateData) },
+    'invisible': { applyFunction: (unit, stateData) => InvisibleState.apply(unit, stateData) },
 };
 
 //---------------------------- Maps ---------------------------------------

@@ -115,6 +115,9 @@ class Item
 					case 'speed_potion':
 						return true;
 
+					case 'invisible_potion':
+						return true;
+
 					case 'spell_scroll':
 						return unit.abilities != null && unit.abilities.conjure != null && unit.abilities.conjure.config != null && unit.abilities.conjure.config.spells != null;
 
@@ -284,6 +287,23 @@ class Item
 						playDrinkItemEffect(unit.scene, unit, this, 0xb58a2a, () =>
 						{
 							SpeedState.apply(unit);
+
+							finishItemAction(callbackObject, {
+								success: true,
+								abilityPointCost: cost.abilityPointCost,
+								movePointCost: cost.movePointCost,
+								consumeItem: actionCfg.consumeItem === true
+							});
+						});
+
+						return false;
+					}
+
+					case 'invisible_potion':
+					{
+						playDrinkItemEffect(unit.scene, unit, this, 0x8d4bd1, () =>
+						{
+							InvisibleState.apply(unit);
 
 							finishItemAction(callbackObject, {
 								success: true,

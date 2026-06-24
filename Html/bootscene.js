@@ -42,6 +42,7 @@ var BootScene = new Phaser.Class({
         this.load.spritesheet('strength_potion', 'img/strength_potion.png', { frameWidth: 66, frameHeight: 103 } );
         this.load.spritesheet('defense_potion', 'img/defense_potion.png', { frameWidth: 67, frameHeight: 103 } );
         this.load.spritesheet('speed_potion', 'img/speed_potion.png', { frameWidth: 67, frameHeight: 103 } );
+        this.load.spritesheet('invisible_potion', 'img/invisible_potion.png', { frameWidth: 67, frameHeight: 103 } );
 
         this.load.spritesheet('wizard', 'img/wizard.png', { frameWidth: 16, frameHeight: 21 } );
         this.load.spritesheet('chort', 'img/chort.png', { frameWidth: 16, frameHeight: 23 } );
