@@ -616,7 +616,6 @@ class InvisibleState extends UnitState
 
 					unit.features.invisible = true;
 					unit.setAlpha(getUnitBaseAlpha(unit) * 0.45);
-					if(typeof updateCurrentPlayerVisibility === 'function') updateCurrentPlayerVisibility();
 					return;
 				}
 			}
@@ -637,8 +636,6 @@ class InvisibleState extends UnitState
 		unit.setAlpha(getUnitBaseAlpha(unit) * 0.45);
 
 		unit.addState(state);
-
-		if(typeof updateCurrentPlayerVisibility === 'function') updateCurrentPlayerVisibility();
 	}
 
 	onRecover()
@@ -660,9 +657,6 @@ class InvisibleState extends UnitState
 	{
 		this.unit.features.invisible = false;
 		this.unit.setAlpha(getUnitBaseAlpha(this.unit));
-
 		this.unit.removeState(this);
-
-		if(typeof updateCurrentPlayerVisibility === 'function') updateCurrentPlayerVisibility();
 	}
 }

@@ -598,39 +598,6 @@
         return areUnitsAdjacent(observer, target);
     }
 
-    function updateInvisibleUnitsVisibilityForPlayer(player)
-    {
-        if(player == null) return;
-        const observers = player.units || [];
-        for(let i = 0; i < units.length; i++)
-        {
-            const target = units[i];
-            if(target.player === player) continue;
-            if(!isUnitInvisible(target)) continue;
-            let visible = false;
-            for(let j = 0; j < observers.length; j++)
-            {
-                if(canSeeInvisibleUnit(observers[j], target))
-                {
-                    visible = true;
-                    break;
-                }
-            }
-            target.visible = visible;
-        }
-    }
-
-    function updateCurrentPlayerVisibility()
-    {
-        if(players == null || players[playerInd] == null) return;
-        const player = players[playerInd];
-        if(gameSettings.showEnemyMoves == false && player.control === PlayerControl.human)
-        {
-            player.units.forEach(unit => checkUnitVisibility(unit));
-            updateInvisibleUnitsVisibilityForPlayer(player);
-        }
-    }
-
     function checkUnitVisibility(unit)
     {
         if(unit == null) return;
@@ -654,7 +621,6 @@
         targets.forEach(unt => {
             unt.visible = true;
         });
-        updateInvisibleUnitsVisibilityForPlayer(unit.player);
         // entities
         targets = [];
         selectEntities(unit.mapX, unit.mapY, 20).forEach(ent => {
