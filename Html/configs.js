@@ -135,6 +135,26 @@ const entityConfigs = {
         },
         createFunction: (scene, x, y, visible=true) => ContainerEntity.create(scene, x, y, visible, [], 'chest')
     },
+
+	'wardrobe': {
+		name: 'wardrobe',
+		sprite: 'wardrobe',
+		frameClosed: 0,
+		frameOpen: 1,
+		scale: 0.1,
+		depthOffset: -20,
+		features: {
+			health: 1,
+			blocksLOS: true,
+			items: [],
+			open: false,
+			destroyWhenEmpty: false,
+			containerType: 'tall',
+			spillOnOpen: true,
+			spilled: false
+		},
+		createFunction: (scene, x, y, visible=true) => ContainerEntity.create(scene, x, y, visible, [], 'wardrobe')
+	},    
 };
 
 //---------------------------- Item configs ----------------------------

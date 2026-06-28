@@ -79,8 +79,11 @@ class MapGenerator {
 
         // chests
 		const chests = this._placeChests(objects.concat(doors, items));
-        
-        objects = objects.concat(doors, items, chests);
+
+        // wardrobes
+		const wardrobes = this._placeWardrobes(map, objects.concat(doors, items, chests));
+
+		objects = objects.concat(doors, items, chests, wardrobes);
 
         return {
             width: this.width,
@@ -1094,6 +1097,75 @@ class MapGenerator {
 				});
 				occupied.add(key);
 				break;
+			}
+		}
+		return objects;
+	}
+
+	_placeWardrobes(map, occupiedObjects = [])
+	{
+		const objects = [];
+		const itemNames = Object.keys(itemConfigs);
+		if(itemNames.length <= 0) return objects;
+
+		const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
+		if(candidateRooms.length <= 0) return objects;
+		const occupied = new Set();
+		for(let i = 0; i < occupiedObjects.length; i++)
+		{
+			const obj = occupiedObjects[i];
+			const ox = Math.floor(obj.x / 16);
+			const oy = Math.floor(obj.y / 16);
+			occupied.add(ox + ':' + oy);
+		}
+		for(let r = 0; r < candidateRooms.length; r++)
+		{
+			const room = candidateRooms[r];
+			// Only 20% chance to place wardrobes in a room
+			if(randomInt(1, 100) > 20) continue;
+			const y = room.y;
+			const minX = room.x + 1;
+			const maxX = room.x + room.w - 2;
+			if(maxX < minX) continue;
+			const maxWardrobes = Math.min(3, maxX - minX + 1);
+			const wardrobeCount = randomInt(1, maxWardrobes);
+			let placed = 0;
+			let attempts = 0;
+			while(placed < wardrobeCount && attempts < 40)
+			{
+				attempts++;
+				const x = randomInt(minX, maxX);
+				const key = x + ':' + y;
+				if(occupied.has(key)) continue;
+				// Do not place a wardrobe if there is already an occupied cell above it (to avoid blocking doors)
+				if(occupied.has(x + ':' + (y - 1))) continue;
+				if(map != null && map.walls != null)
+				{
+					if(y < 0 || y >= map.walls.length) continue;
+					if(x < 0 || x >= map.walls[y].length) continue;
+					if(map.walls[y][x] !== null) continue;
+				}
+				const itemCount = randomInt(1, 4);
+				let wardrobeItems = [];
+				for(let i = 0; i < itemCount; i++)
+				{
+					const itemName = itemNames[randomInt(0, itemNames.length - 1)];
+
+					wardrobeItems.push({
+						configName: itemName,
+						params: {}
+					});
+				}
+				objects.push({
+					type: "entity",
+					name: "wardrobe",
+					x: x * 16,
+					y: y * 16,
+					properties: [],
+					items: wardrobeItems
+				});
+				occupied.add(key);
+				placed++;
 			}
 		}
 		return objects;
