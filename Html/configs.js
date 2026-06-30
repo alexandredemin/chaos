@@ -141,7 +141,7 @@ const entityConfigs = {
 		sprite: 'wardrobe',
 		frameClosed: 0,
 		frameOpen: 1,
-		scale: 0.1,
+		scale: 0.2,
 		depthOffset: -20,
 		features: {
 			health: 1,
