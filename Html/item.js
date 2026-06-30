@@ -766,10 +766,11 @@ class ItemEntity extends Entity
 	constructor(scene, x, y, visible=true, items=[], configName='item')
 	{
 		super(entityConfigs[configName], scene, x, y, visible);
-
 		this.stackSprites = [];
-		this.setOrigin(0.5, 0.5);
-
+		if(this.config.originMode === 'center')
+		{
+			this.setOrigin(0.5, 0.5);
+		}
 		if(!Array.isArray(this.features.items)) this.features.items = [];
 
 		for(let i = 0; i < items.length; i++)

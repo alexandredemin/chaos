@@ -108,6 +108,7 @@ const entityConfigs = {
         name: 'item',
         sprite: '',
         scale: 1.0,
+        originMode: 'center',
         features: {
             health: 1,
             blocksLOS: false,
@@ -122,6 +123,7 @@ const entityConfigs = {
         frameClosed: 0,
         frameOpen: 1,
         scale: 1.0,
+        originMode: 'base',
         depthOffset: -20,
         features: {
             health: 1,
@@ -142,6 +144,7 @@ const entityConfigs = {
 		frameClosed: 0,
 		frameOpen: 1,
 		scale: 0.2,
+        originMode: 'base',
 		depthOffset: -20,
 		features: {
 			health: 1,
