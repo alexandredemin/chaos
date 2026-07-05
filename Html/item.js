@@ -1339,7 +1339,7 @@ class ContainerEntity extends ItemEntity
 					finishUseAction(callbackObject, {
 						success: true,
 						abilityPointCost: 0,
-						movePointCost: 0
+						movePointCost: 1
 					});
 				});
 				return;
@@ -1348,7 +1348,7 @@ class ContainerEntity extends ItemEntity
 			finishUseAction(callbackObject, {
 				success: true,
 				abilityPointCost: 0,
-				movePointCost: 0
+				movePointCost: 1
 			});
 		});
 
