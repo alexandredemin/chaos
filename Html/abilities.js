@@ -775,10 +775,22 @@ class UseAbility extends UnitAbility
 	onUseComplete(result)
 	{
 		if(result != null && result.success === true && this.unit != null)
-        {
-            this.unit.updateVisability();
-        }
-        if(uiScene && uiScene.bottomBar != null)
+		{
+			const abilityPointCost = result.abilityPointCost != null ? result.abilityPointCost : 0;
+			const movePointCost = result.movePointCost != null ? result.movePointCost : 0;
+			if(abilityPointCost > 0)
+			{
+				this.unit.features.abilityPoints -= abilityPointCost;
+				if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
+			}
+			if(movePointCost > 0)
+			{
+				this.unit.features.move -= movePointCost;
+				if(this.unit.features.move < 0) this.unit.features.move = 0;
+			}
+			this.unit.updateVisability();
+		}
+		if(uiScene && uiScene.bottomBar != null)
 		{
 			uiScene.bottomBar.markDirty();
 			uiScene.bottomBar.refresh(true);
