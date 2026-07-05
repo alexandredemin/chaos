@@ -693,6 +693,61 @@ function playDropItemEffect(scene, unit, item, onComplete)
 	});
 }
 
+function playContainerSpillItemEffect(container, mapX, mapY, item, onComplete)
+{
+	if(!shouldShowActionAnimation())
+	{
+		if(onComplete != null) onComplete();
+		return;
+	}
+
+	const scene = container.scene;
+	const targetXY = map.tileToWorldXY(mapX, mapY);
+	const targetX = targetXY.x + 8;
+	const targetY = targetXY.y + 8;
+
+	let sprite = scene.add.image(container.x, container.y - 8, item.config.sprite);
+	sprite.setOrigin(0.5, 0.5);
+	sprite.setDepth(container.depth + 8);
+	sprite.setAlpha(0);
+
+	fitEffectSpriteSize(sprite, 18);
+
+	const startScaleX = sprite.scaleX;
+	const startScaleY = sprite.scaleY;
+
+	scene.tweens.add({
+		targets: sprite,
+		x: container.x,
+		y: container.y - 14,
+		scaleX: startScaleX * 1.35,
+		scaleY: startScaleY * 1.35,
+		alpha: 1,
+		angle: randomInt(-10, 10),
+		duration: 140,
+		ease: 'Cubic.Out',
+		onComplete: () =>
+		{
+			scene.tweens.add({
+				targets: sprite,
+				x: targetX,
+				y: targetY,
+				scaleX: startScaleX * 0.45,
+				scaleY: startScaleY * 0.45,
+				alpha: 0,
+				angle: randomInt(-18, 18),
+				duration: 260,
+				ease: 'Quad.In',
+				onComplete: () =>
+				{
+					sprite.destroy();
+					if(onComplete != null) onComplete();
+				}
+			});
+		}
+	});
+}
+
 function playPickupItemEffect(scene, unit, item, onComplete)
 {
 	if(!shouldShowActionAnimation(unit))
@@ -975,7 +1030,14 @@ function playContainerToggleEffect(container, nextOpen, onComplete = null)
 	overlay.setScale(container.scaleX, container.scaleY);
 	overlay.setRotation(container.rotation);
 	overlay.setFlip(container.flipX, container.flipY);
-	overlay.setDepth(container.depth + 0.01);
+	if(container.features != null && container.features.containerType === 'tall' && nextOpen === true)
+	{
+		overlay.setDepth(container.depth + 1.0);
+	}
+	else
+	{
+		overlay.setDepth(container.depth + 0.01);
+	}
 	overlay.setAlpha(0);
 
 	container.setTexture(oldTexture, oldFrame);
@@ -1006,6 +1068,87 @@ function playContainerToggleEffect(container, nextOpen, onComplete = null)
 	});
 }
 
+function isCellAvailableForContainerSpill(unit, container, mapX, mapY)
+{
+	if(mapX < 0 || mapX >= map.width || mapY < 0 || mapY >= map.height) return false;
+	const unitAtPos = getUnitAtMap(mapX, mapY);
+	if(unitAtPos != null && unitAtPos !== unit)
+	{
+		return false;
+	}
+	let wallTile = wallsLayer.getTileAt(mapX, mapY);
+	if(wallTile != null)
+	{
+		if(wallTile.properties['collides'] === true) return false;
+	}
+	const ents = Entity.getEntitiesAtMap(mapX, mapY);
+	if(ents != null && ents.length > 0)
+	{
+		for(let i = 0; i < ents.length; i++)
+		{
+			const ent = ents[i];
+			if(ent === container) return false;
+			if(typeof ent.canStepOn === 'function' && ent.canStepOn(unit) !== true)
+			{
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+function getContainerSpillCells(unit, container)
+{
+	let result = [];
+	let used = {};
+	function addCell(x, y)
+	{
+		const key = x + ':' + y;
+		if(used[key] === true) return;
+
+		if(isCellAvailableForContainerSpill(unit, container, x, y))
+		{
+			result.push({ x: x, y: y });
+			used[key] = true;
+		}
+	}
+	addCell(unit.mapX, unit.mapY);
+	for(let y = unit.mapY - 1; y <= unit.mapY + 1; y++)
+	{
+		for(let x = unit.mapX - 1; x <= unit.mapX + 1; x++)
+		{
+			addCell(x, y);
+		}
+	}
+	for(let y = container.mapY - 1; y <= container.mapY + 1; y++)
+	{
+		for(let x = container.mapX - 1; x <= container.mapX + 1; x++)
+		{
+			addCell(x, y);
+		}
+	}
+	if(result.length <= 0)
+	{
+		result.push({ x: unit.mapX, y: unit.mapY });
+	}
+	return result;
+}
+
+function getOrCreateGroundItemEntityAtMap(scene, mapX, mapY)
+{
+	let itemEntity = getGroundItemEntityAtMap(mapX, mapY);
+
+	if(itemEntity == null)
+	{
+		itemEntity = ItemEntity.create(scene, 0, 0, true, [], 'item');
+		itemEntity.setPositionFromMap(mapX, mapY);
+		itemEntity.start(false);
+		entities.push(itemEntity);
+	}
+
+	return itemEntity;
+}
+
 //---------------------------- ContainerEntity class ----------------------------
 class ContainerEntity extends ItemEntity
 {
@@ -1018,6 +1161,31 @@ class ContainerEntity extends ItemEntity
 	static create(scene, x, y, visible=true, items=[], configName='chest')
 	{
 		return new ContainerEntity(scene, x, y, visible, items, configName);
+	}
+
+	setDepthFromBottom(offset=0)
+	{
+		let depthOffset = offset;
+		if(depthOffset === 0)
+		{
+			if(this.features != null && this.features.depthOffset != null)
+			{
+				depthOffset = this.features.depthOffset;
+			}
+			else if(this.config != null && this.config.depthOffset != null)
+			{
+				depthOffset = this.config.depthOffset;
+			}
+			else
+			{
+				depthOffset = -16;
+			}
+		}
+		if(this.features != null && this.features.containerType === 'tall' && this.features.open === true)
+		{
+			depthOffset += 1.0;
+		}
+		super.setDepthFromBottom(depthOffset);
 	}
 
 	getSpriteKeyForState(isOpen)
@@ -1064,6 +1232,7 @@ class ContainerEntity extends ItemEntity
 		const frame = this.getFrameForState(this.features.open);
 		this.setTexture(textureKey, frame);
 		this.setScale(this.config.scale || 1.0);
+		this.setDepthFromBottom();
 	}
 
 	canAccessItems(unit)
@@ -1097,25 +1266,40 @@ class ContainerEntity extends ItemEntity
 		return true;
 	}
 
-	spillItemsToMap(mapX, mapY)
+	spillItemsToNearbyCells(unit, onComplete = null)
 	{
-		let groundItems = getGroundItemEntityAtMap(mapX, mapY);
-
-		if(groundItems == null)
-		{
-			groundItems = ItemEntity.create(this.scene, 0, 0, true, [], 'item');
-			groundItems.setPositionFromMap(mapX, mapY);
-			groundItems.start(false);
-			entities.push(groundItems);
-		}
-
+		let spilledItems = [];
 		while(this.getItemCount() > 0)
 		{
 			const item = this.removeItem(0);
-			if(item != null)
+			if(item != null) spilledItems.push(item);
+		}
+		if(spilledItems.length <= 0)
+		{
+			if(onComplete != null) onComplete();
+			return;
+		}
+		const cells = getContainerSpillCells(unit, this);
+		let finished = 0;
+		const onItemComplete = () =>
+		{
+			finished++;
+			if(finished >= spilledItems.length)
 			{
-				groundItems.addItem(item);
+				this.updateSprite();
+				if(onComplete != null) onComplete();
 			}
+		};
+		for(let i = 0; i < spilledItems.length; i++)
+		{
+			const item = spilledItems[i];
+			const cell = cells[randomInt(0, cells.length - 1)];
+			playContainerSpillItemEffect(this, cell.x, cell.y, item, () =>
+			{
+				const groundItems = getOrCreateGroundItemEntityAtMap(this.scene, cell.x, cell.y);
+				groundItems.addItem(item);
+				onItemComplete();
+			});
 		}
 	}
 
@@ -1125,7 +1309,8 @@ class ContainerEntity extends ItemEntity
 		{
 			finishUseAction(callbackObject, {
 				success: false,
-				spendAP: false
+				abilityPointCost: 0,
+				movePointCost: 0
 			});
 			return false;
 		}
@@ -1140,14 +1325,22 @@ class ContainerEntity extends ItemEntity
 				this.features.spilled !== true &&
 				this.getItemCount() > 0)
 			{
-				this.spillItemsToMap(unit.mapX, unit.mapY);
 				this.features.spilled = true;
-				this.updateSprite();
+				this.spillItemsToNearbyCells(unit, () =>
+				{
+					finishUseAction(callbackObject, {
+						success: true,
+						abilityPointCost: 0,
+						movePointCost: 0
+					});
+				});
+				return;
 			}
 
 			finishUseAction(callbackObject, {
 				success: true,
-				spendAP: false
+				abilityPointCost: 0,
+				movePointCost: 0
 			});
 		});
 

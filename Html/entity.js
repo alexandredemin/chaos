@@ -929,7 +929,8 @@ class DoorEntity extends Entity
 		{
 			finishUseAction(callbackObject, {
 				success: false,
-				spendAP: false
+                abilityPointCost: 0,
+                movePointCost: 0
 			});
 			return false;
 		}
@@ -939,8 +940,9 @@ class DoorEntity extends Entity
 		playDoorToggleEffect(this, nextOpen, () =>
 		{
 			finishUseAction(callbackObject, {
-				success: true,
-				spendAP: false
+                success: true,
+                abilityPointCost: 0,
+                movePointCost: 0
 			});
 		});
 
