@@ -1253,6 +1253,14 @@ class ContainerEntity extends ItemEntity
 		return this.features.containerType !== 'tall';
 	}
 
+	getUseCost(unit)
+	{
+		return {
+			abilityPointCost: 0,
+			movePointCost: 1
+		};
+	}
+
 	canUse(unit)
 	{
 		if(unit == null) return false;

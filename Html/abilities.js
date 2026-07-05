@@ -48,6 +48,29 @@ function getAdjacentUsableEntities(unit)
     return result;
 }
 
+function getUseActionCost(target, unit)
+{
+	if(target != null && typeof target.getUseCost === 'function')
+	{
+		return target.getUseCost(unit);
+	}
+	return {
+		abilityPointCost: 0,
+		movePointCost: 0
+	};
+}
+
+function canUnitPayActionCost(unit, cost)
+{
+	if(unit == null) return false;
+	if(cost == null) return true;
+	const abilityPointCost = cost.abilityPointCost || 0;
+	const movePointCost = cost.movePointCost || 0;
+	if(unit.features.abilityPoints < abilityPointCost) return false;
+	if(unit.features.move < movePointCost) return false;
+	return true;
+}
+
 function getItemEntityAtUnit(unit)
 {
 	if(unit == null) return null;
@@ -799,11 +822,20 @@ class UseAbility extends UnitAbility
 		this.stop(this.unit);
 	}
 
-	canActivate(unit)
-	{
-		if(unit == null) return false;
-		return getAdjacentUsableEntities(unit).length > 0;
-	}
+    canActivate(unit)
+    {
+        if(unit == null) return false;
+        const targets = getAdjacentUsableEntities(unit);
+        for(let i = 0; i < targets.length; i++)
+        {
+            const cost = getUseActionCost(targets[i], unit);
+            if(canUnitPayActionCost(unit, cost))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
 	setPlace(mapX, mapY)
 	{
@@ -819,13 +851,20 @@ class UseAbility extends UnitAbility
 			case 0:
 			{
 				this.targets = getAdjacentUsableEntities(this.unit);
+                for(let i = this.targets.length - 1; i >= 0; i--)
+                {
+                    const cost = getUseActionCost(this.targets[i], this.unit);
 
+                    if(!canUnitPayActionCost(this.unit, cost))
+                    {
+                        this.targets.splice(i, 1);
+                    }
+                }
 				if(this.targets.length <= 0)
 				{
 					this.stop(this.unit);
 					return true;
 				}
-
 				if(this.targets.length > 1)
 				{
 					let places = [];
@@ -888,6 +927,12 @@ class UseAbility extends UnitAbility
 
 					if(target != null)
 					{
+                        const cost = getUseActionCost(target, this.unit);
+                        if(!canUnitPayActionCost(this.unit, cost))
+                        {
+                            this.stop(this.unit);
+                            return true;
+                        }
 						this.beginAsyncActionLock();
 						this.step = 2;
 						target.use(this.unit, {}, this);

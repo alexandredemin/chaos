@@ -909,6 +909,14 @@ class DoorEntity extends Entity
         super.endMove();
     }
 
+    getUseCost(unit)
+    {
+        return {
+            abilityPointCost: 0,
+            movePointCost: 1
+        };
+    }
+
     canUse(unit)
     {
         if(unit == null) return false;
@@ -942,7 +950,7 @@ class DoorEntity extends Entity
 			finishUseAction(callbackObject, {
                 success: true,
                 abilityPointCost: 0,
-                movePointCost: 0
+                movePointCost: 1
 			});
 		});
 
