@@ -71,6 +71,12 @@ function canUnitPayActionCost(unit, cost)
 	return true;
 }
 
+function canUnitSpendAbilityPoint(unit)
+{
+	if(unit == null) return false;
+	return unit.features.abilityPoints > 0;
+}
+
 function getItemEntityAtUnit(unit)
 {
 	if(unit == null) return null;
@@ -200,6 +206,11 @@ class ConjureAbility extends UnitAbility
         super.stop(unit);
     }
 
+    canActivate(unit)
+    {
+        return canUnitSpendAbilityPoint(unit);
+    }
+
     next()
     {
         switch (this.step) {
@@ -274,6 +285,11 @@ class FireAbility extends UnitAbility
         this.unit = null;
         this.target = null;
         super.stop(unit);
+    }
+
+    canActivate(unit)
+    {
+        return canUnitSpendAbilityPoint(unit);
     }
 
     setTarget(target)
@@ -418,6 +434,11 @@ class GasAbility  extends UnitAbility
         super.stop(unit);
     }
 
+    canActivate(unit)
+    {
+        return canUnitSpendAbilityPoint(unit);
+    }
+
     canAtack(unit,target)
     {
         if(target.features.gasImmunity === true) return false;
@@ -520,6 +541,11 @@ class WebAbility extends UnitAbility
         this.unit = unit;
     }
 
+    canActivate(unit)
+    {
+        return canUnitSpendAbilityPoint(unit);
+    }
+
     next()
     {
         this.unit.features.abilityPoints--;
@@ -567,6 +593,11 @@ class JumpAbility extends UnitAbility
         this.placeY = -1;
         this.target = null;
         super.stop(unit);
+    }
+
+    canActivate(unit)
+    {
+        return canUnitSpendAbilityPoint(unit);
     }
 
     setPlace(mapX,mapY)

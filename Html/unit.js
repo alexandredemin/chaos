@@ -568,7 +568,6 @@ class Unit extends BaseUnit
     getAvailableAbilities()
     {
         let result = [];
-        if(this.features.abilityPoints <= 0) return result;
         if(this.config.abilities == null) return result;
         const abilityKeys = Object.keys(this.config.abilities);
         for(let i = 0; i < abilityKeys.length; i++)
@@ -697,10 +696,14 @@ class Unit extends BaseUnit
                                 if(ind === 4)
                                 {
                                     pointerPressed = true;
-                                    if(this.features.abilityPoints > 0)
+                                    if(this.config.abilities != null)
                                     {
-                                        if(this.config.abilities != null)if(Object.keys(this.config.abilities).length > 0) this.startAbility();
+                                        if(Object.keys(this.config.abilities).length > 0)
+                                        {
+                                            this.startAbility();
+                                        }
                                     }
+
                                 }
                                 else
                                 {
