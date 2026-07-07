@@ -532,7 +532,7 @@ class SpeedState extends UnitState
 			state.data.multiplier = 2;
 			state.data.timeleft = SpeedState.duration;
 			unit.features.move *= state.data.multiplier;
-			unit.features.abilityPoints *= state.data.multiplier;
+			unit.features.attackCost = 1;
 		}
 		else
 		{
@@ -563,7 +563,7 @@ class SpeedState extends UnitState
 			return;
 		}
 		this.unit.features.move = this.unit.config.features.move * this.data.multiplier;
-		this.unit.features.abilityPoints = this.unit.config.features.abilityPoints * this.data.multiplier;
+		this.unit.features.attackCost = 1;
 		this.unit.processStates();
 	}
 
@@ -574,15 +574,12 @@ class SpeedState extends UnitState
 		if(restoreCurrentPoints)
 		{
 			const baseMove = this.unit.config.features.move;
-			const baseAP = this.unit.config.features.abilityPoints;
 			const mul = this.data.multiplier || 2;
 
 			this.unit.features.move = Math.round(this.unit.features.move / mul);
-			this.unit.features.abilityPoints = Math.round(this.unit.features.abilityPoints / mul);
+			this.unit.features.attackCost = this.data.init_attackCost;
 			if(this.unit.features.move > baseMove) this.unit.features.move = baseMove;
-			if(this.unit.features.abilityPoints > baseAP) this.unit.features.abilityPoints = baseAP;
 			if(this.unit.features.move < 0) this.unit.features.move = 0;
-			if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
 		}
 
 		this.unit.removeState(this);
