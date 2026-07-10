@@ -193,7 +193,7 @@ const itemConfigs = {
 		sprite: 'mana_potion',
 		scale: 0.1,
 		stackOffset: { x: 0, y: 0 },
-		effectValue: 2,
+		effectValue: 5,
 		actions: {
 			use: { title: 'Drink', abilityPointCost: 0, movePointCost: 1, consumeItem: true },
 	        drop: { title: 'Drop', abilityPointCost: 0, movePointCost: 1, consumeItem: true }

@@ -15,6 +15,23 @@ function clearExclusiveBuffStates(unit, exceptName = null)
 	}
 }
 
+function calculatePotionStatBonus(baseValue)
+{
+	return 3;
+}
+
+function calculateGiganticFactor(unit)
+{
+	let power = (unit.config.features.strength + unit.config.features.defense) * unit.config.features.health * 0.5;
+	const maxFactor = 3.0;
+	const minFactor = 1.0;
+	const maxPower = 20;
+	let factor = maxFactor - (power - 1) * (maxFactor - minFactor) / (maxPower - 1);
+	if(factor < minFactor) factor = minFactor;
+	if(factor > maxFactor) factor = maxFactor;
+	return factor;
+}
+
 function createStateAura(state, color)
 {
 	const unit = state.unit;
@@ -220,13 +237,15 @@ class InfectedState extends UnitState
 class GiganticState extends UnitState
 {
     tween = null;
-    
-    data = {
-        init_originY: 0,
-        init_scale: 0,
-        factor: 1.0,
-        timeleft: 0
-    }
+
+	data = {
+		init_originY: 0,
+		init_scale: 0,
+		factor: 1.0,
+		strengthBonus: 0,
+		defenseBonus: 0,
+		timeleft: 0
+	}
     
     static duration = 4;
 
@@ -236,40 +255,49 @@ class GiganticState extends UnitState
         this.name = 'gigantic';
     }
   
-    static apply(unit, stateData=null)
-    {
-        if(unit.hasState('gigantic') === false){
-            clearExclusiveBuffStates(unit, 'gigantic');
-            let state = new GiganticState(unit);
-            if(stateData == null){
-                state.data.init_originY = unit.originY;
-                state.data.init_scale = unit.scale;
-                let str = (unit.config.features.strength + unit.config.features.defense) * unit.config.features.health * 0.5;
-                let max_factor = 3;
-                let min_factor = 1;
-                let max_str = 20;
-                state.data.factor = max_factor - (str - min_factor) * (max_factor - min_factor)/(max_str - 1);
-                if(state.data.factor < min_factor) state.data.factor = min_factor;
-                unit.features.strength = Math.floor(unit.features.strength * state.data.factor + 0.5);
-                unit.features.defense = Math.floor(unit.features.defense * state.data.factor + 0.5);
-                unit.features.health = Math.floor(unit.features.health * state.data.factor + 0.5);
-                state.data.timeleft = GiganticState.duration;
-            }
-            else{
-                state.data = clone(stateData);          
-            }
-            unit.addState(state);
-            state.start();
-        }
-        else{
-            for(let i=0; i<unit.states.length; i++){
-                if(unit.states[i].name === 'gigantic'){
-                    unit.states[i].data.timeleft += GiganticState.duration;
-                    break;
-                }
-            }
-        }
-    }
+	static apply(unit, stateData=null)
+	{
+		if(unit.hasState('gigantic') === false)
+		{
+			clearExclusiveBuffStates(unit, 'gigantic');
+			let state = new GiganticState(unit);
+			if(stateData == null)
+			{
+				state.data.init_originY = unit.originY;
+				state.data.init_scale = unit.scale;
+				state.data.factor = calculateGiganticFactor(unit);
+				const newStrength = Math.floor(unit.features.strength * state.data.factor + 0.5);
+				const newDefense = Math.floor(unit.features.defense * state.data.factor + 0.5);
+				const newHealth = Math.floor(unit.features.health * state.data.factor + 0.5);
+				state.data.strengthBonus = newStrength - unit.features.strength;
+				state.data.defenseBonus = newDefense - unit.features.defense;
+				unit.features.strength = newStrength;
+				unit.features.defense = newDefense;
+				unit.features.health = newHealth;
+				if(unit.features.strength < 1) unit.features.strength = 1;
+				if(unit.features.defense < 1) unit.features.defense = 1;
+				if(unit.features.health < 1) unit.features.health = 1;
+				state.data.timeleft = GiganticState.duration;
+			}
+			else
+			{
+				state.data = clone(stateData);
+			}
+			unit.addState(state);
+			state.start();
+		}
+		else
+		{
+			for(let i = 0; i < unit.states.length; i++)
+			{
+				if(unit.states[i].name === 'gigantic')
+				{
+					unit.states[i].data.timeleft += GiganticState.duration;
+					break;
+				}
+			}
+		}
+	}
   
     start()
     {
@@ -309,32 +337,40 @@ class GiganticState extends UnitState
     {
     }
 
-    stop()
-    {
-        let init_y = this.unit.y;
-        const bounds = this.unit.getBounds();
-        const bottomCenterY = bounds.bottom;
-        this.unit.setOrigin(this.unit.originX, 1);
-        this.unit.y = bottomCenterY - 1;
-        const init_originY = this.data.init_originY;
-        this.tween = this.unit.scene.tweens.add({
-            targets: this.unit,
-            scale: {start: this.unit.scale, to: this.data.init_scale},
-            ease: 'Linear',
-            duration: 400,
-            yoyo: false,
-            repeat: 0,
-            paused: true,
-            onComplete: function(){ this.targets[0].setOrigin(this.targets[0].originX, init_originY); this.targets[0].setPosition(this.targets[0].x, init_y); },
-        });
-        this.tween.play();
-        this.unit.features.strength = this.unit.config.features.strength;
-        this.unit.features.defense = this.unit.config.features.defense;
-        this.unit.features.health = Math.floor(this.unit.features.health / this.data.factor + 0.5);
-        if(this.unit.features.health <= 0) this.unit.features.health = 1;
-        this.unit.removeState(this);
-    }
-
+	stop()
+	{
+		let init_y = this.unit.y;
+		const bounds = this.unit.getBounds();
+		const bottomCenterY = bounds.bottom;
+		this.unit.setOrigin(this.unit.originX, 1);
+		this.unit.y = bottomCenterY - 1;
+		const init_originY = this.data.init_originY;
+		this.tween = this.unit.scene.tweens.add({
+			targets: this.unit,
+			scale: {start: this.unit.scale, to: this.data.init_scale},
+			ease: 'Linear',
+			duration: 400,
+			yoyo: false,
+			repeat: 0,
+			paused: true,
+			onComplete: function(){
+				this.targets[0].setOrigin(this.targets[0].originX, init_originY);
+				this.targets[0].setPosition(this.targets[0].x, init_y);
+			},
+		});
+		this.tween.play();
+		this.unit.features.strength -= this.data.strengthBonus || 0;
+		this.unit.features.defense -= this.data.defenseBonus || 0;
+		if(this.unit.features.strength < 1) this.unit.features.strength = 1;
+		if(this.unit.features.defense < 1) this.unit.features.defense = 1;
+		const factor = this.data.factor || 1.0;
+		if(factor > 0 && this.unit.features.health > 0)
+		{
+			this.unit.features.health = Math.floor(this.unit.features.health / factor + 0.5);
+			if(this.unit.features.health < 1) this.unit.features.health = 1;
+		}
+		this.unit.removeState(this);
+	}
 }
 
 class StrengthState extends UnitState
@@ -343,7 +379,6 @@ class StrengthState extends UnitState
 	auraTween = null;
 
 	data = {
-		init_strength: 0,
 		bonus: 0,
 		timeleft: 0
 	}
@@ -374,9 +409,8 @@ class StrengthState extends UnitState
 		let state = new StrengthState(unit);
 		if(stateData == null)
 		{
-			state.data.init_strength = unit.features.strength;
 			const baseStrength = unit.config.features.strength || 1;
-			state.data.bonus = Math.max(1, Math.round(4 / Math.max(1, baseStrength)));
+			state.data.bonus = calculatePotionStatBonus(baseStrength);
 			state.data.timeleft = StrengthState.duration;
 			unit.features.strength += state.data.bonus;
 		}
@@ -409,7 +443,8 @@ class StrengthState extends UnitState
 	stop()
 	{
 		destroyStateAura(this);
-		this.unit.features.strength = this.data.init_strength;
+		this.unit.features.strength -= this.data.bonus || 0;
+		if(this.unit.features.strength < 1) this.unit.features.strength = 1;
 		this.unit.removeState(this);
 	}
 }
@@ -420,7 +455,6 @@ class DefenseState extends UnitState
 	auraTween = null;
 
 	data = {
-		init_defense: 0,
 		bonus: 0,
 		timeleft: 0
 	}
@@ -451,9 +485,8 @@ class DefenseState extends UnitState
 		let state = new DefenseState(unit);
 		if(stateData == null)
 		{
-			state.data.init_defense = unit.features.defense;
 			const baseDefense = unit.config.features.defense || 1;
-			state.data.bonus = Math.max(1, Math.round(4 / Math.max(1, baseDefense)));
+			state.data.bonus = calculatePotionStatBonus(baseDefense);
 			state.data.timeleft = DefenseState.duration;
 			unit.features.defense += state.data.bonus;
 		}
@@ -486,7 +519,8 @@ class DefenseState extends UnitState
 	stop()
 	{
 		destroyStateAura(this);
-		this.unit.features.defense = this.data.init_defense;
+		this.unit.features.defense -= this.data.bonus || 0;
+		if(this.unit.features.defense < 1) this.unit.features.defense = 1;
 		this.unit.removeState(this);
 	}
 }
