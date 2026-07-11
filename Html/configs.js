@@ -145,7 +145,7 @@ const entityConfigs = {
 		frameOpen: 1,
 		scale: 0.2,
         originMode: 'base',
-		depthOffset: -20,
+		depthOffset: 0,
 		features: {
 			health: 1,
 			blocksLOS: true,

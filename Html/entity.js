@@ -43,11 +43,25 @@ class Entity extends BaseUnit
         return entities.filter(e => e.mapX === x && e.mapY === y);
     }
 
-    setDepthFromBottom(offset=0)
+    setDepthFromBottom(offset=null)
     {
-        if(offset != 0) super.setDepthFromBottom(offset);
-        else if(this.config && this.config.depthOffset != null) super.setDepthFromBottom(this.config.depthOffset);
-        else super.setDepthFromBottom(-16);
+        if(offset != null)
+        {
+            super.setDepthFromBottom(offset);
+            return;
+        }
+        if(this.features != null && this.features.depthOffset != null)
+        {
+            super.setDepthFromBottom(this.features.depthOffset);
+        }
+        else if(this.config != null && this.config.depthOffset != null)
+        {
+            super.setDepthFromBottom(this.config.depthOffset);
+        }
+        else
+        {
+            super.setDepthFromBottom(-16);
+        }
     }
 
     start(showStart=true)

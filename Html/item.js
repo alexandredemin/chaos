@@ -1163,10 +1163,10 @@ class ContainerEntity extends ItemEntity
 		return new ContainerEntity(scene, x, y, visible, items, configName);
 	}
 
-	setDepthFromBottom(offset=0)
+	setDepthFromBottom(offset=null)
 	{
 		let depthOffset = offset;
-		if(depthOffset === 0)
+		if(depthOffset == null)
 		{
 			if(this.features != null && this.features.depthOffset != null)
 			{
@@ -1175,6 +1175,10 @@ class ContainerEntity extends ItemEntity
 			else if(this.config != null && this.config.depthOffset != null)
 			{
 				depthOffset = this.config.depthOffset;
+			}
+			else if(this.features != null && this.features.containerType === 'tall')
+			{
+				depthOffset = 0;
 			}
 			else
 			{
@@ -1185,7 +1189,7 @@ class ContainerEntity extends ItemEntity
 		{
 			depthOffset += 1.0;
 		}
-		super.setDepthFromBottom(depthOffset);
+		BaseUnit.prototype.setDepthFromBottom.call(this, depthOffset);
 	}
 
 	getSpriteKeyForState(isOpen)
