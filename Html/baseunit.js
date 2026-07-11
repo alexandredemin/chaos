@@ -39,14 +39,24 @@ class BaseUnit extends Phaser.GameObjects.Sprite //Phaser.Physics.Arcade.Sprite
         this.abilities = clone(config.abilities);
     }
 
-    setDepthFromBottom(offset=0)
+    setDepthFromBottom(offset=null)
     {
         const bottomY = this.y + this.displayHeight * (1 - this.originY);
-        let depthOffset = offset;
-        if(depthOffset === 0)
+        let depthOffset = 0;
+        if(offset == null)
         {
-            if(this.features && this.features.depthOffset != null) depthOffset += this.features.depthOffset;
-            else if(this.config && this.config.depthOffset != null) depthOffset += this.config.depthOffset;
+            if(this.features && this.features.depthOffset != null)
+            {
+                depthOffset += this.features.depthOffset;
+            }
+            else if(this.config && this.config.depthOffset != null)
+            {
+                depthOffset += this.config.depthOffset;
+            }
+        }
+        else
+        {
+            depthOffset = offset;
         }
         super.setDepth(bottomY + depthOffset);
     }

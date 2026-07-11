@@ -1189,7 +1189,7 @@ class ContainerEntity extends ItemEntity
 		{
 			depthOffset += 1.0;
 		}
-		BaseUnit.prototype.setDepthFromBottom.call(this, depthOffset);
+		super.setDepthFromBottom(depthOffset);
 	}
 
 	getSpriteKeyForState(isOpen)

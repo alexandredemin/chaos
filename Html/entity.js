@@ -186,17 +186,22 @@ class WebEntity extends Entity
         this.setDepthFromBottom();
     }
 
-    setDepthFromBottom(offset=0)
+    setDepthFromBottom(offset=null)
     {
-        if(offset != 0){
+        if(offset != null)
+        {
             super.setDepthFromBottom(offset);
+            return;
         }
-        else{
-            let unitAtPos = getUnitAtMap(this.mapX,this.mapY);
-            if(unitAtPos && unitAtPos.features.webImmunity !== true) super.setDepthFromBottom(2);
-            else super.setDepthFromBottom(-16);
+        let unitAtPos = getUnitAtMap(this.mapX, this.mapY);
+        if(unitAtPos && unitAtPos.features.webImmunity !== true)
+        {
+            super.setDepthFromBottom(2);
         }
-
+        else
+        {
+            super.setDepthFromBottom(-16);
+        }
     }
 
     onCallback()
@@ -841,16 +846,21 @@ class DoorEntity extends Entity
         return this.features.visible;
     }
 
-    setDepthFromBottom(offset=0)
+    setDepthFromBottom(offset=null)
     {
-        if(offset != 0 || this.hasOwnProperty('features') == false || this.features.hasOwnProperty('direction') == false){
+        if(offset != null || this.hasOwnProperty('features') == false || this.features.hasOwnProperty('direction') == false)
+        {
             super.setDepthFromBottom(offset);
+            return;
         }
-        else{
-            if(this.features.direction === 'W' || this.features.direction === 'E') super.setDepthFromBottom(-16.0);
-            else super.setDepthFromBottom(-4.1);  
+        if(this.features.direction === 'W' || this.features.direction === 'E')
+        {
+            super.setDepthFromBottom(-16.0);
         }
-
+        else
+        {
+            super.setDepthFromBottom(-4.1);
+        }
     }
 
     getFrameIndex()
