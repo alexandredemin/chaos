@@ -237,16 +237,29 @@ var GameScene = new Phaser.Class({
         const playersMap = {};
         for (let p of savedGame.players) {
             let player = new Player(p.name);
-            player.control = p.control;
-            //if (player.control === PlayerControl.computer) {
-                player.aiControl = new AIControl(player);
-            //}
+            const factionIdFromName = getIndependentFactionIdFromName(p.name);
+            player.isIndependent = p.isIndependent === true || factionIdFromName != null;
+            player.independentFactionId = p.independentFactionId || factionIdFromName || null;
+            if(player.isIndependent === true)
+            {
+                player.control = PlayerControl.computer;
+                if(player.independentFactionId == null)
+                {
+                    player.independentFactionId = 'default';
+                }
+            }
+            else
+            {
+                player.control = p.control;
+            }
+            setupPlayerAI(player);
             if (p.fogExplored) {
                 player.fogExplored = p.fogExplored.map(row => row.map(v => !!v));
             }
             if (p.fogVisible) {
                 player.fogVisible = p.fogVisible.map(row => row.map(v => !!v));
             }
+            initPlayerFogData(player);
             players.push(player);
             playersMap[player.name] = player;
         }
@@ -338,10 +351,7 @@ var GameScene = new Phaser.Class({
             player.addWizard(wiz);
             units.push(wiz);
             player.control = playersSettings[i].control;
-            //if(playersSettings[i].control == PlayerControl.computer) player.aiControl = new AIControl(player);
-            //+debug
-            player.aiControl = new AIControl(player);
-            //-
+            setupPlayerAI(player);
             player.fogExplored = Array.from({ length: map.height }, () => Array(map.width).fill(false));
             player.fogVisible = Array.from({ length: map.height }, () => Array(map.width).fill(false));
             this.initSpells(wiz);

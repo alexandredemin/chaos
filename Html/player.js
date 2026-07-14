@@ -7,6 +7,9 @@ class Player
     control = PlayerControl.human;
     aiControl = null;
 
+    isIndependent = false;
+	independentFactionId = null;
+
     fogExplored = null;
     fogVisible = null;
     fogLayer = null;
@@ -76,6 +79,11 @@ class Player
 
     consumeResources()
     {
+        if(this.isIndependent === true)
+        {
+            this.startControl();
+            return;
+        }
         let availableMana = 0;
         if(this.wizard) availableMana = this.wizard.features.mana;
         let diedUnits = [];
@@ -152,4 +160,114 @@ class Player
         this.units.forEach(item => item.recovered = false);
         this.processRecover();
     }
+}
+
+//---------------------------- Independent players helpers ----------------------------
+const independentPlayerNamePrefix = '__independent__:';
+
+function getIndependentPlayerName(factionId='default')
+{
+	return independentPlayerNamePrefix + factionId;
+}
+
+function getIndependentFactionIdFromName(playerName)
+{
+	if(typeof playerName !== 'string') return null;
+	if(!playerName.startsWith(independentPlayerNamePrefix)) return null;
+
+	return playerName.substring(independentPlayerNamePrefix.length);
+}
+
+function isIndependentPlayer(player)
+{
+	return player != null && player.isIndependent === true;
+}
+
+function initPlayerFogData(player)
+{
+	if(player == null) return;
+	if(typeof map === 'undefined' || map == null) return;
+	if(player.fogExplored == null)
+	{
+		player.fogExplored = Array.from({ length: map.height }, () => Array(map.width).fill(false));
+	}
+	if(player.fogVisible == null)
+	{
+		player.fogVisible = Array.from({ length: map.height }, () => Array(map.width).fill(false));
+	}
+}
+
+function setupPlayerAI(player)
+{
+	if(isIndependentPlayer(player))
+	{
+		player.aiControl = new IndependentAIControl(player);
+	}
+	else
+	{
+		player.aiControl = new AIControl(player);
+	}
+}
+
+function createIndependentPlayer(factionId='default', scene=null)
+{
+	const player = new Player(getIndependentPlayerName(factionId));
+	player.control = PlayerControl.computer;
+	player.isIndependent = true;
+	player.independentFactionId = factionId;
+	player.wizard = null;
+	initPlayerFogData(player);
+	setupPlayerAI(player);
+	if(gameSettings.fogOfWar === true && scene != null && player.fogLayer == null)
+	{
+		player.initializeFog(scene, map);
+		player.fogLayer.setVisible(false);
+	}
+	return player;
+}
+
+function getIndependentPlayer(factionId='default', createIfMissing=true, scene=null)
+{
+	for(let i = 0; i < players.length; i++)
+	{
+		const player = players[i];
+		if(player.isIndependent === true && player.independentFactionId === factionId)
+		{
+			return player;
+		}
+	}
+	if(createIfMissing !== true) return null;
+	const player = createIndependentPlayer(factionId, scene);
+	players.push(player);
+	return player;
+}
+
+function ensureIndependentPlayer(factionId='default', scene=null)
+{
+	return getIndependentPlayer(factionId, true, scene);
+}
+
+function createIndependentUnit(scene, configName, mapX, mapY, independentAI=null, factionId='default')
+{
+	const cfg = unitConfigs[configName];
+	if(cfg == null) return null;
+	const player = ensureIndependentPlayer(factionId, scene);
+	const unit = new Unit(cfg, scene, 0, 0);
+	unit.setPositionFromMap(mapX, mapY);
+	unit.independentAI = clone(independentAI || {
+		type: 'idle',
+		homeX: mapX,
+		homeY: mapY
+	});
+	player.addUnit(unit);
+	units.push(unit);
+	if(gameSettings.fogOfWar === true && player.fogExplored != null)
+	{
+		computeFOV(player, mapX, mapY, 20);
+		if(player.fogLayer != null)
+		{
+			player.fogLayer.redrawAll(player.fogExplored);
+		}
+	}
+	return unit;
 }

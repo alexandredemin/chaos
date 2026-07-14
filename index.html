@@ -28,6 +28,7 @@
     <script type="text/javascript" src="Html/uiscene.js"></script>
     <script type="text/javascript" src="Html/startscene.js"></script>
     <script type="text/javascript" src="Html/aicontrol.js"></script>
+    <script type="text/javascript" src="Html/independentai.js"></script>
     <script type="text/javascript" src="Html/aitreesearch.js"></script>
     <script type="text/javascript" src="Html/mapgenerator.js"></script>
     <style> body {
@@ -871,6 +872,8 @@
             players: players.map(p => ({
                 name: p.name,
                 control: p.control,
+                isIndependent: p.isIndependent === true,
+                independentFactionId: p.independentFactionId || null,
                 fogExplored: p.fogExplored
                     ? p.fogExplored.map(row => row.map(v => v ? 1 : 0))
                     : null,

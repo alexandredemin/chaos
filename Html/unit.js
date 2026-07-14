@@ -30,6 +30,7 @@ class Unit extends BaseUnit
             features: clone(this.features),
             abilities: clone(this.abilities),
             playerName: this.player.name,
+            independentAI: clone(this.independentAI || null),
             states: this.states.map(s => s.serialize())
         };
     }
@@ -42,6 +43,7 @@ class Unit extends BaseUnit
         for (let key in data.features) {u.features[key] = data.features[key];}
         if(!Array.isArray(u.features.items)) u.features.items = [];
         u.abilities = clone(data.abilities);
+        u.independentAI = clone(data.independentAI || null);
         u.player = playersMap[data.playerName];
         units.push(u);
         if(u.player){
