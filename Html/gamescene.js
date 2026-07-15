@@ -80,10 +80,15 @@ var GameScene = new Phaser.Class({
         placeSelector = new PlaceSelector(this);
 
         //+ init fogs
-        if(gameSettings.fogOfWar){
-            for(let unit of units) computeFOV(unit.player, unit.mapX, unit.mapY, 20);
-            for(let player of players){
-                player.initializeFog(this, map);
+        if(gameSettings.fogOfWar)
+        {
+            for(let unit of units)
+            {
+                if(playerUsesFogOfWar(unit.player)) computeFOV(unit.player, unit.mapX, unit.mapY, 20);
+            }
+            for(let player of players)
+            {
+                if(playerUsesFogOfWar(player)) player.initializeFog(this, map);
             }
         }
         //-
@@ -253,12 +258,13 @@ var GameScene = new Phaser.Class({
                 player.control = p.control;
             }
             setupPlayerAI(player);
-            if (p.fogExplored) {
-                player.fogExplored = p.fogExplored.map(row => row.map(v => !!v));
+            if(playerUsesFogOfWar(player))
+            {
+                if(p.fogExplored) player.fogExplored = p.fogExplored.map(row => row.map(v => !!v));
+                if(p.fogVisible) player.fogVisible = p.fogVisible.map(row => row.map(v => !!v));
             }
-            if (p.fogVisible) {
-                player.fogVisible = p.fogVisible.map(row => row.map(v => !!v));
-            }
+            // For computer/independent players this intentionally clears fog data.
+            // To restore AI fog later, set computerPlayersUseFogOfWar = true.
             initPlayerFogData(player);
             players.push(player);
             playersMap[player.name] = player;
@@ -352,8 +358,7 @@ var GameScene = new Phaser.Class({
             units.push(wiz);
             player.control = playersSettings[i].control;
             setupPlayerAI(player);
-            player.fogExplored = Array.from({ length: map.height }, () => Array(map.width).fill(false));
-            player.fogVisible = Array.from({ length: map.height }, () => Array(map.width).fill(false));
+            initPlayerFogData(player);
             this.initSpells(wiz);
             posIndex++;
         }

@@ -635,12 +635,19 @@
         });
     }
 
-    function updateFog(unit){
+    function updateFog(unit)
+    {
+        if(unit == null) return;
+        if(playerUsesFogOfWar(unit.player) !== true) return;
+        if(unit.player.fogLayer == null) return;
         const newTiles = computeFOV(unit.player, unit.mapX, unit.mapY, 20);
-        if (newTiles.length > 0) unit.player.fogLayer.revealTiles(newTiles);
+        if(newTiles.length > 0) unit.player.fogLayer.revealTiles(newTiles);
     }
 
     function computeFOV(player, originX, originY, radius = 20) {
+        if(playerUsesFogOfWar(player) !== true) return [];
+        if(player.fogVisible == null || player.fogExplored == null) return [];
+        
         const visible = player.fogVisible;
         const explored = player.fogExplored;
         const newlyExplored = [];
@@ -874,13 +881,12 @@
                 control: p.control,
                 isIndependent: p.isIndependent === true,
                 independentFactionId: p.independentFactionId || null,
-                fogExplored: p.fogExplored
-                    ? p.fogExplored.map(row => row.map(v => v ? 1 : 0))
-                    : null,
-
-                fogVisible: p.fogVisible
-                    ? p.fogVisible.map(row => row.map(v => v ? 1 : 0))
-                    : null
+                fogExplored: playerUsesFogOfWar(p) && p.fogExplored
+                ? p.fogExplored.map(row => row.map(v => v ? 1 : 0))
+                : null,
+                fogVisible: playerUsesFogOfWar(p) && p.fogVisible
+                ? p.fogVisible.map(row => row.map(v => v ? 1 : 0))
+                : null
             })),
             units: units.map(u => u.serialize()),
             entities: entities.map(e => e.serialize()),
@@ -929,9 +935,14 @@
             if (rangeRenderer.visible === true) rangeRenderer.redraw();
         }
 
-        if(gameSettings.fogOfWar){
-            for(player of players){
-                player.fogLayer.rt.setPosition(groundLayer.x, groundLayer.y);
+        if(gameSettings.fogOfWar)
+        {
+            for(let player of players)
+            {
+                if(player.fogLayer != null && player.fogLayer.rt != null)
+                {
+                    player.fogLayer.rt.setPosition(groundLayer.x, groundLayer.y);
+                }
             }
         }
 

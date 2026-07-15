@@ -148,10 +148,10 @@ class Player
 
     startTurn()
     {
-        if(gameSettings.fogOfWar && this.control === PlayerControl.human)
+        if(playerUsesFogOfWar(this))
         {
-            players.forEach(p => p.fogLayer.setVisible(false));
-            this.fogLayer.setVisible(true);
+            players.forEach(p => {if(p.fogLayer != null) p.fogLayer.setVisible(false);});
+            if(this.fogLayer != null) this.fogLayer.setVisible(true);
         }
         if(gameSettings.showEnemyMoves == false && this.control === PlayerControl.human)
         {
@@ -162,8 +162,23 @@ class Player
     }
 }
 
-//---------------------------- Independent players helpers ----------------------------
+//---------------------------- Helpers ----------------------------
+// Computer/independent players currently do not use fog of war in AI logic.
+// Set this to true later if you want fair AI that also has its own fog data.
+const computerPlayersUseFogOfWar = false;
+
 const independentPlayerNamePrefix = '__independent__:';
+
+function playerUsesFogOfWar(player)
+{
+	if(gameSettings.fogOfWar !== true) return false;
+	if(player == null) return false;
+	if(player.control === PlayerControl.human) return true;
+
+	// Future fair-AI mode:
+	// return computerPlayersUseFogOfWar === true;
+	return computerPlayersUseFogOfWar === true;
+}
 
 function getIndependentPlayerName(factionId='default')
 {
@@ -187,6 +202,12 @@ function initPlayerFogData(player)
 {
 	if(player == null) return;
 	if(typeof map === 'undefined' || map == null) return;
+	if(playerUsesFogOfWar(player) !== true)
+	{
+		player.fogExplored = null;
+		player.fogVisible = null;
+		return;
+	}
 	if(player.fogExplored == null)
 	{
 		player.fogExplored = Array.from({ length: map.height }, () => Array(map.width).fill(false));
@@ -261,13 +282,13 @@ function createIndependentUnit(scene, configName, mapX, mapY, independentAI=null
 	});
 	player.addUnit(unit);
 	units.push(unit);
-	if(gameSettings.fogOfWar === true && player.fogExplored != null)
-	{
-		computeFOV(player, mapX, mapY, 20);
-		if(player.fogLayer != null)
-		{
-			player.fogLayer.redrawAll(player.fogExplored);
-		}
-	}
+    if(playerUsesFogOfWar(player))
+    {
+        computeFOV(player, mapX, mapY, 20);
+        if(player.fogLayer != null)
+        {
+            player.fogLayer.redrawAll(player.fogExplored);
+        }
+    }   
 	return unit;
 }
