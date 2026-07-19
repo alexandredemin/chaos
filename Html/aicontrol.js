@@ -212,51 +212,90 @@ class AIControl
         return true;
     }
 
+	ensureUnitAIControl(unit)
+	{
+		if(!unit.aiControl)
+		{
+			unit.aiControl = {target: null};
+		}
+		return unit.aiControl;
+	}
+
+	getCurrentMainGoal(unit)
+	{
+		this.ensureUnitAIControl(unit);
+		if(unit.aiControl.mainTarget)
+		{
+			if(unit.aiControl.mainTarget.died)
+			{
+				this.setMainTarget(unit, null, null, null, null);
+				return null;
+			}
+			return [unit.aiControl.mainTarget.mapX, unit.aiControl.mainTarget.mapY];
+		}
+		if(unit.aiControl.mainTargetPos)
+		{
+			return [unit.aiControl.mainTargetPos[0], unit.aiControl.mainTargetPos[1]];
+		}
+		return null;
+	}
+
+	chooseNewMainGoal(unit)
+	{
+		let mainGoal = null;
+		if(unit.player.wizard && !unit.player.wizard.died)
+		{
+			if(this.threats && this.threats.length > 0)
+			{
+				this.chooseTargetThreat(unit, this.threats);
+			}
+			if(unit.aiControl.mainTarget)
+			{
+				mainGoal = [unit.aiControl.mainTarget.mapX, unit.aiControl.mainTarget.mapY];
+			}
+			else
+			{
+				this.choosePatrolTarget(unit);
+				if(unit.aiControl.mainTargetPos)
+				{
+					mainGoal = [unit.aiControl.mainTargetPos[0], unit.aiControl.mainTargetPos[1]];
+				}
+			}
+		}
+		else
+		{
+			let dmap = this.getDistanceMap(unit, unit.mapX, unit.mapY);
+			let trgtWiz = this.getNearestEnemyWizard(dmap, unit);
+			if(trgtWiz)
+			{
+				this.setMainTarget(unit, trgtWiz, [trgtWiz.mapX, trgtWiz.mapY], "attack", 10);
+				mainGoal = [trgtWiz.mapX, trgtWiz.mapY];
+			}
+		}
+		return mainGoal;
+	}
+
+	getMainGoal(unit)
+	{
+		this.ensureUnitAIControl(unit);
+		let mainGoal = this.getCurrentMainGoal(unit);
+		if(mainGoal == null)
+		{
+			mainGoal = this.chooseNewMainGoal(unit);
+		}
+		if(mainGoal == null)
+		{
+			mainGoal = [unit.mapX, unit.mapY];
+		}
+		return mainGoal;
+	}
+
     stepUnit(unit)
     {
-        if(!unit.aiControl)
-        {
-            unit.aiControl = {target: null};
-        }
-        if(unit.aiControl.target == null)
-        {
-            let mainGoal = null;
-            if(unit.aiControl.mainTarget){
-                if(unit.aiControl.mainTarget.died){
-                    this.setMainTarget(unit,null,null,null,null);
-                }
-                else{
-                    mainGoal = [unit.aiControl.mainTarget.mapX,unit.aiControl.mainTarget.mapY];              
-                }
-            }
-            else if(unit.aiControl.mainTargetPos){
-                mainGoal = [unit.aiControl.mainTargetPos[0],unit.aiControl.mainTargetPos[1]];                
-            } 
-            if(mainGoal == null){
-                if(unit.player.wizard && !unit.player.wizard.died){
-                    if(this.threats && this.threats.length > 0){
-                        this.chooseTargetThreat(unit,this.threats);
-                    }
-                    if(unit.aiControl.mainTarget){
-                        mainGoal = [unit.aiControl.mainTarget.mapX,unit.aiControl.mainTarget.mapY];
-                    }
-                    else{
-                        this.choosePatrolTarget(unit);
-                        if(unit.aiControl.mainTargetPos){
-                            mainGoal = [unit.aiControl.mainTargetPos[0],unit.aiControl.mainTargetPos[1]];
-                        } 
-                    }
-                }
-                else{
-                    let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-                    let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
-                    if(trgtWiz){
-                        this.setMainTarget(unit,trgtWiz,[trgtWiz.mapX,trgtWiz.mapY],"attack",10);
-                        mainGoal = [trgtWiz.mapX,trgtWiz.mapY];
-                    }
-                }
-            }
-            if(mainGoal == null) mainGoal = [unit.mapX,unit.mapY];
+		const unitAI = this.ensureUnitAIControl(unit);
+		if(unitAI.target == null)
+		{
+			const mainGoal = this.getMainGoal(unit);
             let aggressionFactor = 2;
             if(unit.aiControl.agression) aggressionFactor = unit.aiControl.agression;
             let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
