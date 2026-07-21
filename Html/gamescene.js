@@ -282,6 +282,7 @@ var GameScene = new Phaser.Class({
         playerInd = 0;
         let startPos = [];
         let entityObjects = [];
+        let independentUnitObjects = [];
         // split objects into start positions and entities
         for (let i = 0; i < objectLayer.objects.length; i++)
         {
@@ -299,6 +300,16 @@ var GameScene = new Phaser.Class({
                     y: objPos.y,
                     properties: obj.properties || [],
                     items: obj.items || []
+                });
+            }
+            else if(obj.type === 'independent_unit')
+            {
+                independentUnitObjects.push({
+                    configName: obj.name,
+                    x: objPos.x,
+                    y: objPos.y,
+                    factionId: obj.factionId || 'default',
+                    independentAI: clone(obj.independentAI || null)
                 });
             }
         }
@@ -361,6 +372,20 @@ var GameScene = new Phaser.Class({
             initPlayerFogData(player);
             this.initSpells(wiz);
             posIndex++;
+        }
+        // Create generated independent guards after normal players.
+        for(let i = 0; i < independentUnitObjects.length; i++)
+        {
+            const guardData = independentUnitObjects[i];
+            if(unitConfigs[guardData.configName] == null) continue;
+            createIndependentUnit(
+                this,
+                guardData.configName,
+                guardData.x,
+                guardData.y,
+                guardData.independentAI,
+                guardData.factionId
+            );
         }
     },
 

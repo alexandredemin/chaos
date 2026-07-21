@@ -83,7 +83,10 @@ class MapGenerator {
         // wardrobes
 		const wardrobes = this._placeWardrobes(map, objects.concat(doors, items, chests));
 
-		objects = objects.concat(doors, items, chests, wardrobes);
+        // independent guards for rooms with many containers
+        const treasureGuards = this._placeTreasureGuards(map, chests, wardrobes, objects.concat(doors, items, chests, wardrobes));
+
+		objects = objects.concat(doors, items, chests, wardrobes, treasureGuards);
 
         return {
             width: this.width,
@@ -1169,6 +1172,137 @@ class MapGenerator {
 			}
 		}
 		return objects;
+	}
+
+    _placeTreasureGuards(map, chests=[], wardrobes=[], occupiedObjects=[])
+	{
+		const result = [];
+		// A room is guarded when it contains at least this many chests and wardrobes in total.
+		const minContainerCount = 3;
+
+		// All guards currently belong to one independent faction, therefore guards from different rooms do not attack each other.
+		// To make every room a separate hostile faction later, replace this value inside the room loop with:
+		// const factionId = 'treasure_guards_' + room.x + '_' + room.y;
+		const commonFactionId = 'treasure_guards';
+
+		const excludedUnitTypes = ['wizard', 'rat', 'bat'];
+
+		const guardUnitTypes = Object.keys(unitConfigs).filter(configName =>
+		{
+			return excludedUnitTypes.indexOf(configName) < 0;
+		});
+		if(guardUnitTypes.length <= 0) return result;
+
+		const containers = chests.concat(wardrobes);
+		const occupied = new Set();
+		const doorCells = [];
+		for(let i = 0; i < occupiedObjects.length; i++)
+		{
+			const obj = occupiedObjects[i];
+			if(obj == null || obj.x == null || obj.y == null) continue;
+			const mapX = Math.floor(obj.x / 16);
+			const mapY = Math.floor(obj.y / 16);
+			const key = mapX + ':' + mapY;
+			occupied.add(key);
+			if(obj.type === 'entity' && obj.name === 'door')
+			{
+				doorCells.push({x: mapX, y: mapY});
+			}
+		}
+
+		const isInsideRoom = (mapX, mapY, room) =>
+		{
+			return mapX >= room.x && mapX < room.x + room.w && mapY >= room.y && mapY < room.y + room.h;
+		};
+
+		const isNearDoor = (mapX, mapY) =>
+		{
+			for(let i = 0; i < doorCells.length; i++)
+			{
+				if(Math.abs(mapX - doorCells[i].x) <= 1 && Math.abs(mapY - doorCells[i].y) <= 1)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+
+		for(let roomIndex = 0; roomIndex < this.rooms.length; roomIndex++)
+		{
+			const room = this.rooms[roomIndex];
+			let roomContainerCount = 0;
+			for(let i = 0; i < containers.length; i++)
+			{
+				const container = containers[i];
+				const mapX = Math.floor(container.x / 16);
+				const mapY = Math.floor(container.y / 16);
+				if(isInsideRoom(mapX, mapY, room))
+				{
+					roomContainerCount++;
+				}
+			}
+			if(roomContainerCount < minContainerCount) continue;
+			let availableCells = [];
+			for(let y = room.y; y < room.y + room.h; y++)
+			{
+				for(let x = room.x; x < room.x + room.w; x++)
+				{
+					if(y < 0 || y >= map.walls.length) continue;
+					if(x < 0 || x >= map.walls[y].length) continue;
+					// Only floor cells.
+					if(map.walls[y][x] !== null) continue;
+					const key = x + ':' + y;
+					if(occupied.has(key)) continue;
+                    // Do not spawn a guard in a doorway or immediately next to it, so the room cannot be blocked at start.
+					if(isNearDoor(x, y)) continue;
+					availableCells.push({x: x, y: y});
+				}
+			}
+			if(availableCells.length <= 0) continue;
+			// Shuffle available cells.
+			for(let i = availableCells.length - 1; i > 0; i--)
+			{
+				const j = randomInt(0, i);
+				const tmp = availableCells[i];
+				availableCells[i] = availableCells[j];
+				availableCells[j] = tmp;
+			}
+
+			// One guard normally, two guards with a 40% probability.
+			let guardCount = Math.random() < 0.40 ? 2 : 1;
+			guardCount = Math.min(guardCount, availableCells.length);
+			// All guards in the same room have the same creature type.
+			const guardConfigName = guardUnitTypes[randomInt(0, guardUnitTypes.length - 1)];
+
+			const aggroRadius = Math.max(4, Math.ceil(Math.max(room.w, room.h) / 2) + 1);
+			const leashRadius = aggroRadius + 3;
+
+			for(let guardIndex = 0; guardIndex < guardCount; guardIndex++)
+			{
+				const cell = availableCells[guardIndex];
+				result.push({
+					type: 'independent_unit',
+					name: guardConfigName,
+					x: cell.x * 16,
+					y: cell.y * 16,
+					factionId: commonFactionId,
+					independentAI: {
+						type: 'guard',
+						// Each guard returns to its own initial cell. This prevents two guards from trying to occupy the same room-center cell.
+						homeX: cell.x,
+						homeY: cell.y,
+						aggroRadius: aggroRadius,
+						leashRadius: leashRadius,
+                        patrolRadius: 3,
+						aggression: 4,
+                        patrolAggression: 2,
+						returnAggression: 1
+					}
+				});
+				occupied.add(cell.x + ':' + cell.y);
+			}
+		}
+		return result;
 	}
 
     //--- start positions ---

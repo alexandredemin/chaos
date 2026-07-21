@@ -239,7 +239,7 @@ function createIndependentPlayer(factionId='default', scene=null)
 	player.wizard = null;
 	initPlayerFogData(player);
 	setupPlayerAI(player);
-	if(gameSettings.fogOfWar === true && scene != null && player.fogLayer == null)
+	if(playerUsesFogOfWar(player) && scene != null && player.fogLayer == null)
 	{
 		player.initializeFog(scene, map);
 		player.fogLayer.setVisible(false);
