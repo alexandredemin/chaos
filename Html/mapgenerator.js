@@ -71,22 +71,22 @@ class MapGenerator {
 
         const doors = this._placeDoors(map,tileTypeMap);
 
-        // start positions
-        let objects = this._generateStartPositions();
+     	// start positions
+		const startPositions = this._generateStartPositions();
 
-        // items
-        const items = this._placeItems(objects.concat(doors));
+		// items
+		const items = this._placeItems(startPositions.concat(doors));
 
-        // chests
-		const chests = this._placeChests(objects.concat(doors, items));
+		// chests
+		const chests = this._placeChests(startPositions.concat(doors, items));
 
-        // wardrobes
-		const wardrobes = this._placeWardrobes(map, objects.concat(doors, items, chests));
+		// wardrobes
+		const wardrobes = this._placeWardrobes(map, startPositions.concat(doors, items, chests));
 
-        // independent guards for rooms with many containers
-        const treasureGuards = this._placeTreasureGuards(map, chests, wardrobes, objects.concat(doors, items, chests, wardrobes));
+		// independent guards for rooms with many containers
+		const treasureGuards = this._placeTreasureGuards(map, chests, wardrobes, startPositions, startPositions.concat(doors, items, chests, wardrobes));
 
-		objects = objects.concat(doors, items, chests, wardrobes, treasureGuards);
+		const objects = startPositions.concat(doors, items, chests, wardrobes, treasureGuards);
 
         return {
             width: this.width,
@@ -1174,11 +1174,32 @@ class MapGenerator {
 		return objects;
 	}
 
-    _placeTreasureGuards(map, chests=[], wardrobes=[], occupiedObjects=[])
+    _placeTreasureGuards(map, chests=[], wardrobes=[], startPositions=[], occupiedObjects=[])
 	{
 		const result = [];
+		const startCells = [];
+		for(let i = 0; i < startPositions.length; i++)
+		{
+			const start = startPositions[i];
+			if(start == null) continue;
+			let mapX = null;
+			let mapY = null;
+			if(start.mapX != null && start.mapY != null)
+			{
+				mapX = start.mapX;
+				mapY = start.mapY;
+			}
+			else if(start.x != null && start.y != null)
+			{
+				mapX = Math.floor(start.x / 16);
+				mapY = Math.floor(start.y / 16);
+			}
+			if(mapX == null || mapY == null) continue;
+			startCells.push({x: mapX, y: mapY});
+		}
+
 		// A room is guarded when it contains at least this many chests and wardrobes in total.
-		const minContainerCount = 3;
+		const minContainerCount = 2;
 
 		// All guards currently belong to one independent faction, therefore guards from different rooms do not attack each other.
 		// To make every room a separate hostile faction later, replace this value inside the room loop with:
@@ -1230,6 +1251,18 @@ class MapGenerator {
 		for(let roomIndex = 0; roomIndex < this.rooms.length; roomIndex++)
 		{
 			const room = this.rooms[roomIndex];
+            let roomHasStartPosition = false;
+			for(let i = 0; i < startCells.length; i++)
+			{
+				if(isInsideRoom(startCells[i].x, startCells[i].y, room))
+				{
+					roomHasStartPosition = true;
+					break;
+				}
+			}
+			// A wizard may start at any generated start position, so rooms containing start positions must never have guards.
+			if(roomHasStartPosition) continue;
+            
 			let roomContainerCount = 0;
 			for(let i = 0; i < containers.length; i++)
 			{
