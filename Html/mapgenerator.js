@@ -1339,7 +1339,7 @@ class MapGenerator {
 	}
 
     //--- start positions ---
-    _generateStartPositions(count = 8) {
+    _generateStartPositions(count = 4) {
         const objects = [];
 
         // 1) collect candidate rooms (only normal rooms)
