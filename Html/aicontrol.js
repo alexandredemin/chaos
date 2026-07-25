@@ -297,7 +297,7 @@ class AIControl
 		{
 			const mainGoal = this.getMainGoal(unit);
             let aggressionFactor = 2;
-            if(unit.aiControl.agression) aggressionFactor = unit.aiControl.agression;
+            if(unit.aiControl.agression != null) aggressionFactor = unit.aiControl.agression;
             let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
             let stepPlaces = this.getAvailableCells(dmap,unit,null,true);
             if(unit.features.attackPoints > 0) this.computeAtackMatrix(unit,stepPlaces,dmap);

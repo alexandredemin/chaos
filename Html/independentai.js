@@ -8,7 +8,8 @@ class IndependentAIControl extends AIControl
 
 		this.behaviors = {
 			idle: new IdleIndependentBehavior(this),
-			guard: new GuardIndependentBehavior(this)
+			guard: new GuardIndependentBehavior(this),
+			roam: new RoamIndependentBehavior(this)
 		};
 	}
 
