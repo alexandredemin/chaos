@@ -85,8 +85,11 @@ class MapGenerator {
 
 		// independent guards for rooms with many containers
 		const treasureGuards = this._placeTreasureGuards(map, chests, wardrobes, startPositions, startPositions.concat(doors, items, chests, wardrobes));
+        
+        // independent creatures freely roaming through the dungeon
+		const roamingCreatures = this._placeRoamingCreatures(map, startPositions, startPositions.concat(doors, items, chests, wardrobes,treasureGuards));
 
-		const objects = startPositions.concat(doors, items, chests, wardrobes, treasureGuards);
+		const objects = startPositions.concat(doors, items, chests, wardrobes, treasureGuards, roamingCreatures);
 
         return {
             width: this.width,
@@ -1204,7 +1207,7 @@ class MapGenerator {
 		// All guards currently belong to one independent faction, therefore guards from different rooms do not attack each other.
 		// To make every room a separate hostile faction later, replace this value inside the room loop with:
 		// const factionId = 'treasure_guards_' + room.x + '_' + room.y;
-		const commonFactionId = 'treasure_guards';
+		const commonFactionId = 'dungeon_creatures';
 
 		const excludedUnitTypes = ['wizard', 'rat', 'bat'];
 
@@ -1333,6 +1336,256 @@ class MapGenerator {
 					}
 				});
 				occupied.add(cell.x + ':' + cell.y);
+			}
+		}
+		return result;
+	}
+
+    _placeRoamingCreatures(map, startPositions=[], occupiedObjects=[])
+	{
+		const result = [];
+
+		//Guards and roaming creatures use the same independent player, so they do not consider each other enemies.
+		const factionId = 'dungeon_creatures';
+
+		// Creature density is based on a 20x20 reference map:
+		// cautious creatures:   5-7
+		// aggressive creatures: 1-2
+		// The amount is proportional to the map area.
+		const referenceArea = 20 * 20;
+		const mapArea = this.width * this.height;
+		const areaScale = mapArea / referenceArea;
+
+		const cautiousMinCount = Math.max(1, Math.round(5 * areaScale));
+		const cautiousMaxCount = Math.max(cautiousMinCount, Math.round(7 * areaScale));
+		const aggressiveMinCount = Math.max(1, Math.round(1 * areaScale));
+		const aggressiveMaxCount = Math.max(aggressiveMinCount,Math.round(2 * areaScale));
+		const cautiousCount = this._rand(cautiousMinCount, cautiousMaxCount);
+		const aggressiveCount = this._rand(aggressiveMinCount, aggressiveMaxCount);
+
+		// Aggressive creatures are placed first, so they have a better chance of receiving positions separated from other creatures.
+		const profiles = [
+			{
+				count: aggressiveCount,
+				unitTypes: ['chort','muddy','demon','troll'],
+				minSpawnDistance: 3,
+				behavior: {
+					type: 'roam',
+					minGoalDistance: 16,
+					maxGoalDistance: 40,
+					goalTolerance: 1,
+					stuckTurnLimit: 3,
+					aggroRadius: 7,
+					pursuitRadius: 14,
+					pursuitCooldownTurns: 1,
+					targetAggression: 1,
+					travelAggression: 3,
+					combatAggression: 6
+				}
+			},
+			{
+				count: cautiousCount,
+				unitTypes: ['rat','bat'],
+				minSpawnDistance: 2,
+				behavior: {
+					type: 'roam',
+					minGoalDistance: 8,
+					maxGoalDistance: 24,
+					goalTolerance: 1,
+					stuckTurnLimit: 3,
+					aggroRadius: 4,
+					pursuitRadius: 7,
+					pursuitCooldownTurns: 2,
+					targetAggression: 0.1,
+					travelAggression: 0.5,
+					combatAggression: 2
+				}
+			}
+		];
+
+		const occupied = new Set();
+		const doorCells = [];
+		const startCells = [];
+		const placedCells = [];
+		// Collect occupied cells and doors.
+		for(let i = 0; i < occupiedObjects.length; i++)
+		{
+			const obj = occupiedObjects[i];
+			if(obj == null || obj.x == null || obj.y == null) continue;
+			const mapX = Math.floor(obj.x / 16);
+			const mapY = Math.floor(obj.y / 16);
+			occupied.add(mapX + ':' + mapY);
+			if(obj.type === 'entity' && obj.name === 'door') doorCells.push({x: mapX, y: mapY});
+		}
+		// Collect wizard start cells.
+		for(let i = 0; i < startPositions.length; i++)
+		{
+			const start = startPositions[i];
+			if(start == null) continue;
+			let mapX = null;
+			let mapY = null;
+			if(start.mapX != null && start.mapY != null)
+			{
+				mapX = start.mapX;
+				mapY = start.mapY;
+			}
+			else if(start.x != null && start.y != null)
+			{
+				mapX = Math.floor(start.x / 16);
+				mapY = Math.floor(start.y / 16);
+			}
+			if(mapX == null || mapY == null) continue;
+			startCells.push({x: mapX,y: mapY});
+		}
+
+		const isInsideRoom = (mapX, mapY, room) =>
+		{
+			return mapX >= room.x && mapX < room.x + room.w && mapY >= room.y && mapY < room.y + room.h;
+		};
+
+		const roomHasStartPosition = room =>
+		{
+			for(let i = 0; i < startCells.length; i++)
+			{
+				if(isInsideRoom(startCells[i].x,startCells[i].y,room)) return true;
+			}
+			return false;
+		};
+
+		const isNearDoor = (mapX, mapY) =>
+		{
+			for(let i = 0; i < doorCells.length; i++)
+			{
+				if(Math.abs(mapX - doorCells[i].x) <= 1 && Math.abs(mapY - doorCells[i].y) <= 1) return true;
+			}
+			return false;
+		};
+
+		const getCellDistance = (cell1, cell2) =>
+		{
+			return Math.max(Math.abs(cell1.x - cell2.x), Math.abs(cell1.y - cell2.y));
+		};
+
+		const shuffle = array =>
+		{
+			for(let i = array.length - 1; i > 0; i--)
+			{
+				const j = this._rand(0, i);
+				const tmp = array[i];
+				array[i] = array[j];
+				array[j] = tmp;
+			}
+			return array;
+		};
+
+		const getAvailableCells = (room, minSpawnDistance) =>
+		{
+			const cells = [];
+			for(let y = room.y; y < room.y + room.h; y++)
+			{
+				for(let x = room.x; x < room.x + room.w; x++)
+				{
+					if(y < 0 ||	y >= map.walls.length) continue;
+					if(x < 0 || x >= map.walls[y].length) continue;
+                    // Only floor cells.
+					if(map.walls[y][x] !== null) continue;
+					if(occupied.has(x + ':' + y)) continue;
+                    //Do not initially block a doorway.
+					if(isNearDoor(x, y)) continue;
+					const cell = {x: x, y: y};
+					let tooClose = false;
+					for(let i = 0; i < placedCells.length; i++)
+					{
+						if(getCellDistance(cell, placedCells[i]) < minSpawnDistance)
+						{
+							tooClose = true;
+							break;
+						}
+					}
+					if(tooClose)continue;
+					cells.push(cell);
+				}
+			}
+			return cells;
+		};
+
+		// Find the special central arena.
+		const arenaNode = this.bspNodes.find(node =>
+		{
+			return node != null && node.room != null && node.roomType === 'arena';
+		});
+		let arenaRoom = null;
+		if(arenaNode != null && !roomHasStartPosition(arenaNode.room)) arenaRoom = arenaNode.room;
+
+		// Rooms used as fallback positions:
+		// - wizard start rooms are excluded;
+		// - rooms closer to the map center are preferred;
+		// - only the central half of suitable rooms is used.
+		const mapCenter = {x: Math.floor(this.width / 2), y: Math.floor(this.height / 2)};
+		let centralRooms = this.rooms.filter(room =>
+		{
+			if(roomHasStartPosition(room)) return false;
+			if(arenaRoom != null && room === arenaRoom) return false;
+			return true;
+		});
+		centralRooms.sort((room1, room2) =>
+		{
+			const center1 = this._roomCenter(room1);
+			const center2 = this._roomCenter(room2);
+			const dx1 = center1.x - mapCenter.x;
+			const dy1 = center1.y - mapCenter.y;
+			const dx2 = center2.x - mapCenter.x;
+			const dy2 = center2.y - mapCenter.y;
+			return dx1 * dx1 + dy1 * dy1 - (dx2 * dx2 + dy2 * dy2);
+		});
+		const centralRoomCount = Math.min(centralRooms.length,Math.max(4,Math.ceil(centralRooms.length / 2)));
+		centralRooms = centralRooms.slice(0, centralRoomCount);
+
+		// Tries to find a position for one creature. When the arena exists, it is always tried first. If it becomes crowded, remaining creatures spill into the central non-start rooms.
+		const findSpawnCell = profile =>
+		{
+			let roomOrder = centralRooms.slice();
+			shuffle(roomOrder);
+			if(arenaRoom != null) roomOrder.unshift(arenaRoom);
+			//First attempt: respect the profile's preferred separation from other roaming creatures.
+			for(let roomIndex = 0; roomIndex < roomOrder.length; roomIndex++)
+			{
+				const cells = getAvailableCells(roomOrder[roomIndex], profile.minSpawnDistance);
+				if(cells.length <= 0) continue;
+				return cells[this._rand(0, cells.length - 1)];
+			}
+			// Second attempt: relax separation, but still avoid occupied cells, doors and wizard start rooms.
+			for(let roomIndex = 0; roomIndex < roomOrder.length; roomIndex++)
+			{
+				const cells = getAvailableCells(roomOrder[roomIndex], 1);
+				if(cells.length <= 0) continue;
+				return cells[this._rand(0, cells.length - 1)];
+			}
+			return null;
+		};
+
+		for(let profileIndex = 0; profileIndex < profiles.length; profileIndex++)
+		{
+			const profile = profiles[profileIndex];
+			const availableUnitTypes = profile.unitTypes.filter(configName => {return unitConfigs[configName] != null;});
+			if(availableUnitTypes.length <= 0) continue;
+			for(let creatureIndex = 0; creatureIndex < profile.count; creatureIndex++)
+			{
+				const selectedCell = findSpawnCell(profile);
+				// The generator may place fewer creatures when there are not enough suitable free cells.
+				if(selectedCell == null) break;
+				const configName = availableUnitTypes[this._rand(0, availableUnitTypes.length - 1)];
+				const independentAI = Object.assign({}, profile.behavior, {homeX: selectedCell.x, homeY: selectedCell.y});
+				result.push({
+					type: 'independent_unit',
+					name: configName,
+					x: selectedCell.x * 16,
+					y: selectedCell.y * 16,
+					factionId: factionId,
+					independentAI: independentAI
+				});
+				occupied.add(selectedCell.x + ':' + selectedCell.y);
+				placedCells.push({x: selectedCell.x, y: selectedCell.y});
 			}
 		}
 		return result;

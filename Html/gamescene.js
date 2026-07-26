@@ -376,15 +376,15 @@ var GameScene = new Phaser.Class({
         // Create generated independent guards after normal players.
         for(let i = 0; i < independentUnitObjects.length; i++)
         {
-            const guardData = independentUnitObjects[i];
-            if(unitConfigs[guardData.configName] == null) continue;
+            const independentUnitData = independentUnitObjects[i];
+            if(unitConfigs[independentUnitData.configName] == null) continue;
             createIndependentUnit(
                 this,
-                guardData.configName,
-                guardData.x,
-                guardData.y,
-                guardData.independentAI,
-                guardData.factionId
+                independentUnitData.configName,
+                independentUnitData.x,
+                independentUnitData.y,
+                independentUnitData.independentAI,
+                independentUnitData.factionId
             );
         }
     },
