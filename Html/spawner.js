@@ -142,7 +142,7 @@ class MonsterSpawner
 	static resolveOrigin(options, source)
 	{
 		if(options.mapX != null && options.mapY != null) return {x: Math.floor(options.mapX), y: Math.floor(options.mapY)};
-		if(source != null && source.mapX != null &&source.mapY != null) return {x: Math.floor(source.mapX),y: Math.floor(source.mapY)};
+		if(source != null && source.mapX != null && source.mapY != null) return {x: Math.floor(source.mapX),y: Math.floor(source.mapY)};
 		return null;
 	}
 
@@ -216,91 +216,40 @@ class MonsterSpawner
 	static getAvailableSpawnCells(options)
 	{
 		const result = [];
-
 		const source = options.source || null;
-
 		const originX = options.originX;
 		const originY = options.originY;
+		const minSpawnRadius = options.minSpawnRadius;
+		const spawnRadius = options.spawnRadius;
+		const unitProbe = options.unitProbe || null;
+		const reservedCells = options.reservedCells || new Set();
+		const allowPassableEntityCells = options.allowPassableEntityCells === true;
 
-		const minSpawnRadius =
-			options.minSpawnRadius;
-
-		const spawnRadius =
-			options.spawnRadius;
-
-		const unitProbe =
-			options.unitProbe || null;
-
-		const reservedCells =
-			options.reservedCells ||
-			new Set();
-
-		const allowPassableEntityCells =
-			options.allowPassableEntityCells === true;
-
-		/*
-		 * Cells are collected ring by ring.
-		 *
-		 * This keeps monsters close to the source while still
-		 * randomizing their positions within the same radius.
-		 */
-		for(let radius = minSpawnRadius;
-			radius <= spawnRadius;
-			radius++)
+		// Cells are collected ring by ring.
+		// This keeps monsters close to the source while still randomizing their positions within the same radius.
+		for(let radius = minSpawnRadius; radius <= spawnRadius; radius++)
 		{
 			const ring = [];
-
-			for(let y = originY - radius;
-				y <= originY + radius;
-				y++)
+			for(let y = originY - radius; y <= originY + radius; y++)
 			{
-				for(let x = originX - radius;
-					x <= originX + radius;
-					x++)
+				for(let x = originX - radius; x <= originX + radius; x++)
 				{
-					const distance = Math.max(
-						Math.abs(x - originX),
-						Math.abs(y - originY)
-					);
-
-					if(distance !== radius)
-					{
-						continue;
-					}
-
+					const distance = Math.max(Math.abs(x - originX), Math.abs(y - originY));
+					if(distance !== radius) continue;
 					if(!this.isCellAvailable({
 						source: source,
-
 						mapX: x,
 						mapY: y,
-
 						unitProbe: unitProbe,
-
-						reservedCells:
-							reservedCells,
-
-						allowPassableEntityCells:
-							allowPassableEntityCells
-					}))
-					{
-						continue;
-					}
-
-					ring.push({
-						x: x,
-						y: y
-					});
+						reservedCells: reservedCells,
+						allowPassableEntityCells: allowPassableEntityCells
+					})) continue;
+					ring.push({x: x, y: y});
 				}
 			}
-
 			this.shuffle(ring);
-
-			for(let i = 0; i < ring.length; i++)
-			{
-				result.push(ring[i]);
-			}
+			for(let i = 0; i < ring.length; i++) result.push(ring[i]);
 		}
-
 		return result;
 	}
 
@@ -309,125 +258,42 @@ class MonsterSpawner
 		const source = options.source || null;
 		const mapX = options.mapX;
 		const mapY = options.mapY;
+		const unitProbe = options.unitProbe || null;
+		const reservedCells = options.reservedCells || new Set();
+		const allowPassableEntityCells = options.allowPassableEntityCells === true;
+		if(mapX < 0 || mapX >= map.width || mapY < 0 || mapY >= map.height) return false;
+		const cellKey = this.getCellKey(mapX, mapY);
+		if(reservedCells.has(cellKey)) return false;
+		if(source != null && source.mapX === mapX && source.mapY === mapY) return false;
+		if(getUnitAtMap(mapX, mapY) != null) return false;
+		const wallTile = wallsLayer.getTileAt(mapX, mapY);
+		if(wallTile != null && wallTile.properties['collides'] === true) return false;
+		const cellEntities = Entity.getEntitiesAtMap(mapX, mapY);
+		if(cellEntities == null || cellEntities.length <= 0) return true;
 
-		const unitProbe =
-			options.unitProbe || null;
+		// By default monsters are spawned only on completely empty cells.
+		// This avoids spawning directly onto doors, fire, webs, containers and other effects.
+		if(!allowPassableEntityCells) return false;
 
-		const reservedCells =
-			options.reservedCells ||
-			new Set();
-
-		const allowPassableEntityCells =
-			options.allowPassableEntityCells === true;
-
-		if(mapX < 0 ||
-			mapX >= map.width ||
-			mapY < 0 ||
-			mapY >= map.height)
-		{
-			return false;
-		}
-
-		const cellKey =
-			this.getCellKey(mapX, mapY);
-
-		if(reservedCells.has(cellKey))
-		{
-			return false;
-		}
-
-		if(source != null &&
-			source.mapX === mapX &&
-			source.mapY === mapY)
-		{
-			return false;
-		}
-
-		if(getUnitAtMap(mapX, mapY) != null)
-		{
-			return false;
-		}
-
-		const wallTile =
-			wallsLayer.getTileAt(mapX, mapY);
-
-		if(wallTile != null &&
-			wallTile.properties['collides'] === true)
-		{
-			return false;
-		}
-
-		const cellEntities =
-			Entity.getEntitiesAtMap(
-				mapX,
-				mapY
-			);
-
-		if(cellEntities == null ||
-			cellEntities.length <= 0)
-		{
-			return true;
-		}
-
-		/*
-		 * By default monsters are spawned only on completely
-		 * empty cells. This avoids spawning directly onto doors,
-		 * fire, webs, containers and other effects.
-		 */
-		if(!allowPassableEntityCells)
-		{
-			return false;
-		}
-
-		/*
-		 * When entity cells are explicitly allowed, every entity
-		 * must explicitly permit the unit to stand there.
-		 *
-		 * Entities without canStepOn() are rejected because spawning
-		 * bypasses normal onBeforeStepIn()/onStepIn() processing.
-		 */
-		for(let i = 0;
-			i < cellEntities.length;
-			i++)
+		// When entity cells are explicitly allowed, every entity must explicitly permit the unit to stand there.
+		// Entities without canStepOn() are rejected because spawning bypasses normal onBeforeStepIn()/onStepIn() processing.
+		for(let i = 0; i < cellEntities.length; i++)
 		{
 			const entity = cellEntities[i];
-
-			if(entity === source)
-			{
-				return false;
-			}
-
-			if(typeof entity.canStepOn !== 'function')
-			{
-				return false;
-			}
-
+			if(entity === source) return false;
+			if(typeof entity.canStepOn !== 'function') return false;
 			let canStepOn = false;
-
 			try
 			{
-				canStepOn =
-					entity.canStepOn(
-						unitProbe
-					) === true;
+				canStepOn = entity.canStepOn(unitProbe) === true;
 			}
 			catch(error)
 			{
-				console.warn(
-					'MonsterSpawner: canStepOn() failed.',
-					entity,
-					error
-				);
-
+				console.warn('MonsterSpawner: canStepOn() failed.', entity, error);
 				return false;
 			}
-
-			if(!canStepOn)
-			{
-				return false;
-			}
+			if(!canStepOn) return false;
 		}
-
 		return true;
 	}
 
@@ -438,17 +304,13 @@ class MonsterSpawner
 
 	static shuffle(array)
 	{
-		for(let i = array.length - 1;
-			i > 0;
-			i--)
+		for(let i = array.length - 1; i > 0; i--)
 		{
 			const j = randomInt(0, i);
-
 			const temp = array[i];
 			array[i] = array[j];
 			array[j] = temp;
 		}
-
 		return array;
 	}
 }

@@ -268,12 +268,12 @@ function ensureIndependentPlayer(factionId='default', scene=null)
 	return getIndependentPlayer(factionId, true, scene);
 }
 
-function createIndependentUnit(scene, configName, mapX, mapY, independentAI=null, factionId='default')
+function createIndependentUnit(scene, configName, mapX, mapY, independentAI=null, factionId='default', visible=true)
 {
 	const cfg = unitConfigs[configName];
 	if(cfg == null) return null;
 	const player = ensureIndependentPlayer(factionId, scene);
-	const unit = new Unit(cfg, scene, 0, 0);
+	const unit = new Unit(cfg, scene, 0, 0, visible);
 	unit.setPositionFromMap(mapX, mapY);
 	unit.independentAI = clone(independentAI || {
 		type: 'idle',
