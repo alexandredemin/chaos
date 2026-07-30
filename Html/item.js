@@ -1155,12 +1155,27 @@ class ContainerEntity extends ItemEntity
 	constructor(scene, x, y, visible=true, items=[], configName='chest')
 	{
 		super(scene, x, y, visible, items, configName);
+		this.normalizeMonsterSpawnFeatures();
 		this.updateSprite();
 	}
 
 	static create(scene, x, y, visible=true, items=[], configName='chest')
 	{
 		return new ContainerEntity(scene, x, y, visible, items, configName);
+	}
+
+	normalizeMonsterSpawnFeatures()
+	{
+		if(this.features.monsterSpawnResolved == null) this.features.monsterSpawnResolved = false;
+		if(this.features.monsterSpawn === undefined) this.features.monsterSpawn = null;
+	}
+
+	onDeserialize(storedData)
+	{
+		this.normalizeMonsterSpawnFeatures();
+		const storedFeatures = storedData != null ? storedData.features : null;
+		// Backward compatibility
+		if(storedFeatures == null || storedFeatures.monsterSpawnResolved == null) this.features.monsterSpawnResolved = true;
 	}
 
 	setDepthFromBottom(offset=null)
@@ -1199,6 +1214,7 @@ class ContainerEntity extends ItemEntity
 
 	start(showStart=true)
 	{
+		this.normalizeMonsterSpawnFeatures();
 		super.start(showStart);
 		this.updateSprite();
 	}
@@ -1315,6 +1331,7 @@ class ContainerEntity extends ItemEntity
 		}
 	}
 
+	/*
 	use(unit, context = {}, callbackObject = null)
 	{
 		if(!this.canUse(unit))
@@ -1357,5 +1374,120 @@ class ContainerEntity extends ItemEntity
 		});
 
 		return false;
+	}
+	*/
+
+	use(unit, context = {}, callbackObject = null)
+	{
+		if(!this.canUse(unit))
+		{
+			finishUseAction(callbackObject, {success: false, abilityPointCost: 0, movePointCost: 0});
+			return false;
+		}
+		const nextOpen = !this.features.open;
+
+		const finishContainerUse = () =>
+		{
+			finishUseAction(callbackObject, {success: true, abilityPointCost: 0, movePointCost: 1});
+		};
+
+		playContainerToggleEffect(this, nextOpen, () =>
+			{
+				// Closing never triggers item spill or monster spawn.
+				if(nextOpen !== true)
+				{
+					finishContainerUse();
+					return;
+				}
+				// On the first opening:
+				// 1. resolve the one-time monster probability;
+				// 2. finish spillOnOpen, when applicable;
+				// 3. create monsters;
+				// 4. complete UseAbility.
+				this.processFirstOpen(unit, finishContainerUse);
+			}
+		);
+		return false;
+	}
+
+	getMonsterSpawnProbability()
+	{
+		const config = this.features.monsterSpawn;
+		if(config == null) return 0;
+		const probability = Number(config.probability);
+		if(!Number.isFinite(probability))return 0;
+		return Math.max(0, Math.min(1, probability));
+	}
+
+	//Resolves the one-time random event immediately.
+	// Actual monster creation happens later, after spillOnOpen has completed.
+	// This prevents a repeated input or callback from resolving the same container twice.
+	prepareFirstOpenMonsterSpawn()
+	{
+		this.normalizeMonsterSpawnFeatures();
+		if(this.features.monsterSpawnResolved === true) return {resolved: false, shouldSpawn: false, reason: 'already_resolved', config: null};
+		// The event is now permanently resolved
+		this.features.monsterSpawnResolved = true;
+		const config = this.features.monsterSpawn;
+		if(config == null) return {resolved: true, shouldSpawn: false, reason: 'no_config', config: null};
+		const probability = this.getMonsterSpawnProbability();
+		if(probability <= 0) return {resolved: true, shouldSpawn: false, reason: 'zero_probability', config: clone(config)};
+		if(Math.random() >= probability) return {resolved: true, shouldSpawn: false, reason: 'probability_failed', config: clone(config)};
+		return {resolved: true, shouldSpawn: true, reason: 'probability_succeeded', config: clone(config)};
+	}
+
+	spawnPreparedMonsters(spawnAttempt, triggerUnit, onComplete = null)
+	{
+		if(spawnAttempt == null || spawnAttempt.shouldSpawn !== true || spawnAttempt.config == null)
+		{
+			if(onComplete != null)
+			{
+				onComplete({
+					success: false,
+					reason: spawnAttempt != null ? spawnAttempt.reason : 'no_spawn_attempt',
+					requestedCount: 0,
+					plannedMonsterTypes: [],
+					spawnedUnits: [],
+					spawnCells: [],
+					factionId: null
+				});
+			}
+			return;
+		}
+		const spawnConfig = clone(spawnAttempt.config);
+		// Items spilled from a wardrobe create passable ItemEntity objects.
+		// By default, container monsters are allowed to appear on such passable entity cells.
+		// An explicit value in monsterSpawn overrides this default.
+		if(spawnConfig.allowPassableEntityCells == null) spawnConfig.allowPassableEntityCells = true;
+		const result = MonsterSpawner.spawn({source: this, scene: this.scene, triggerUnit: triggerUnit, config: spawnConfig});
+		if(onComplete != null) onComplete(result);
+	}
+
+	processFirstOpen(unit, onComplete = null)
+	{
+		// Resolve the one-time random event before starting any asynchronous item animations.
+		const spawnAttempt = this.prepareFirstOpenMonsterSpawn();
+		
+		const afterSpill = () =>
+		{
+			this.spawnPreparedMonsters(spawnAttempt, unit, () => {if(onComplete != null)onComplete();});
+		};
+
+		const shouldResolveSpill =	this.features.containerType === 'tall' && this.features.spillOnOpen === true && this.features.spilled !== true;
+		if(!shouldResolveSpill)
+		{
+			afterSpill();
+			return;
+		}
+		// spilled marks the one-time event itself, not merely the presence of items.
+		// An empty wardrobe opened for the first time therefore will not spill newly inserted items on a later opening.
+		this.features.spilled = true;
+		if(this.getItemCount() <= 0)
+		{
+			afterSpill();
+			return;
+		}
+		// Wait until every item animation and ItemEntity creation has completed, then create monsters.
+		this.spillItemsToNearbyCells(unit, afterSpill);
 	}
 }

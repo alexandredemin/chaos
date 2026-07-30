@@ -133,7 +133,9 @@ const entityConfigs = {
             destroyWhenEmpty: false,
             containerType: 'low',
             spillOnOpen: false,
-            spilled: false
+            spilled: false,
+            monsterSpawnResolved: false,
+            monsterSpawn: null
         },
         createFunction: (scene, x, y, visible=true) => ContainerEntity.create(scene, x, y, visible, [], 'chest')
     },
@@ -154,7 +156,9 @@ const entityConfigs = {
 			destroyWhenEmpty: false,
 			containerType: 'tall',
 			spillOnOpen: true,
-			spilled: false
+			spilled: false,
+            monsterSpawnResolved: false,
+            monsterSpawn: null
 		},
 		createFunction: (scene, x, y, visible=true) => ContainerEntity.create(scene, x, y, visible, [], 'wardrobe')
 	},    
