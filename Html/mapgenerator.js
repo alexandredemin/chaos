@@ -1098,7 +1098,39 @@ class MapGenerator {
 					name: "chest",
 					x: x * 16,
 					y: y * 16,
-					properties: [],
+					properties: [
+                        {
+                            name: "monsterSpawnResolved",
+                            value: false
+                        },
+                        {
+                            name: "monsterSpawn",
+                            value: {
+                                probability: 0.30,
+                                minCount: 1,
+                                maxCount: 2,
+                                monsterTypes: ["rat"],
+                                sameTypePerBatch: true,
+                                factionId: 'dungeon_creatures',
+                                minSpawnRadius: 1,
+                                spawnRadius: 2,
+                                allowPassableEntityCells: true,
+                                behavior: {
+                                    type: "roam",
+                                    minGoalDistance: 8,
+                                    maxGoalDistance: 24,
+                                    goalTolerance: 1,
+                                    stuckTurnLimit: 3,
+                                    aggroRadius: 6,
+                                    pursuitRadius: 12,
+                                    pursuitCooldownTurns: 1,
+                                    targetAggression: 1,
+                                    travelAggression: 3,
+                                    combatAggression: 6
+                                }
+                            }
+                        }
+                    ],
 					items: chestItems
 				});
 				occupied.add(key);
@@ -1167,7 +1199,39 @@ class MapGenerator {
 					name: "wardrobe",
 					x: x * 16,
 					y: y * 16,
-					properties: [],
+					properties: [
+                        {
+                            name: "monsterSpawnResolved",
+                            value: false
+                        },
+                        {
+                            name: "monsterSpawn",
+                            value: {
+                                probability: 0.30,
+                                minCount: 1,
+                                maxCount: 2,
+                                monsterTypes: ["rat", "bat"],
+                                sameTypePerBatch: true,
+                                factionId: 'dungeon_creatures',
+                                minSpawnRadius: 1,
+                                spawnRadius: 2,
+                                allowPassableEntityCells: true,
+                                behavior: {
+                                    type: "roam",
+                                    minGoalDistance: 8,
+                                    maxGoalDistance: 24,
+                                    goalTolerance: 1,
+                                    stuckTurnLimit: 3,
+                                    aggroRadius: 6,
+                                    pursuitRadius: 12,
+                                    pursuitCooldownTurns: 1,
+                                    targetAggression: 1,
+                                    travelAggression: 3,
+                                    combatAggression: 6
+                                }
+                            }
+                        }
+                    ],
 					items: wardrobeItems
 				});
 				occupied.add(key);
