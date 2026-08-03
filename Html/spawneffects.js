@@ -131,369 +131,120 @@ class MonsterSpawnAnimator
 		return {sprite: sprite, startX: startX, startY: startY, baseScaleX: unit.scaleX, baseScaleY: unit.scaleY};
 	}
 
-	static playEmergeEffect(
-		source,
-		unit,
-		effectConfig,
-		finalVisible,
-		onComplete
-	)
+	static playEmergeEffect(source, unit, effectConfig, finalVisible, onComplete)
 	{
-		const effect = this.createEffectSprite(
-			source,
-			unit,
-			effectConfig
-		);
-
+		const effect = this.createEffectSprite(source, unit, effectConfig);
 		if(effect == null)
 		{
 			this.revealUnit(unit, finalVisible);
-
-			if(onComplete != null)
-			{
-				onComplete();
-			}
-
+			if(onComplete != null) onComplete();
 			return;
 		}
-
 		const sprite = effect.sprite;
-
-		const initialScale =
-			effectConfig.initialScale != null
-				? Math.max(
-					0.01,
-					Number(effectConfig.initialScale)
-				)
-				: 0.18;
-
-		const intermediateScale =
-			effectConfig.intermediateScale != null
-				? Math.max(
-					initialScale,
-					Number(effectConfig.intermediateScale)
-				)
-				: 0.45;
-
-		const initialAlpha =
-			effectConfig.initialAlpha != null
-				? Math.max(
-					0,
-					Math.min(
-						1,
-						Number(effectConfig.initialAlpha)
-					)
-				)
-				: 0.35;
-
-		const emergeLift =
-			effectConfig.emergeLift != null
-				? Number(effectConfig.emergeLift)
-				: 2;
-
-		const emergeDuration = Math.max(
-			1,
-			effectConfig.emergeDuration != null
-				? Number(effectConfig.emergeDuration)
-				: 150
-		);
-
-		const moveDuration = Math.max(
-			1,
-			effectConfig.moveDuration != null
-				? Number(effectConfig.moveDuration)
-				: 320
-		);
-
-		sprite.setScale(
-			effect.baseScaleX * initialScale,
-			effect.baseScaleY * initialScale
-		);
-
+		const initialScale = effectConfig.initialScale != null ? Math.max(0.01, Number(effectConfig.initialScale)) : 0.18;
+		const intermediateScale = effectConfig.intermediateScale != null ? Math.max(initialScale, Number(effectConfig.intermediateScale)) : 0.45;
+		const initialAlpha = effectConfig.initialAlpha != null ? Math.max(0, Math.min(1, Number(effectConfig.initialAlpha))) : 0.35;
+		const emergeLift = effectConfig.emergeLift != null ? Number(effectConfig.emergeLift) : 2;
+		const emergeDuration = Math.max(1, effectConfig.emergeDuration != null ? Number(effectConfig.emergeDuration) : 150);
+		const moveDuration = Math.max(1, effectConfig.moveDuration != null ? Number(effectConfig.moveDuration) : 320);
+		sprite.setScale(effect.baseScaleX * initialScale, effect.baseScaleY * initialScale);
 		sprite.setAlpha(initialAlpha);
-
 		unit.setVisible(false);
-
 		unit.scene.tweens.add({
 			targets: sprite,
-
 			y: effect.startY - emergeLift,
-
-			scaleX:
-				effect.baseScaleX *
-				intermediateScale,
-
-			scaleY:
-				effect.baseScaleY *
-				intermediateScale,
-
+			scaleX: effect.baseScaleX * intermediateScale,
+			scaleY: effect.baseScaleY * intermediateScale,
 			alpha: 1,
-
 			duration: emergeDuration,
 			ease: effectConfig.emergeEase || 'Quad.Out',
-
 			onComplete: () =>
 			{
 				if(sprite.active === false)
 				{
-					this.revealUnit(
-						unit,
-						finalVisible
-					);
-
-					if(onComplete != null)
-					{
-						onComplete();
-					}
-
+					this.revealUnit(unit, finalVisible);
+					if(onComplete != null) onComplete();
 					return;
 				}
-
 				unit.scene.tweens.add({
 					targets: sprite,
-
 					x: unit.x,
 					y: unit.y,
-
 					scaleX: effect.baseScaleX,
 					scaleY: effect.baseScaleY,
-
 					alpha: 1,
-
 					duration: moveDuration,
-					ease:
-						effectConfig.moveEase ||
-						'Cubic.Out',
-
-					onComplete: () =>
-					{
-						this.finishEffect(
-							sprite,
-							unit,
-							finalVisible,
-							onComplete
-						);
-					}
+					ease: effectConfig.moveEase || 'Cubic.Out',
+					onComplete: () => {this.finishEffect(sprite, unit, finalVisible, onComplete);}
 				});
 			}
 		});
 	}
 
-	static playBurstEffect(
-		source,
-		unit,
-		effectConfig,
-		finalVisible,
-		onComplete
-	)
+	static playBurstEffect(source, unit, effectConfig, finalVisible, onComplete)
 	{
-		const effect = this.createEffectSprite(
-			source,
-			unit,
-			effectConfig
-		);
-
+		const effect = this.createEffectSprite(source, unit, effectConfig);
 		if(effect == null)
 		{
 			this.revealUnit(unit, finalVisible);
-
-			if(onComplete != null)
-			{
-				onComplete();
-			}
-
+			if(onComplete != null) onComplete();
 			return;
 		}
-
 		const sprite = effect.sprite;
-
-		const initialScale =
-			effectConfig.initialScale != null
-				? Math.max(
-					0.01,
-					Number(effectConfig.initialScale)
-				)
-				: 0.25;
-
-		const launchScale =
-			effectConfig.launchScale != null
-				? Math.max(
-					initialScale,
-					Number(effectConfig.launchScale)
-				)
-				: 0.72;
-
-		const overshootScale =
-			effectConfig.overshootScale != null
-				? Math.max(
-					1,
-					Number(effectConfig.overshootScale)
-				)
-				: 1.10;
-
-		const jumpHeight =
-			effectConfig.jumpHeight != null
-				? Math.max(
-					0,
-					Number(effectConfig.jumpHeight)
-				)
-				: 7;
-
-		const initialAlpha =
-			effectConfig.initialAlpha != null
-				? Math.max(
-					0,
-					Math.min(
-						1,
-						Number(effectConfig.initialAlpha)
-					)
-				)
-				: 0.65;
-
-		const launchDuration = Math.max(
-			1,
-			effectConfig.launchDuration != null
-				? Number(effectConfig.launchDuration)
-				: (
-					effectConfig.emergeDuration != null
-						? Number(
-							effectConfig.emergeDuration
-						)
-						: 110
-				)
-		);
-
-		const moveDuration = Math.max(
-			1,
-			effectConfig.moveDuration != null
-				? Number(effectConfig.moveDuration)
-				: 240
-		);
-
-		const settleDuration = Math.max(
-			1,
-			effectConfig.settleDuration != null
-				? Number(effectConfig.settleDuration)
-				: 90
-		);
-
-		sprite.setScale(
-			effect.baseScaleX * initialScale,
-			effect.baseScaleY * initialScale
-		);
-
+		const initialScale = effectConfig.initialScale != null ? Math.max(0.01, Number(effectConfig.initialScale)) : 0.25;
+		const launchScale = effectConfig.launchScale != null ? Math.max(initialScale, Number(effectConfig.launchScale)) : 0.72;
+		const overshootScale = effectConfig.overshootScale != null ? Math.max(1, Number(effectConfig.overshootScale)) : 1.10;
+		const jumpHeight = effectConfig.jumpHeight != null ? Math.max(0, Number(effectConfig.jumpHeight)) : 7;
+		const initialAlpha = effectConfig.initialAlpha != null ? Math.max(0, Math.min(1, Number(effectConfig.initialAlpha))) : 0.65;
+		const launchDuration = Math.max(1, effectConfig.launchDuration != null ? Number(effectConfig.launchDuration) : (effectConfig.emergeDuration != null ? Number(effectConfig.emergeDuration) : 110));
+		const moveDuration = Math.max(1, effectConfig.moveDuration != null ? Number(effectConfig.moveDuration) : 240);
+		const settleDuration = Math.max(1, effectConfig.settleDuration != null ? Number(effectConfig.settleDuration) : 90);
+		sprite.setScale(effect.baseScaleX * initialScale, effect.baseScaleY * initialScale);
 		sprite.setAlpha(initialAlpha);
-
 		unit.setVisible(false);
-
-		/*
-		 * First phase: the creature jumps out of the source.
-		 */
+		// First phase: the creature jumps out of the source.
 		unit.scene.tweens.add({
 			targets: sprite,
-
 			y: effect.startY - jumpHeight,
-
-			scaleX:
-				effect.baseScaleX *
-				launchScale,
-
-			scaleY:
-				effect.baseScaleY *
-				launchScale,
-
+			scaleX: effect.baseScaleX * launchScale,
+			scaleY: effect.baseScaleY * launchScale,
 			alpha: 1,
-
 			duration: launchDuration,
-			ease:
-				effectConfig.launchEase ||
-				'Back.Out',
-
+			ease: effectConfig.launchEase || 'Back.Out',
 			onComplete: () =>
 			{
 				if(sprite.active === false)
 				{
-					this.revealUnit(
-						unit,
-						finalVisible
-					);
-
-					if(onComplete != null)
-					{
-						onComplete();
-					}
-
+					this.revealUnit(unit, finalVisible);
+					if(onComplete != null) onComplete();
 					return;
 				}
-
-				/*
-				 * Second phase: move to the reserved cell
-				 * and slightly overshoot the final scale.
-				 */
+				// Second phase: move to the reserved cell and slightly overshoot the final scale.
 				unit.scene.tweens.add({
 					targets: sprite,
-
 					x: unit.x,
 					y: unit.y,
-
-					scaleX:
-						effect.baseScaleX *
-						overshootScale,
-
-					scaleY:
-						effect.baseScaleY *
-						overshootScale,
-
+					scaleX: effect.baseScaleX * overshootScale,
+					scaleY: effect.baseScaleY * overshootScale,
 					duration: moveDuration,
-					ease:
-						effectConfig.moveEase ||
-						'Cubic.Out',
-
+					ease: effectConfig.moveEase || 'Cubic.Out',
 					onComplete: () =>
 					{
 						if(sprite.active === false)
 						{
-							this.revealUnit(
-								unit,
-								finalVisible
-							);
+							this.revealUnit(unit, finalVisible);
 
-							if(onComplete != null)
-							{
-								onComplete();
-							}
-
+							if(onComplete != null) onComplete();
 							return;
 						}
-
-						/*
-						 * Third phase: short landing/settling.
-						 */
+						// Third phase: short landing/settling.
 						unit.scene.tweens.add({
 							targets: sprite,
-
-							scaleX:
-								effect.baseScaleX,
-
-							scaleY:
-								effect.baseScaleY,
-
-							duration:
-								settleDuration,
-
-							ease:
-								effectConfig.settleEase ||
-								'Quad.Out',
-
-							onComplete: () =>
-							{
-								this.finishEffect(
-									sprite,
-									unit,
-									finalVisible,
-									onComplete
-								);
-							}
+							scaleX: effect.baseScaleX,
+							scaleY: effect.baseScaleY,
+							duration: settleDuration,
+							ease: effectConfig.settleEase || 'Quad.Out',
+							onComplete: () => {this.finishEffect(sprite, unit, finalVisible, onComplete);}
 						});
 					}
 				});
@@ -501,80 +252,27 @@ class MonsterSpawnAnimator
 		});
 	}
 
-	static finishEffect(
-		sprite,
-		unit,
-		finalVisible,
-		onComplete
-	)
+	static finishEffect(sprite, unit, finalVisible, onComplete)
 	{
-		if(sprite != null &&
-			sprite.active !== false)
-		{
-			sprite.destroy();
-		}
-
-		this.revealUnit(
-			unit,
-			finalVisible
-		);
-
-		if(onComplete != null)
-		{
-			onComplete();
-		}
+		if(sprite != null && sprite.active !== false) sprite.destroy();
+		this.revealUnit(unit, finalVisible);
+		if(onComplete != null) onComplete();
 	}
 
 	static revealUnit(unit, visible=true)
 	{
-		if(unit == null ||
-			unit.active === false)
-		{
-			return;
-		}
-
-		unit.setVisible(
-			visible === true
-		);
-
-		if(visible !== true)
-		{
-			return;
-		}
-
+		if(unit == null || unit.active === false) return;
+		unit.setVisible(visible === true);
+		if(visible !== true) return;
 		let alpha = 1;
-
-		if(unit.features != null &&
-			unit.features.alpha != null)
-		{
-			alpha = unit.features.alpha;
-		}
-		else if(unit.config != null &&
-			unit.config.features != null &&
-			unit.config.features.alpha != null)
-		{
-			alpha = unit.config.features.alpha;
-		}
-
+		if(unit.features != null && unit.features.alpha != null) alpha = unit.features.alpha;
+		else if(unit.config != null && unit.config.features != null && unit.config.features.alpha != null) alpha = unit.config.features.alpha;
 		unit.setAlpha(alpha);
 		unit.setDepthFromBottom();
-
-		if(unit.config != null &&
-			unit.scene != null &&
-			unit.scene.anims != null)
+		if(unit.config != null && unit.scene != null && unit.scene.anims != null)
 		{
-			const stopAnimationKey =
-				unit.config.sprite + 'stop';
-
-			if(unit.scene.anims.exists(
-				stopAnimationKey
-			))
-			{
-				unit.anims.play(
-					stopAnimationKey,
-					true
-				);
-			}
+			const stopAnimationKey = unit.config.sprite + 'stop';
+			if(unit.scene.anims.exists(stopAnimationKey)) unit.anims.play(stopAnimationKey, true);
 		}
 	}
 }
