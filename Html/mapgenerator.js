@@ -1127,6 +1127,21 @@ class MapGenerator {
                                     targetAggression: 1,
                                     travelAggression: 3,
                                     combatAggression: 6
+                                },
+                                spawnEffect: {
+                                    type: "burst",
+                                    initialScale: 0.25,
+                                    launchScale: 0.72,
+                                    overshootScale: 1.10,
+                                    sourceOffsetX: 0,
+                                    sourceOffsetY: -2,
+                                    jumpHeight: 7,
+                                    launchDuration: 110,
+                                    moveDuration: 240,
+                                    settleDuration: 90,
+                                    staggerDelay: 90,
+                                    maxStaggerDelay: 360,
+                                    playMoveAnimation: true
                                 }
                             }
                         }
@@ -1228,6 +1243,20 @@ class MapGenerator {
                                     targetAggression: 1,
                                     travelAggression: 3,
                                     combatAggression: 6
+                                },
+                                spawnEffect: {
+                                    type: "emerge",
+                                    initialScale: 0.18,
+                                    intermediateScale: 0.45,
+                                    initialAlpha: 0.35,
+                                    sourceOffsetX: 0,
+                                    sourceOffsetY: 4,
+                                    emergeLift: 2,
+                                    emergeDuration: 150,
+                                    moveDuration: 320,
+                                    staggerDelay: 100,
+                                    maxStaggerDelay: 400,
+                                    playMoveAnimation: true
                                 }
                             }
                         }
