@@ -29,7 +29,45 @@ class MonsterSpawner
 	 * 	}
 	 * }
 	 */
-	static spawn(options={})
+	static spawn(options={}, onComplete=null)
+	{
+		const config = options.config || {};
+		const effectConfig = config.spawnEffect || null;
+		const finalVisible = config.visible !== false;
+		const useAnimatedEffect = finalVisible === true && typeof MonsterSpawnAnimator !== 'undefined' && MonsterSpawnAnimator.isAnimatedEffect(effectConfig);
+
+		// With an animated effect, real units are created hidden on their final reserved cells.
+		// Without an effect, they are created normally visible.
+		const result = this.createSpawnBatch(options, finalVisible === true && useAnimatedEffect !== true);
+		
+		const finish = () => {if(onComplete != null) onComplete(result);};
+
+		if(result.success !== true || result.spawnedUnits.length <= 0)
+		{
+			finish();
+			return result;
+		}
+		if(useAnimatedEffect !== true)
+		{
+			finish();
+			return result;
+		}
+		MonsterSpawnAnimator.playBatch(
+			{
+				source: options.source || null,
+				scene: options.scene || (options.source != null ? options.source.scene : null),
+				units: result.spawnedUnits,
+				effect: effectConfig,
+				triggerUnit: options.triggerUnit || null,
+				finalVisible: finalVisible
+			},
+			finish
+		);
+		//The result is returned immediately for inspection, while onComplete is called after all animations end.
+		return result;
+	}
+
+	static createSpawnBatch(options={}, initialVisible=true)
 	{
 		const result = {
 			success: false,
@@ -113,15 +151,16 @@ class MonsterSpawner
 			const cellKey = this.getCellKey(cell.x, cell.y);
 			reservedCells.add(cellKey);
 			const behavior = this.createBehaviorConfig(config.behavior, cell);
+			const unitVisible = initialVisible === true && config.visible !== false;
 			const unit = createIndependentUnit(
-					scene,
-					configName,
-					cell.x,
-					cell.y,
-					behavior,
-					factionId,
-					config.visible !== false
-				);
+				scene,
+				configName,
+				cell.x,
+				cell.y,
+				behavior,
+				factionId,
+				unitVisible
+			);
 			if(unit == null)
 			{
 				reservedCells.delete(cellKey);

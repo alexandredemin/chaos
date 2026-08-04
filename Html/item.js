@@ -1459,8 +1459,13 @@ class ContainerEntity extends ItemEntity
 		// By default, container monsters are allowed to appear on such passable entity cells.
 		// An explicit value in monsterSpawn overrides this default.
 		if(spawnConfig.allowPassableEntityCells == null) spawnConfig.allowPassableEntityCells = true;
-		const result = MonsterSpawner.spawn({source: this, scene: this.scene, triggerUnit: triggerUnit, config: spawnConfig});
-		if(onComplete != null) onComplete(result);
+		MonsterSpawner.spawn({source: this, scene: this.scene, triggerUnit: triggerUnit, config: spawnConfig},
+			result =>
+			{
+				// Called only after every monster spawn animation in the batch has completed.
+				if(onComplete != null) onComplete(result);
+			}
+		);
 	}
 
 	processFirstOpen(unit, onComplete = null)
