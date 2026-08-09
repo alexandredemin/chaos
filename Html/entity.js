@@ -1119,379 +1119,135 @@ class MonsterGeneratorEntity extends Entity
 	getSpawnCapacity(generator)
 	{
 		let capacity = Infinity;
-		const maxAlive =
-			this.getNumericLimit(
-				generator.maxAlive
-			);
-
-		if(Number.isFinite(maxAlive))
-		{
-			capacity = Math.min(
-				capacity,
-				Math.max(
-					0,
-					maxAlive -
-						this.getAliveSpawnedCount()
-				)
-			);
-		}
-
-		const maxTotal =
-			this.getNumericLimit(
-				generator.maxTotal
-			);
-
-		if(Number.isFinite(maxTotal))
-		{
-			capacity = Math.min(
-				capacity,
-				Math.max(
-					0,
-					maxTotal -
-						(
-							generator.spawnedTotal ||
-							0
-						)
-				)
-			);
-		}
-
+		const maxAlive = this.getNumericLimit(generator.maxAlive);
+		if(Number.isFinite(maxAlive)) capacity = Math.min(capacity, Math.max(0, maxAlive - this.getAliveSpawnedCount()));
+		const maxTotal = this.getNumericLimit(generator.maxTotal);
+		if(Number.isFinite(maxTotal)) capacity = Math.min(capacity, Math.max(0, maxTotal - (generator.spawnedTotal || 0)));
 		return capacity;
 	}
 
 	getValidUnitProfiles(generator)
 	{
-		if(generator == null ||
-			!Array.isArray(generator.units))
-		{
-			return [];
-		}
-
+		if(generator == null || !Array.isArray(generator.units))return [];
 		const result = [];
-
-		for(let i = 0;
-			i < generator.units.length;
-			i++)
+		for(let i = 0; i < generator.units.length; i++)
 		{
-			const profile =
-				generator.units[i];
-
-			if(profile == null)
+			const profile = generator.units[i];
+			if(profile == null) continue;
+			if(typeof profile.configName !== 'string') continue;
+			if(unitConfigs[profile.configName] == null)
 			{
+				console.warn('MonsterGeneratorEntity: unknown unit "' + profile.configName + '".');
 				continue;
 			}
-
-			if(typeof profile.configName !==
-				'string')
-			{
-				continue;
-			}
-
-			if(unitConfigs[
-				profile.configName
-			] == null)
-			{
-				console.warn(
-					'MonsterGeneratorEntity: unknown unit "' +
-						profile.configName +
-						'".'
-				);
-
-				continue;
-			}
-
-			let weight =
-				Number(profile.weight);
-
-			if(!Number.isFinite(weight))
-			{
-				weight = 1;
-			}
-
-			if(weight <= 0)
-			{
-				continue;
-			}
-
-			result.push({
-				profile: profile,
-				weight: weight
-			});
+			let weight = Number(profile.weight);
+			if(!Number.isFinite(weight)) weight = 1;
+			if(weight <= 0) continue;
+			result.push({profile: profile, weight: weight});
 		}
-
 		return result;
 	}
 
 	chooseUnitProfile(generator)
 	{
-		const profiles =
-			this.getValidUnitProfiles(
-				generator
-			);
-
-		if(profiles.length <= 0)
-		{
-			return null;
-		}
-
+		const profiles = this.getValidUnitProfiles(generator);
+		if(profiles.length <= 0) return null;
 		let totalWeight = 0;
-
-		for(let i = 0;
-			i < profiles.length;
-			i++)
-		{
-			totalWeight +=
-				profiles[i].weight;
-		}
-
-		if(totalWeight <= 0)
-		{
-			return null;
-		}
-
-		let roll =
-			Math.random() *
-			totalWeight;
-
-		for(let i = 0;
-			i < profiles.length;
-			i++)
+		for(let i = 0; i < profiles.length; i++) totalWeight += profiles[i].weight;
+		if(totalWeight <= 0) return null;
+		let roll = Math.random() * totalWeight;
+		for(let i = 0; i < profiles.length; i++)
 		{
 			roll -= profiles[i].weight;
-
-			if(roll <= 0)
-			{
-				return profiles[i].profile;
-			}
+			if(roll <= 0) return profiles[i].profile;
 		}
-
-		return profiles[
-			profiles.length - 1
-		].profile;
+		return profiles[profiles.length - 1].profile;
 	}
 
 	getSpawnChance(generator)
 	{
-		const chance =
-			Number(
-				generator.spawnChance
-			);
-
-		if(!Number.isFinite(chance))
-		{
-			return 0;
-		}
-
-		return Math.max(
-			0,
-			Math.min(
-				1,
-				chance
-			)
-		);
+		const chance = Number(generator.spawnChance);
+		if(!Number.isFinite(chance)) return 0;
+		return Math.max(0,Math.min(1,chance));
 	}
 
-	createSpawnerConfig(
-		generator,
-		profile,
-		capacity
-	)
+	createSpawnerConfig(generator, profile, capacity)
 	{
-		let minCount = Math.max(
-			1,
-			Math.floor(
-				generator.minCount != null
-					? generator.minCount
-					: 1
-			)
-		);
-
-		let maxCount = Math.max(
-			minCount,
-			Math.floor(
-				generator.maxCount != null
-					? generator.maxCount
-					: minCount
-			)
-		);
-
+		let minCount = Math.max(1, Math.floor(generator.minCount != null ? generator.minCount : 1));
+		let maxCount = Math.max(minCount, Math.floor(generator.maxCount != null ? generator.maxCount : minCount));
 		if(Number.isFinite(capacity))
 		{
-			maxCount = Math.min(
-				maxCount,
-				capacity
-			);
-
-			minCount = Math.min(
-				minCount,
-				maxCount
-			);
+			maxCount = Math.min(maxCount, capacity);
+			minCount = Math.min(minCount, maxCount);
 		}
-
 		return {
 			minCount: minCount,
 			maxCount: maxCount,
-
-			/*
-			 * The generator has already selected one weighted
-			 * unit profile. The whole batch therefore consists
-			 * of this unit type.
-			 */
-			monsterTypes: [
-				profile.configName
-			],
-
+			//The generator has already selected one weighted unit profile. The whole batch therefore consists of this unit type.
+			monsterTypes: [profile.configName],
 			sameTypePerBatch: true,
-
-			factionId:
-				generator.factionId ||
-				'dungeon_creatures',
-
-			minSpawnRadius:
-				generator.minSpawnRadius != null
-					? generator.minSpawnRadius
-					: 1,
-
-			spawnRadius:
-				generator.spawnRadius != null
-					? generator.spawnRadius
-					: 2,
-
-			allowPassableEntityCells:
-				generator.allowPassableEntityCells ===
-				true,
-
-			behavior: clone(
-				profile.behavior || {
-					type: 'idle'
-				}
-			),
-
-			spawnEffect: clone(
-				profile.spawnEffect ||
-				generator.spawnEffect ||
-				null
-			),
-
-			spawnSourceId:
-				this.ensureGeneratorId()
-		};
+			factionId: generator.factionId || 'dungeon_creatures',
+			minSpawnRadius: generator.minSpawnRadius != null ? generator.minSpawnRadius : 1,
+			spawnRadius: generator.spawnRadius != null ? generator.spawnRadius : 2,
+            allowPassableEntityCells: generator.allowPassableEntityCells === true,
+			behavior: clone(profile.behavior || {type: 'idle'}),
+			spawnEffect: clone(profile.spawnEffect || generator.spawnEffect || null),
+			spawnSourceId: this.ensureGeneratorId()
+        };
 	}
 
 	makeMove()
 	{
 		super.makeMove();
-
-		const generator =
-			this.getGeneratorConfig();
-
-		if(generator == null ||
-			generator.enabled === false)
+		const generator = this.getGeneratorConfig();
+		if(generator == null || generator.enabled === false)
 		{
 			super.endMove();
 			return;
 		}
-
-		/*
-		 * Cooldown is measured in full entity phases,
-		 * i.e. game rounds.
-		 */
+		// Cooldown is measured in full entity phases, i.e. game rounds.
 		if(generator.cooldownLeft > 0)
 		{
 			generator.cooldownLeft--;
-
 			super.endMove();
 			return;
 		}
-
-		const capacity =
-			this.getSpawnCapacity(
-				generator
-			);
-
+		const capacity = this.getSpawnCapacity(generator);
 		if(capacity <= 0)
 		{
 			super.endMove();
 			return;
 		}
-
-		const spawnChance =
-			this.getSpawnChance(
-				generator
-			);
-
-		if(spawnChance <= 0 ||
-			Math.random() >= spawnChance)
+		const spawnChance = this.getSpawnChance(generator);
+		if(spawnChance <= 0 || Math.random() >= spawnChance)
 		{
 			super.endMove();
 			return;
 		}
-
-		const profile =
-			this.chooseUnitProfile(
-				generator
-			);
-
+		const profile = this.chooseUnitProfile(generator);
 		if(profile == null)
 		{
 			super.endMove();
 			return;
 		}
-
-		const spawnConfig =
-			this.createSpawnerConfig(
-				generator,
-				profile,
-				capacity
-			);
-
+		const spawnConfig = this.createSpawnerConfig(generator, profile, capacity);
 		if(spawnConfig.maxCount <= 0)
 		{
 			super.endMove();
 			return;
 		}
-
-		/*
-		 * MonsterSpawner owns cell selection, independent-player
-		 * creation and spawn animation. The entity phase continues
-		 * only after the complete animation batch has finished.
-		 */
+		// MonsterSpawner owns cell selection, independent-player creation and spawn animation.
+        // The entity phase continues only after the complete animation batch has finished.
 		MonsterSpawner.spawn(
-			{
-				source: this,
-				scene: this.scene,
-				config: spawnConfig
-			},
+			{source: this, scene: this.scene, config: spawnConfig},
 			result =>
 			{
-				const spawnedCount =
-					result != null &&
-					Array.isArray(
-						result.spawnedUnits
-					)
-						? result.spawnedUnits.length
-						: 0;
-
+				const spawnedCount = result != null && Array.isArray(result.spawnedUnits) ? result.spawnedUnits.length : 0;
 				if(spawnedCount > 0)
 				{
-					generator.spawnedTotal =
-						(
-							generator.spawnedTotal ||
-							0
-						) +
-						spawnedCount;
-
-					generator.cooldownLeft =
-						Math.max(
-							0,
-							Math.floor(
-								generator.cooldownRounds != null
-									? generator.cooldownRounds
-									: 0
-							)
-						);
+					generator.spawnedTotal = (generator.spawnedTotal || 0) + spawnedCount;
+					generator.cooldownLeft = Math.max(0, Math.floor(generator.cooldownRounds != null ? generator.cooldownRounds : 0));
 				}
-
 				super.endMove();
 			}
 		);
