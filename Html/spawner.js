@@ -166,6 +166,10 @@ class MonsterSpawner
 				reservedCells.delete(cellKey);
 				continue;
 			}
+			// Optional persistent link to the entity that spawned this unit. Unit.serialize() stores the whole features
+			// object, so this relation survives save/load.
+			if(config.spawnSourceId != null) unit.features.spawnSourceId = config.spawnSourceId;
+			result.spawnedUnits.push(unit);
 			result.spawnedUnits.push(unit);
 			result.spawnCells.push({x: cell.x, y: cell.y});
 		}
@@ -177,7 +181,6 @@ class MonsterSpawner
 
 
 //---------------------------- Configuration ----------------------------
-
 	static resolveOrigin(options, source)
 	{
 		if(options.mapX != null && options.mapY != null) return {x: Math.floor(options.mapX), y: Math.floor(options.mapY)};

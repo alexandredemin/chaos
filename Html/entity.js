@@ -984,6 +984,521 @@ class DoorEntity extends Entity
 }
 
 
+//---------------------------- Monster generator entity ----------------------------
+class MonsterGeneratorEntity extends Entity
+{
+	constructor(scene, x, y, visible=true)
+	{
+		super(entityConfigs['monster_generator'], scene, x, y, visible);
+		this.normalizeGeneratorFeatures();
+	}
+
+	static create(scene, x, y, visible=true)
+	{
+		return new MonsterGeneratorEntity(scene, x, y, visible);
+	}
+
+	normalizeGeneratorFeatures()
+	{
+		if(this.features.generatorId === undefined) this.features.generatorId = null;
+		if(this.features.generator === undefined) this.features.generator = null;
+		if(this.features.passable == null) this.features.passable = true;
+		if(this.features.stepCost == null) this.features.stepCost = 1;
+		const generator = this.features.generator;
+		if(generator == null) return;
+		if(generator.spawnedTotal == null) generator.spawnedTotal = 0;
+		if(generator.cooldownLeft == null) generator.cooldownLeft = 0;
+	}
+
+	ensureGeneratorId()
+	{
+		if(this.features.generatorId == null)
+		{
+			// Generator entities occupy unique map cells, therefore their coordinates provide a simple persistent identifier.
+			this.features.generatorId = 'monster_generator:' + this.mapX + ':' + this.mapY;
+        }
+		return this.features.generatorId;
+	}
+
+	getVisualScale()
+	{
+		const scale = Number(this.features.visualScale);
+		if(Number.isFinite(scale) && scale > 0) return scale;
+		return this.config.scale;
+	}
+
+	applyVisualConfig()
+	{
+		const spriteKey = this.features.visualSprite || this.config.sprite;
+		const frame = this.features.visualFrame;
+		if(spriteKey != null && this.scene != null && this.scene.textures != null && this.scene.textures.exists(spriteKey))
+		{
+			if(frame != null) this.setTexture(spriteKey,frame);
+			else this.setTexture(spriteKey);
+		}
+		else if(spriteKey != null) console.warn('MonsterGeneratorEntity: texture "' + spriteKey + '" was not loaded.');
+		const scale = this.getVisualScale();
+		const originMode = this.features.visualOriginMode || 'center';
+		if(originMode === 'center') this.setOrigin(0.5, 0.5);
+		else if(originMode === 'base')
+		{
+			const scaledHeight = this.height * scale;
+			if(scaledHeight > 16) this.setOrigin(0.5, 1 - (0.5 * 16 / scaledHeight));
+			else this.setOrigin(0.5, 0.5);
+		}
+		this.setDepthFromBottom();
+	}
+
+	start(showStart=true)
+	{
+		this.normalizeGeneratorFeatures();
+		this.ensureGeneratorId();
+		this.applyVisualConfig();
+		const targetScale = this.getVisualScale();
+		if(showStart)
+		{
+			this.setScale(0);
+			this.tween = this.scene.tweens.add({
+					targets: this,
+					scale: {start: 0, to: targetScale},
+					ease: 'Linear',
+					duration: 400,
+					yoyo: false,
+					repeat: 0,
+					onComplete: () => {this.onStartComplete(this);}
+                });
+			return;
+		}
+		this.setScale(targetScale);
+		this.setDepthFromBottom();
+		this.onStartComplete(this);
+	}
+
+	onBeforeStepIn(unit, callback=null)
+	{
+		return this.features.passable === true;
+	}
+
+	evaluateStep(unit)
+	{
+		if(this.features.passable !== true) return 10000;
+		const stepCost = Number(this.features.stepCost);
+		if(!Number.isFinite(stepCost) || stepCost <= 0) return 1;
+		return stepCost;
+	}
+
+	getGeneratorConfig()
+	{
+		this.normalizeGeneratorFeatures();
+		const generator = this.features.generator;
+		if(generator == null || typeof generator !== 'object') return null;
+		return generator;
+	}
+
+	getAliveSpawnedCount()
+	{
+		const generatorId = this.ensureGeneratorId();
+		let result = 0;
+		for(let i = 0; i < units.length; i++)
+		{
+			const unit = units[i];
+			if(unit == null || unit.features == null) continue;
+			if(unit.features.spawnSourceId === generatorId) result++;
+		}
+		return result;
+	}
+
+	getNumericLimit(value)
+	{
+		if(value == null) return Infinity;
+		const number = Number(value);
+		if(!Number.isFinite(number)) return Infinity;
+		return Math.max(0, Math.floor(number));
+	}
+
+	getSpawnCapacity(generator)
+	{
+		let capacity = Infinity;
+		const maxAlive =
+			this.getNumericLimit(
+				generator.maxAlive
+			);
+
+		if(Number.isFinite(maxAlive))
+		{
+			capacity = Math.min(
+				capacity,
+				Math.max(
+					0,
+					maxAlive -
+						this.getAliveSpawnedCount()
+				)
+			);
+		}
+
+		const maxTotal =
+			this.getNumericLimit(
+				generator.maxTotal
+			);
+
+		if(Number.isFinite(maxTotal))
+		{
+			capacity = Math.min(
+				capacity,
+				Math.max(
+					0,
+					maxTotal -
+						(
+							generator.spawnedTotal ||
+							0
+						)
+				)
+			);
+		}
+
+		return capacity;
+	}
+
+	getValidUnitProfiles(generator)
+	{
+		if(generator == null ||
+			!Array.isArray(generator.units))
+		{
+			return [];
+		}
+
+		const result = [];
+
+		for(let i = 0;
+			i < generator.units.length;
+			i++)
+		{
+			const profile =
+				generator.units[i];
+
+			if(profile == null)
+			{
+				continue;
+			}
+
+			if(typeof profile.configName !==
+				'string')
+			{
+				continue;
+			}
+
+			if(unitConfigs[
+				profile.configName
+			] == null)
+			{
+				console.warn(
+					'MonsterGeneratorEntity: unknown unit "' +
+						profile.configName +
+						'".'
+				);
+
+				continue;
+			}
+
+			let weight =
+				Number(profile.weight);
+
+			if(!Number.isFinite(weight))
+			{
+				weight = 1;
+			}
+
+			if(weight <= 0)
+			{
+				continue;
+			}
+
+			result.push({
+				profile: profile,
+				weight: weight
+			});
+		}
+
+		return result;
+	}
+
+	chooseUnitProfile(generator)
+	{
+		const profiles =
+			this.getValidUnitProfiles(
+				generator
+			);
+
+		if(profiles.length <= 0)
+		{
+			return null;
+		}
+
+		let totalWeight = 0;
+
+		for(let i = 0;
+			i < profiles.length;
+			i++)
+		{
+			totalWeight +=
+				profiles[i].weight;
+		}
+
+		if(totalWeight <= 0)
+		{
+			return null;
+		}
+
+		let roll =
+			Math.random() *
+			totalWeight;
+
+		for(let i = 0;
+			i < profiles.length;
+			i++)
+		{
+			roll -= profiles[i].weight;
+
+			if(roll <= 0)
+			{
+				return profiles[i].profile;
+			}
+		}
+
+		return profiles[
+			profiles.length - 1
+		].profile;
+	}
+
+	getSpawnChance(generator)
+	{
+		const chance =
+			Number(
+				generator.spawnChance
+			);
+
+		if(!Number.isFinite(chance))
+		{
+			return 0;
+		}
+
+		return Math.max(
+			0,
+			Math.min(
+				1,
+				chance
+			)
+		);
+	}
+
+	createSpawnerConfig(
+		generator,
+		profile,
+		capacity
+	)
+	{
+		let minCount = Math.max(
+			1,
+			Math.floor(
+				generator.minCount != null
+					? generator.minCount
+					: 1
+			)
+		);
+
+		let maxCount = Math.max(
+			minCount,
+			Math.floor(
+				generator.maxCount != null
+					? generator.maxCount
+					: minCount
+			)
+		);
+
+		if(Number.isFinite(capacity))
+		{
+			maxCount = Math.min(
+				maxCount,
+				capacity
+			);
+
+			minCount = Math.min(
+				minCount,
+				maxCount
+			);
+		}
+
+		return {
+			minCount: minCount,
+			maxCount: maxCount,
+
+			/*
+			 * The generator has already selected one weighted
+			 * unit profile. The whole batch therefore consists
+			 * of this unit type.
+			 */
+			monsterTypes: [
+				profile.configName
+			],
+
+			sameTypePerBatch: true,
+
+			factionId:
+				generator.factionId ||
+				'dungeon_creatures',
+
+			minSpawnRadius:
+				generator.minSpawnRadius != null
+					? generator.minSpawnRadius
+					: 1,
+
+			spawnRadius:
+				generator.spawnRadius != null
+					? generator.spawnRadius
+					: 2,
+
+			allowPassableEntityCells:
+				generator.allowPassableEntityCells ===
+				true,
+
+			behavior: clone(
+				profile.behavior || {
+					type: 'idle'
+				}
+			),
+
+			spawnEffect: clone(
+				profile.spawnEffect ||
+				generator.spawnEffect ||
+				null
+			),
+
+			spawnSourceId:
+				this.ensureGeneratorId()
+		};
+	}
+
+	makeMove()
+	{
+		super.makeMove();
+
+		const generator =
+			this.getGeneratorConfig();
+
+		if(generator == null ||
+			generator.enabled === false)
+		{
+			super.endMove();
+			return;
+		}
+
+		/*
+		 * Cooldown is measured in full entity phases,
+		 * i.e. game rounds.
+		 */
+		if(generator.cooldownLeft > 0)
+		{
+			generator.cooldownLeft--;
+
+			super.endMove();
+			return;
+		}
+
+		const capacity =
+			this.getSpawnCapacity(
+				generator
+			);
+
+		if(capacity <= 0)
+		{
+			super.endMove();
+			return;
+		}
+
+		const spawnChance =
+			this.getSpawnChance(
+				generator
+			);
+
+		if(spawnChance <= 0 ||
+			Math.random() >= spawnChance)
+		{
+			super.endMove();
+			return;
+		}
+
+		const profile =
+			this.chooseUnitProfile(
+				generator
+			);
+
+		if(profile == null)
+		{
+			super.endMove();
+			return;
+		}
+
+		const spawnConfig =
+			this.createSpawnerConfig(
+				generator,
+				profile,
+				capacity
+			);
+
+		if(spawnConfig.maxCount <= 0)
+		{
+			super.endMove();
+			return;
+		}
+
+		/*
+		 * MonsterSpawner owns cell selection, independent-player
+		 * creation and spawn animation. The entity phase continues
+		 * only after the complete animation batch has finished.
+		 */
+		MonsterSpawner.spawn(
+			{
+				source: this,
+				scene: this.scene,
+				config: spawnConfig
+			},
+			result =>
+			{
+				const spawnedCount =
+					result != null &&
+					Array.isArray(
+						result.spawnedUnits
+					)
+						? result.spawnedUnits.length
+						: 0;
+
+				if(spawnedCount > 0)
+				{
+					generator.spawnedTotal =
+						(
+							generator.spawnedTotal ||
+							0
+						) +
+						spawnedCount;
+
+					generator.cooldownLeft =
+						Math.max(
+							0,
+							Math.floor(
+								generator.cooldownRounds != null
+									? generator.cooldownRounds
+									: 0
+							)
+						);
+				}
+
+				super.endMove();
+			}
+		);
+	}
+}
+
+
 class MushroomEntity extends Entity
 {
 
