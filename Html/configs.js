@@ -91,6 +91,27 @@ const entityConfigs = {
         },
         createFunction: (scene, x, y, visible=true) => DoorEntity.create(scene, x, y, visible)
     },
+
+	'monster_generator': {
+		name: 'monster_generator',
+		sprite: 'pentagram',
+		scale: 0.15,
+		features: {
+			health: 1,
+			blocksLOS: false,
+			passable: true,
+			stepCost: 1,
+			destructible: false, // Reserved for the future damageable-entity system.
+			visualSprite: 'pentagram',
+			visualScale: 0.15,
+			visualFrame: 0,
+			visualOriginMode: 'center',
+			depthOffset: -40,
+			generatorId: null,
+			generator: null // Actual generator settings may be supplied by mapgenerator.js through object properties.
+		},
+		createFunction: (scene, x, y, visible=true) => MonsterGeneratorEntity.create(scene, x, y, visible)
+	},
   
     'mushroom': {
         name: 'mushroom',

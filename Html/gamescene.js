@@ -325,9 +325,9 @@ var GameScene = new Phaser.Class({
             for (let p = 0; p < e.properties.length; p++)
             {
                 const prop = e.properties[p];
-                if (entity.features.hasOwnProperty(prop.name))
+                if(entity.features.hasOwnProperty(prop.name))
                 {
-                    entity.features[prop.name] = prop.value;
+                    entity.features[prop.name] = clone(prop.value);
                 }
             }
             if(Array.isArray(e.items) && entity.features.hasOwnProperty('items'))
