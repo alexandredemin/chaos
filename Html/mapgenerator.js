@@ -1684,6 +1684,31 @@ class MapGenerator {
 		return result;
 	}
 
+    // --- place monster generators ---
+    _createMonsterGeneratorObject(mapX, mapY, options={})
+	{
+		const generator = clone(options.generator || {});
+		return {
+			type: 'entity',
+			name: 'monster_generator',
+			x: mapX * 16,
+			y: mapY * 16,
+			properties: [
+				{name: 'visualSprite', value: options.visualSprite || 'pentagram'},
+				{name: 'visualScale', value: options.visualScale != null ? options.visualScale : 0.15},
+				{name: 'visualFrame', value: options.visualFrame != null ? options.visualFrame : 0},
+				{name: 'visualOriginMode', value: options.visualOriginMode || 'center'},
+				{name: 'depthOffset', value: options.depthOffset != null ? options.depthOffset : -40},
+				{name: 'blocksLOS', value: options.blocksLOS === true},
+				{name: 'passable', value: options.passable !== false},
+				{name: 'stepCost', value: options.stepCost != null ? options.stepCost : 1},
+				{name: 'destructible', value: options.destructible === true},
+				{name: 'generatorId', value: options.generatorId || null},
+				{name: 'generator', value: generator}
+			]
+		};
+	}
+
     //--- start positions ---
     _generateStartPositions(count = 4) {
         const objects = [];
