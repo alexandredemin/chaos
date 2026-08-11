@@ -85,11 +85,14 @@ class MapGenerator {
 
 		// independent guards for rooms with many containers
 		const treasureGuards = this._placeTreasureGuards(map, chests, wardrobes, startPositions, startPositions.concat(doors, items, chests, wardrobes));
-        
-        // independent creatures freely roaming through the dungeon
-		const roamingCreatures = this._placeRoamingCreatures(map, startPositions, startPositions.concat(doors, items, chests, wardrobes,treasureGuards));
+    
+        // monster generators
+		const monsterGenerators = this._placeMonsterGenerators(map, startPositions, treasureGuards, startPositions.concat(doors, items, chests, wardrobes, treasureGuards));
 
-		const objects = startPositions.concat(doors, items, chests, wardrobes, treasureGuards, roamingCreatures);
+        // independent creatures freely roaming through the dungeon
+		const roamingCreatures = this._placeRoamingCreatures(map, startPositions, startPositions.concat(doors, items, chests, wardrobes, treasureGuards, monsterGenerators));
+
+        const objects = startPositions.concat(doors, items, chests, wardrobes, treasureGuards, monsterGenerators, roamingCreatures);
 
         return {
             width: this.width,
@@ -1707,6 +1710,278 @@ class MapGenerator {
 				{name: 'generator', value: generator}
 			]
 		};
+	}
+
+    _placeMonsterGenerators(map, startPositions=[], guards=[], occupiedObjects=[])
+	{
+		const result = [];
+		const occupied = new Set();
+		const doorCells = [];
+		for(let i = 0; i < occupiedObjects.length; i++)
+		{
+			const obj = occupiedObjects[i];
+			if(obj == null || obj.x == null || obj.y == null) continue;
+			const x = Math.floor(obj.x / 16);
+			const y = Math.floor(obj.y / 16);
+			occupied.add(x + ':' + y);
+			if(obj.type === 'entity' && obj.name === 'door') doorCells.push({x: x, y: y});
+		}
+
+		const isInsideRoom = (x, y, room) =>
+		{
+			return x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h;
+		};
+
+		const roomHasObject = (room, objects) =>
+		{
+			for(let i = 0; i < objects.length; i++)
+			{
+				const obj = objects[i];
+				if(obj == null || obj.x == null || obj.y == null) continue;
+				const x = Math.floor(obj.x / 16);
+				const y = Math.floor(obj.y / 16);
+				if(isInsideRoom(x, y, room)) return true;
+			}
+			return false;
+		};
+
+		const isNearDoor = (x, y) =>
+		{
+			for(let i = 0; i < doorCells.length; i++)
+				if(Math.abs(x - doorCells[i].x) <= 1 && Math.abs(y - doorCells[i].y) <= 1) return true;
+			return false;
+		};
+
+		// Start rooms and rooms containing guards are completely excluded.
+		let candidateRooms = this.rooms.filter(room =>
+		{
+			if(roomHasObject(room, startPositions)) return false;
+			if(roomHasObject(room, guards)) return false;
+			return true;
+		});
+		if(candidateRooms.length <= 0) return result;
+
+		// Generators are persistent sources, therefore their count grows slower than map area.
+		// 20x20: 1-2, 30x30: 2-3, 40x40: 3-4, absolute maximum: 5.
+		const areaScale = Math.sqrt((this.width * this.height) / (20 * 20));
+		const roomLimit = Math.max(1, Math.ceil(candidateRooms.length / 3));
+		const hardLimit = Math.min(5, candidateRooms.length, roomLimit);
+		const minCount = Math.min(hardLimit, Math.max(1, Math.floor(1.5 * areaScale)));
+		const maxCount = Math.min(hardLimit, Math.max(minCount, Math.ceil(2.0 * areaScale)));
+		const generatorCount = this._rand(minCount, maxCount);
+		// Shuffle rooms. Taking them one by one guarantees at most one generator per room.
+		for(let i = candidateRooms.length - 1; i > 0; i--)
+		{
+			const j = this._rand(0, i);
+			const tmp = candidateRooms[i];
+			candidateRooms[i] = candidateRooms[j];
+			candidateRooms[j] = tmp;
+		}
+
+		const roamBase = {
+			type: 'roam',
+			minGoalDistance: 8,
+			maxGoalDistance: 24,
+			goalTolerance: 1,
+			stuckTurnLimit: 3,
+			aggroRadius: 5,
+			pursuitRadius: 10,
+			pursuitCooldownTurns: 1
+		};
+
+		const profiles = [
+			{
+				type: 'rat',
+				weight: 42,
+				spawnChance: 0.18,
+				minCount: 1,
+				maxCount: 2,
+				cooldownRounds: 1,
+				maxAlive: 4,
+				maxTotal: 10,
+				behavior: Object.assign({}, roamBase, {
+					targetAggression: 0.35,
+					travelAggression: 1,
+					combatAggression: 3
+				})
+			},
+			{
+				type: 'bat',
+				weight: 35,
+				spawnChance: 0.18,
+				minCount: 1,
+				maxCount: 2,
+				cooldownRounds: 1,
+				maxAlive: 4,
+				maxTotal: 10,
+				behavior: Object.assign({}, roamBase, {
+					aggroRadius: 6,
+					pursuitRadius: 12,
+					targetAggression: 0.45,
+					travelAggression: 1,
+					combatAggression: 3
+				})
+			},
+			{
+				type: 'spider',
+				weight: 16,
+				spawnChance: 0.12,
+				minCount: 1,
+				maxCount: 1,
+				cooldownRounds: 2,
+				maxAlive: 3,
+				maxTotal: 6,
+				behavior: Object.assign({}, roamBase, {
+					targetAggression: 0.7,
+					travelAggression: 2,
+					combatAggression: 4
+				})
+			},
+			{
+				type: 'muddy',
+				weight: 4,
+				strong: true,
+				spawnChance: 0.08,
+				minCount: 1,
+				maxCount: 1,
+				cooldownRounds: 3,
+				maxAlive: 1,
+				maxTotal: 3,
+				behavior: Object.assign({}, roamBase, {
+					minGoalDistance: 14,
+					maxGoalDistance: 36,
+					aggroRadius: 7,
+					pursuitRadius: 14,
+					targetAggression: 1,
+					travelAggression: 3,
+					combatAggression: 6
+				})
+			},
+			{
+				type: 'chort',
+				weight: 3,
+				strong: true,
+				spawnChance: 0.10,
+				minCount: 1,
+				maxCount: 1,
+				cooldownRounds: 3,
+				maxAlive: 2,
+				maxTotal: 4,
+				behavior: Object.assign({}, roamBase, {
+					minGoalDistance: 14,
+					maxGoalDistance: 36,
+					aggroRadius: 7,
+					pursuitRadius: 14,
+					targetAggression: 1,
+					travelAggression: 3,
+					combatAggression: 6
+				})
+			}
+		];
+
+		let strongGeneratorPlaced = false;
+
+		const chooseProfile = () =>
+		{
+			const available = profiles.filter(profile => !profile.strong || !strongGeneratorPlaced);
+			let totalWeight = 0;
+			for(let i = 0; i < available.length; i++) totalWeight += available[i].weight;
+			let roll = Math.random() * totalWeight;
+			for(let i = 0; i < available.length; i++)
+			{
+				roll -= available[i].weight;
+				if(roll <= 0) return available[i];
+			}
+			return available[available.length - 1];
+		};
+
+		const getAvailableCells = room =>
+		{
+			const cells = [];
+			for(let y = room.y; y < room.y + room.h; y++)
+			{
+				for(let x = room.x; x < room.x + room.w; x++)
+				{
+					if(y < 0 || y >= map.walls.length) continue;
+					if(x < 0 || x >= map.walls[y].length) continue;
+					if(map.walls[y][x] !== null) continue;
+					if(occupied.has(x + ':' + y)) continue;
+					if(isNearDoor(x, y)) continue;
+					cells.push({x: x, y: y});
+				}
+			}
+			return cells;
+		};
+
+		for(let roomIndex = 0; roomIndex < candidateRooms.length && result.length < generatorCount; roomIndex++)
+		{
+			const room = candidateRooms[roomIndex];
+			const cells = getAvailableCells(room);
+			if(cells.length <= 0) continue;
+
+			const cell = cells[this._rand(0, cells.length - 1)];
+			const profile = chooseProfile();
+			if(profile == null || unitConfigs[profile.type] == null) continue;
+			if(profile.strong) strongGeneratorPlaced = true;
+			const strong = profile.strong === true;
+			const generator = this._createMonsterGeneratorObject(cell.x, cell.y, {
+				visualSprite: 'pentagram',
+				visualScale: strong ? 0.18 : 0.15,
+				visualOriginMode: 'center',
+				depthOffset: -40,
+				blocksLOS: false,
+				passable: true,
+				stepCost: 1,
+				destructible: false,
+				generator: {
+					enabled: true,
+					spawnChance: profile.spawnChance,
+					minCount: profile.minCount,
+					maxCount: profile.maxCount,
+					cooldownRounds: profile.cooldownRounds,
+					maxAlive: profile.maxAlive,
+					maxTotal: profile.maxTotal,
+					spawnedTotal: 0,
+					factionId: 'dungeon_creatures',
+					minSpawnRadius: 1,
+					spawnRadius: 2,
+					allowPassableEntityCells: false,
+					units: [
+						{
+							configName: profile.type,
+							weight: 1,
+							behavior: clone(profile.behavior)
+						}
+					],
+					spawnEffect: strong ? {
+						type: 'burst',
+						initialScale: 0.2,
+						launchScale: 0.7,
+						overshootScale: 1.1,
+						jumpHeight: 6,
+						launchDuration: 120,
+						moveDuration: 250,
+						settleDuration: 90,
+						staggerDelay: 100,
+						playMoveAnimation: true
+					} : {
+						type: 'emerge',
+						initialScale: 0.15,
+						intermediateScale: 0.4,
+						initialAlpha: 0.35,
+						sourceOffsetY: 3,
+						emergeLift: 2,
+						emergeDuration: 150,
+						moveDuration: 300,
+						staggerDelay: 100,
+						playMoveAnimation: true
+					}
+				}
+			});
+			result.push(generator);
+			occupied.add(cell.x + ':' + cell.y);
+		}
+		return result;
 	}
 
     //--- start positions ---
