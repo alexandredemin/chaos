@@ -1697,7 +1697,7 @@ class MapGenerator {
 			x: mapX * 16,
 			y: mapY * 16,
 			properties: [
-				{name: 'visualSprite', value: options.visualSprite || 'pentagram'},
+				{name: 'visualSprite', value: options.visualSprite || 'hole'},
 				{name: 'visualScale', value: options.visualScale != null ? options.visualScale : 0.15},
 				{name: 'visualFrame', value: options.visualFrame != null ? options.visualFrame : 0},
 				{name: 'visualOriginMode', value: options.visualOriginMode || 'center'},
@@ -1925,8 +1925,8 @@ class MapGenerator {
 			if(profile.strong) strongGeneratorPlaced = true;
 			const strong = profile.strong === true;
 			const generator = this._createMonsterGeneratorObject(cell.x, cell.y, {
-				visualSprite: 'pentagram',
-				visualScale: strong ? 0.18 : 0.15,
+				visualSprite: 'hole',
+				visualScale: strong ? 1.0 : 1.0,
 				visualOriginMode: 'center',
 				depthOffset: -40,
 				blocksLOS: false,

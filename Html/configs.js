@@ -94,16 +94,16 @@ const entityConfigs = {
 
 	'monster_generator': {
 		name: 'monster_generator',
-		sprite: 'pentagram',
-		scale: 0.15,
+		sprite: 'hole',
+		scale: 1.0,
 		features: {
 			health: 1,
 			blocksLOS: false,
 			passable: true,
 			stepCost: 1,
 			destructible: false, // Reserved for the future damageable-entity system.
-			visualSprite: 'pentagram',
-			visualScale: 0.15,
+			visualSprite: 'hole',
+			visualScale: 1.0,
 			visualFrame: 0,
 			visualOriginMode: 'center',
 			depthOffset: -40,
