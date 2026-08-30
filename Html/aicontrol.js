@@ -3,85 +3,99 @@
 class AIControl
 {
     player = null;
-    availableUnits = null;
-    passStage = 1;
-    threats = null;
-    distantThreats = null;
+	availableUnits = null;
+	passStage = 1;
+	normalPassStages = 3;
+	maxPassStages = 12;
+	currentUnit = null;
+	traffic = null;
+	threats = null;
+	distantThreats = null;
 
     constructor(player)
     {
         this.player = player;
+        this.traffic = new AITrafficController(this);
     }
 
-    startTurn()
-    {
-        if(this.player.units.length === 0)
-        {
-            setTimeout(endTurn,1);
-            return;
-        }
-        this.availableUnits = [];
-        for(let i=this.player.units.length-1;i>=0;i--)
-        {
-            this.availableUnits.push(this.player.units[i]);
-        }
-        this.computeEnemyAttackMaps();
-        this.planning();
-        this.passStage = 1;
-        this.pass();
-    }
+	startTurn()
+	{
+		if(this.player.units.length === 0)
+		{
+			setTimeout(endTurn,1);
+			return;
+		}
+		this.traffic.startTurn();
+		this.availableUnits = [];
+		for(let i=this.player.units.length-1;i>=0;i--) this.availableUnits.push(this.player.units[i]);
+		this.computeEnemyAttackMaps();
+		this.planning();
+		this.passStage = 1;
+		this.currentUnit = null;
+		this.pass(true);
+	}
 
-    pass()
-    {
-        if(this.availableUnits.length > 0)
-        {
-            let unit = this.availableUnits.pop();
-            if(!unit || unit.died)
-            {
-                this.pass();
-            }
-            else
-            {
-                selectUnit(unit);
-                this.step(unit);
-            }  
-        }
-        else
-        {
-            if(this.passStage <= 2) {
-                this.passStage++;
-                for (let i = this.player.units.length - 1; i >= 0; i--) {
-                    let unt = this.player.units[i];
-                    if (unt.features.move > 0 || unt.features.abilityPoints > 0) this.availableUnits.push(unt);
-                }
-                this.pass();
-            }
-            else
-            {
-                setTimeout(endTurn,1);
-            }
-        }
-    }
+    pass(force=false)
+	{
+		if(!force && this.currentUnit != null && this.traffic.beforePass(this.currentUnit)) return;
+		this.currentUnit = null;
+		if(this.availableUnits.length > 0)
+		{
+			let unit = this.availableUnits.pop();
+			if(!unit || unit.died)
+			{
+				this.pass(true);
+				return;
+			}
+			this.currentUnit = unit;
+			selectUnit(unit);
+			this.step(unit);
+			return;
+		}
+		if(this.passStage < this.maxPassStages)
+		{
+			this.passStage++;
+			for(let i=this.player.units.length-1;i>=0;i--)
+			{
+				let unit = this.player.units[i];
+				if(!unit || unit.died) continue;
+				if(this.passStage <= this.normalPassStages)
+				{
+					if(unit.features.move > 0 || unit.features.abilityPoints > 0) this.availableUnits.push(unit);
+				}
+				else if(this.traffic.needsActivation(unit)) this.availableUnits.push(unit);
+			}
+			this.pass(true);
+			return;
+		}
+		setTimeout(endTurn,1);
+	}
 
     step(unit)
-    {
-        if(unit.died)
-        {
-            this.pass();
-            return;
-        }
-        if(unit.config.name === "wizard")
-        {
-            this.stepWizard(unit);
-            return;
-        }
-        //if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died){
-        //    this.stepByPlan(unit);
-        //}
-        //else{
-            this.stepUnit(unit);
-        //}
-    }
+	{
+		if(unit.died)
+		{
+			this.pass(true);
+			return;
+		}
+		if(this.passStage > this.normalPassStages)
+		{
+			this.traffic.stepOnly(unit);
+			return;
+		}
+		if(this.traffic.beforeStep(unit)) return;
+		if(unit.config.name === "wizard")
+		{
+			this.stepWizard(unit);
+			return;
+		}
+		//if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died){
+		//    this.stepByPlan(unit);
+		//}
+		//else{
+			this.stepUnit(unit);
+		//}
+	}
 
     isGoalAchieved(unit)
     {
@@ -182,19 +196,32 @@ class AIControl
         }
     }
 
-    stepToTarget(unit,target,dmap)
-    {
-        if(!dmap) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-        let cell = this.getOptimalStep(dmap,target,[unit.mapX, unit.mapY]);
-        if(cell != null)
-        {
-            if(unit.canStepTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) unit.stepTo(cell[0],cell[1]);
-            else if(unit.canAtackTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) unit.atackTo(cell[0], cell[1]);
-            else return false;
-        }
-        else return false;
-        return true;
-    }
+	stepToTarget(unit,target,dmap)
+	{
+		if(!dmap) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+		let cell = this.getOptimalStep(dmap,target,[unit.mapX,unit.mapY]);
+		if(cell == null) return false;
+		let dx = cell[0] - unit.mapX;
+		let dy = cell[1] - unit.mapY;
+		if(unit.canStepTo(dx,dy))
+		{
+			this.traffic.beforeNormalStep(unit,cell);
+			unit.stepTo(cell[0],cell[1]);
+			return true;
+		}
+		if(unit.canAtackTo(dx,dy))
+		{
+			unit.atackTo(cell[0],cell[1]);
+			return true;
+		}
+		const blocker = getUnitAtMap(cell[0],cell[1]);
+		if(blocker != null && blocker.player === unit.player)
+		{
+			this.traffic.onFriendlyBlock(unit,cell,blocker);
+			return true;
+		}
+		return false;
+	}
 
     stepCommonUnit(unit,dmap)
     {
