@@ -63,6 +63,20 @@ class AITrafficController
 		return a != null && b != null && a.dx === b.dx && a.dy === b.dy;
 	}
 
+	getRequestPriority(message)
+	{
+		if(message && message.priority != null) return message.priority;
+		if(message && message.data && message.data.priority != null) return message.data.priority;
+		if(message && message.sender) return this.ai.getTrafficPriority(message.sender);
+		return 0;
+	}
+
+	canRequestYield(blocker, priority)
+	{
+		if(blocker == null || blocker.died) return false;
+		return this.ai.getTrafficPriority(blocker) <= priority;
+	}
+
 	addTriedTarget(incoming, unit)
 	{
 		if(incoming == null || unit == null) return;
@@ -79,20 +93,26 @@ class AITrafficController
 	sendRootRequest(unit, blocker, cell)
 	{
 		const state = this.getState(unit);
-		const message = AIMessageBus.send(unit, blocker, 'yield_request', {});
+		const priority = this.ai.getTrafficPriority(unit);
+		if(!this.canRequestYield(blocker,priority))
+		{
+			state.deferred = {target:blocker,x:cell[0],y:cell[1],reason:'failed'};
+			return false;
+		}
+		const message = AIMessageBus.send(unit,blocker,'yield_request',{priority:priority});
 		if(message == null) return false;
-
-		state.outgoing = {id: message.id, target: blocker, x: cell[0], y: cell[1], result: null, reason: null};
+		state.outgoing = {id:message.id,target:blocker,x:cell[0],y:cell[1],priority:priority,result:null,reason:null};
 		return true;
 	}
 
 	forwardRequest(unit, incoming, blocker)
 	{
 		const state = this.getState(unit);
-		const message = AIMessageBus.send(unit, blocker, 'yield_request', {}, incoming.id);
+		const priority = this.getRequestPriority(incoming);
+		if(!this.canRequestYield(blocker,priority)) return false;
+		const message = AIMessageBus.send(unit,blocker,'yield_request',{priority:priority},incoming.id);
 		if(message == null) return false;
-
-		state.outgoing = {id: incoming.id, target: blocker, x: blocker.mapX, y: blocker.mapY, result: null, reason: null};
+		state.outgoing = {id:incoming.id,target:blocker,x:blocker.mapX,y:blocker.mapY,priority:priority,result:null,reason:null};
 		return true;
 	}
 
@@ -123,10 +143,17 @@ class AITrafficController
 		{
 			if(message.sender == null || message.sender.died) continue;
 
+			const priority = this.getRequestPriority(message);
+			if(this.ai.getTrafficPriority(unit) > priority)
+			{
+				this.reply(unit,{id:message.id,sender:message.sender},'yield_failed','priority');
+				continue;
+			}
+
 			const sameActiveId = (state.incoming && state.incoming.id === message.id) || (state.outgoing && state.outgoing.id === message.id);
 			if(sameActiveId)
 			{
-				this.reply(unit, {id: message.id, sender: message.sender}, 'yield_failed', 'cycle');
+				this.reply(unit,{id:message.id,sender:message.sender},'yield_failed','cycle');
 				continue;
 			}
 
@@ -135,19 +162,20 @@ class AITrafficController
 				if(state.outgoing != null && state.outgoing.target === message.sender && message.id < state.outgoing.id)
 				{
 					const oldOutgoing = state.outgoing;
-					if(state.incoming != null) this.reply(unit, state.incoming, 'yield_rejected', 'preempted');
-					else state.deferred = {target: oldOutgoing.target, x: oldOutgoing.x, y: oldOutgoing.y, reason: 'preempted'};
+					if(state.incoming != null) this.reply(unit,state.incoming,'yield_rejected','preempted');
+					else state.deferred = {target:oldOutgoing.target,x:oldOutgoing.x,y:oldOutgoing.y,reason:'preempted'};
+
 					state.incoming = null;
 					state.outgoing = null;
-					state.incoming = {id: message.id, sender: message.sender, triedTargets: []};
+					state.incoming = {id:message.id,sender:message.sender,priority:priority,triedTargets:[]};
 					continue;
 				}
 
-				this.reply(unit, {id: message.id, sender: message.sender}, 'yield_rejected', 'busy');
+				this.reply(unit,{id:message.id,sender:message.sender},'yield_rejected','busy');
 				continue;
 			}
 
-			state.incoming = {id: message.id, sender: message.sender, triedTargets: []};
+			state.incoming = {id:message.id,sender:message.sender,priority:priority,triedTargets:[]};
 		}
 	}
 
@@ -206,26 +234,33 @@ class AITrafficController
 	{
 		const result = [];
 		const tried = new Set(incoming && Array.isArray(incoming.triedTargets) ? incoming.triedTargets : []);
+		const priority = this.getRequestPriority(incoming);
 
 		for(let dy=-1;dy<=1;dy++)
 			for(let dx=-1;dx<=1;dx++)
 			{
 				if(dx === 0 && dy === 0) continue;
+
 				const other = getUnitAtMap(unit.mapX+dx,unit.mapY+dy);
 				if(other == null || other.died || other.player !== unit.player) continue;
 				if(incoming && other === incoming.sender) continue;
 				if(tried.has(other.id)) continue;
-				result.push({unit: other, score: this.openDegree(unit,other.mapX,other.mapY)});
+				if(!this.canRequestYield(other,priority)) continue;
+
+				result.push({unit:other,score:this.openDegree(unit,other.mapX,other.mapY)});
 			}
 
 		if(result.length <= 0) return [];
+
 		let bestScore = Math.max(...result.map(item => item.score));
 		let best = result.filter(item => item.score === bestScore);
+
 		for(let i=best.length-1;i>0;i--)
 		{
 			const j = randomInt(0,i);
 			const tmp = best[i]; best[i] = best[j]; best[j] = tmp;
 		}
+
 		return best.map(item => item.unit).concat(result.filter(item => item.score !== bestScore).map(item => item.unit));
 	}
 
@@ -360,9 +395,8 @@ class AITrafficController
 		}
 
 		const candidates = this.findFriendlyCandidates(unit,incoming);
-		if(candidates.length > 0)
+		if(candidates.length > 0 && this.forwardRequest(unit,incoming,candidates[0]))
 		{
-			this.forwardRequest(unit,incoming,candidates[0]);
 			this.ai.pass(true);
 			return true;
 		}

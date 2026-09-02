@@ -248,6 +248,22 @@ class AIControl
 		return unit.aiControl;
 	}
 
+	getTrafficPriority(unit)
+	{
+		if(unit == null) return 0;
+		if(unit === this.player.wizard)
+		{
+			const ents = Entity.getEntitiesAtMap(unit.mapX,unit.mapY);
+			if(ents.some(ent => ent.config && ent.config.name === 'pentagram')) return 100;
+			return 70;
+		}
+		const order = unit.aiControl ? unit.aiControl.order : null;
+		if(order === 'intercept') return 80;
+		if(order === 'attack') return 60;
+		if(order === 'patrol') return 10;
+		return 40;
+	}
+
 	getCurrentMainGoal(unit)
 	{
 		this.ensureUnitAIControl(unit);

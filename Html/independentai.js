@@ -71,6 +71,11 @@ class IndependentAIControl extends AIControl
 		return behavior;
 	}
 
+	getTrafficPriority(unit)
+	{
+		return 40;
+	}
+
 	planning()
 	{
 		/*
