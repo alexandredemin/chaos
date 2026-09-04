@@ -5,6 +5,7 @@ class Unit extends BaseUnit
 {
     player = null;
     target = null;
+    moveGuard = null;
     isMoving = false;
     filtered = false;
     processedAbility = null;
@@ -222,6 +223,30 @@ class Unit extends BaseUnit
         this.target = new Phaser.Math.Vector2();
         this.target.x = x;
         this.target.y = y;
+
+        if(this.moveGuard != null) this.moveGuard.cancel();
+        this.moveGuard = AsyncGuard.wrap(
+            'unit_move',
+            null,
+            {
+                timeoutMs: 5000,
+                data: {
+                    unitId: this.id,
+                    unitName: this.config.name,
+                    fromX: this.mapX,
+                    fromY: this.mapY,
+                    targetX: x,
+                    targetY: y
+                },
+                onTimeout: () =>
+                {
+                    if(this.died || this.active === false || !this.isMoving || this.target == null) return;
+                    this.setPosition(this.target.x,this.target.y);
+                    this.endStep();
+                }
+            }
+        );
+
         if(gameSettings.showEnemyMoves == true || this.player.control === PlayerControl.human)
         {
             this.anims.play(this.config.sprite+'run', true);           
@@ -236,16 +261,35 @@ class Unit extends BaseUnit
         hideArrows();
     }
 
-    processEntityStepOut(entities, callback, canStep = true)
+    processEntityStepOut(entities, callback, canStep=true)
     {
-        while(canStep && entities.length > 0){
+        while(canStep && entities.length > 0)
+        {
             const ent = entities.pop();
-            const result = ent.onStepOut(this, this.processEntityStepOut.bind(this,entities, callback)); //async call
-            if(result != null){
+            const next = this.processEntityStepOut.bind(this,entities,callback);
+            const guarded = AsyncGuard.wrap(
+                'entity_step_out',
+                next,
+                {
+                    timeoutMs: 5000,
+                    timeoutArgs: [false],
+                    data: {
+                        unitId: this.id,
+                        unitName: this.config.name,
+                        entity: ent.config ? ent.config.name : null,
+                        x: this.mapX,
+                        y: this.mapY
+                    }
+                }
+            );
+            const result = ent.onStepOut(this,guarded);
+            if(result != null)
+            {
+                guarded.cancel();
                 if(result !== true) canStep = false;
                 break;
             }
-            else return;
+            return;
         }
         if(callback) callback(canStep);
     }
@@ -263,27 +307,39 @@ class Unit extends BaseUnit
         }
     }
 
-    processBeforeEntityStepIn(entities, callback, canStep = true)
+    processBeforeEntityStepIn(entities, callback, canStep=true)
     {
         while(canStep && entities.length > 0)
         {
             const ent = entities.pop();
-            const result = ent.onBeforeStepIn(this, this.processBeforeEntityStepIn.bind(this, entities, callback));
-
+            const next = this.processBeforeEntityStepIn.bind(this,entities,callback);
+            const guarded = AsyncGuard.wrap(
+                'entity_before_step_in',
+                next,
+                {
+                    timeoutMs: 5000,
+                    timeoutArgs: [false],
+                    data: {
+                        unitId: this.id,
+                        unitName: this.config.name,
+                        entity: ent.config ? ent.config.name : null,
+                        fromX: this.mapX,
+                        fromY: this.mapY
+                    }
+                }
+            );
+            const result = ent.onBeforeStepIn(this,guarded);
             if(result != null)
             {
+                guarded.cancel();
                 if(result !== true)
                 {
                     canStep = false;
                     break;
                 }
             }
-            else
-            {
-                return;
-            }
+            else return;
         }
-
         if(callback) callback(canStep);
     }
 
@@ -345,7 +401,7 @@ class Unit extends BaseUnit
                 if(result.killed == true) config.killed = true;
                 if(config.hit == true || config.damaged == true || config.killed == true)
                 {
-                    if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
+                    if(shouldShowActionAnimation(this))
                     {
                         cam.startFollow(this);
                         let lm = new LossesAnimationManager(this.scene, 200, 200);
@@ -396,6 +452,11 @@ class Unit extends BaseUnit
 
     endStep()
     {
+        if(this.moveGuard != null)
+        {
+            this.moveGuard.cancel();
+            this.moveGuard = null;
+        }
         this.body.reset(this.target.x, this.target.y);
         this.isMoving = false;
         this.anims.play(this.config.sprite+'stop', true);

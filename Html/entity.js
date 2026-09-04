@@ -262,7 +262,7 @@ class WebEntity extends Entity
         {
             config = {hit: true, damaged: false, killed: false};
         }
-        if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
+        if(shouldShowActionAnimation(unit))
         {
             hideArrows();
             cam.startFollow(this);
@@ -497,7 +497,7 @@ class GlueBlobEntity extends Entity
         {
             config = {hit: true, damaged: false, killed: false};
         }
-        if(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human)
+        if(shouldShowActionAnimation(unit))
         {
             hideArrows();
             cam.startFollow(this);
@@ -650,7 +650,7 @@ class FrogEntity extends Entity
         }
         else{
             this.active = true;
-            this.visible = (gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human);
+            this.visible = shouldShowActionAnimation();
             super.start(showStart);
         }
     }
@@ -680,7 +680,7 @@ class FrogEntity extends Entity
                     if(Math.abs(dx) >=2 || Math.abs(dy) >= 2)frogtween = false;
                     let entity = Entity.getEntityAtMap(x,y);
                     if(entity != null)if(entity.config.name === 'frog')continue;
-                    let frog = new FrogEntity(this.scene,0,0,(gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human),false,frogtween);
+                    let frog = new FrogEntity(this.scene,0,0,shouldShowActionAnimation(),false,frogtween);
                     let d2 = dx*dx+dy*dy;
                     if(d2>2) frog.features.health = frog.features.health - 2;
                     else if(d2>0) frog.features.health = frog.features.health - 1;
@@ -755,7 +755,7 @@ function finishUseAction(callbackObject, result)
 	}
 }
 
-function playDoorToggleEffect(door, nextOpen, onComplete = null)
+function playDoorToggleEffect(door, nextOpen, onComplete=null)
 {
 	if(!shouldShowActionAnimation())
 	{
@@ -764,52 +764,68 @@ function playDoorToggleEffect(door, nextOpen, onComplete = null)
 		if(onComplete != null) onComplete();
 		return;
 	}
-    
-    const scene = door.scene;
+	const scene = door.scene;
 	const prevAlpha = door.alpha;
 	const prevDepth = door.depth;
-
 	const oldFrame = door.getFrameIndex();
-
 	const oldOpen = door.features.open;
 	door.features.open = nextOpen;
 	const newFrame = door.getFrameIndex();
 	door.features.open = oldOpen;
-
-	const overlay = scene.add.sprite(door.x, door.y, door.texture.key, newFrame);
-	overlay.setOrigin(door.originX, door.originY);
-	overlay.setDisplayOrigin(door.displayOriginX, door.displayOriginY);
-	overlay.setScale(door.scaleX, door.scaleY);
+	const overlay = scene.add.sprite(door.x,door.y,door.texture.key,newFrame);
+	overlay.setOrigin(door.originX,door.originY);
+	overlay.setDisplayOrigin(door.displayOriginX,door.displayOriginY);
+	overlay.setScale(door.scaleX,door.scaleY);
 	overlay.setRotation(door.rotation);
-	overlay.setFlip(door.flipX, door.flipY);
-	overlay.setDepth(prevDepth + 0.01);
+	overlay.setFlip(door.flipX,door.flipY);
+	overlay.setDepth(prevDepth+0.01);
 	overlay.setAlpha(0);
-
 	door.setFrame(oldFrame);
 	door.setAlpha(prevAlpha);
+	let doorTween = null;
+	let overlayTween = null;
+	const finishState = () =>
+	{
+		if(overlay.active !== false) overlay.destroy();
+		door.features.open = nextOpen;
+		door.updateSprite();
+		door.setAlpha(prevAlpha);
+	};
 
-	scene.tweens.add({
+	const finish = AsyncGuard.wrap(
+		'door_toggle',
+		() =>
+		{
+			finishState();
+			if(onComplete != null) onComplete();
+		},
+		{
+			timeoutMs: 1500,
+			data: {
+				x: door.mapX,
+				y: door.mapY,
+				open: nextOpen
+			},
+			onTimeout: () =>
+			{
+				if(doorTween != null) doorTween.stop();
+				if(overlayTween != null) overlayTween.stop();
+			}
+		}
+	);
+
+	doorTween = scene.tweens.add({
 		targets: door,
 		alpha: 0,
 		duration: 340,
 		ease: 'Linear'
 	});
-
-	scene.tweens.add({
+	overlayTween = scene.tweens.add({
 		targets: overlay,
 		alpha: prevAlpha,
 		duration: 340,
 		ease: 'Linear',
-		onComplete: () =>
-		{
-			overlay.destroy();
-
-			door.features.open = nextOpen;
-			door.updateSprite();
-			door.setAlpha(prevAlpha);
-
-			if(onComplete != null) onComplete();
-		}
+		onComplete: finish
 	});
 }
 

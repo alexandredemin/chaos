@@ -1,61 +1,103 @@
 //---------------------------- Animation classes ----------------------------
-
 class LossesAnimationManager
 {
-    animationQueue = [];
-    hitAnimation = null;
-    damageAnimation = null;
-    disappearanceAnimation = null;
-    callbackObject = null;
-    callbackMethod = null;
-    callbackArgs = null;
-    unit = null;
+	animationQueue = [];
+	hitAnimation = null;
+	damageAnimation = null;
+	disappearanceAnimation = null;
+	callbackObject = null;
+	callbackMethod = null;
+	callbackArgs = null;
+	unit = null;
+	safeComplete = null;
 
-    constructor(scene, x, y)
-    {
-        this.hitAnimation = new HitAnimation(scene, x, y);
-        this.damageAnimation = new DamageAnimation(scene, x, y);
-        this.disappearanceAnimation = new DisappearanceAnimation(scene, x, y);
-    }
+	constructor(scene, x, y)
+	{
+		this.hitAnimation = new HitAnimation(scene, x, y);
+		this.damageAnimation = new DamageAnimation(scene, x, y);
+		this.disappearanceAnimation = new DisappearanceAnimation(scene, x, y);
+	}
 
-    onCallback()
-    {
-        this.animateLosses();
-    }
+	onCallback()
+	{
+		this.animateLosses();
+	}
 
-    animateLosses()
-    {
-        if(this.animationQueue.length > 0)
-        {
-            let anim = this.animationQueue.pop();
-            anim.playAt(this.unit.x,this.unit.y,this.unit,this);
-        }
-        else {
-            if (this.callbackObject != null) {
-                if (typeof this.callbackObject === "function") {
-                    this.callbackObject.apply(null, this.callbackArgs || []);
-                } else if (this.callbackMethod != null && this.callbackObject[this.callbackMethod] != null && typeof this.callbackObject[this.callbackMethod] === "function") {
-                    this.callbackObject[this.callbackMethod].apply(this.callbackObject, this.callbackArgs || []);
-                } else if (typeof this.callbackObject.onCallback === "function") {
-                    this.callbackObject.onCallback();
-                }
-            }
-        }
-    }
+	invokeCallback()
+	{
+		if(this.callbackObject == null) return;
 
-    playAt(x,y,unit,callbackObject,callbackMethod,config, callbackArgs = null)
-    {
-        this.callbackObject = callbackObject;
-        this.callbackMethod = callbackMethod;
-        this.callbackArgs = callbackArgs;
-        this.unit = unit;
-        if(config.killed) this.animationQueue.push(this.disappearanceAnimation);
-        if(config.damaged) this.animationQueue.push(this.damageAnimation);
-        if(config.hit) this.animationQueue.push(this.hitAnimation);
-        this.animateLosses();
-    }
+		if(typeof this.callbackObject === "function")
+			this.callbackObject.apply(null,this.callbackArgs || []);
+		else if(this.callbackMethod != null && this.callbackObject[this.callbackMethod] != null && typeof this.callbackObject[this.callbackMethod] === "function")
+			this.callbackObject[this.callbackMethod].apply(this.callbackObject,this.callbackArgs || []);
+		else if(typeof this.callbackObject.onCallback === "function")
+			this.callbackObject.onCallback();
+	}
 
+	abortAnimations()
+	{
+		const animations = [this.hitAnimation,this.damageAnimation,this.disappearanceAnimation];
 
+		for(const anim of animations)
+		{
+			if(anim == null) continue;
+			if(anim.tween != null) anim.tween.stop();
+			if(anim.anims != null) anim.anims.stop();
+			if(typeof anim.setActive === 'function') anim.setActive(false);
+			if(typeof anim.setVisible === 'function') anim.setVisible(false);
+		}
+	}
+
+	animateLosses()
+	{
+		if(this.animationQueue.length > 0)
+		{
+			let anim = this.animationQueue.pop();
+			anim.playAt(this.unit.x,this.unit.y,this.unit,this);
+			return;
+		}
+
+		if(this.safeComplete != null) this.safeComplete();
+		else this.invokeCallback();
+	}
+
+	playAt(x,y,unit,callbackObject,callbackMethod,config,callbackArgs=null)
+	{
+		this.callbackObject = callbackObject;
+		this.callbackMethod = callbackMethod;
+		this.callbackArgs = callbackArgs;
+		this.unit = unit;
+
+		this.safeComplete = AsyncGuard.wrap(
+			'losses_animation',
+			this.invokeCallback.bind(this),
+			{
+				timeoutMs: 5000,
+				data: {
+					unitId: unit ? unit.id : null,
+					unitName: unit && unit.config ? unit.config.name : null,
+					killed: config ? config.killed === true : false,
+					damaged: config ? config.damaged === true : false,
+					hit: config ? config.hit === true : false
+				},
+				onTimeout: () =>
+				{
+					this.animationQueue = [];
+					this.abortAnimations();
+
+					if(config && config.killed && unit != null && unit.died !== true && typeof unit.die === 'function')
+						unit.die();
+				}
+			}
+		);
+
+		if(config.killed) this.animationQueue.push(this.disappearanceAnimation);
+		if(config.damaged) this.animationQueue.push(this.damageAnimation);
+		if(config.hit) this.animationQueue.push(this.hitAnimation);
+
+		this.animateLosses();
+	}
 }
 
 class HitAnimation extends Phaser.GameObjects.RenderTexture
