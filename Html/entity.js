@@ -150,10 +150,20 @@ class Entity extends BaseUnit
     makeMove()
     {
         this.moved = true;
+        GameFlowWatchdog.touch('entity_move',{
+            name:this.config ? this.config.name : null,
+            x:this.mapX,
+            y:this.mapY
+        });
     }
 
     endMove()
     {
+        GameFlowWatchdog.touch('entity_end',{
+            name:this.config ? this.config.name : null,
+            x:this.mapX,
+            y:this.mapY
+        });
         moveEntites();
     }
 
@@ -1254,19 +1264,29 @@ class MonsterGeneratorEntity extends Entity
 		}
 		// MonsterSpawner owns cell selection, independent-player creation and spawn animation.
         // The entity phase continues only after the complete animation batch has finished.
-		MonsterSpawner.spawn(
-			{source: this, scene: this.scene, config: spawnConfig},
-			result =>
-			{
-				const spawnedCount = result != null && Array.isArray(result.spawnedUnits) ? result.spawnedUnits.length : 0;
-				if(spawnedCount > 0)
-				{
-					generator.spawnedTotal = (generator.spawnedTotal || 0) + spawnedCount;
-					generator.cooldownLeft = Math.max(0, Math.floor(generator.cooldownRounds != null ? generator.cooldownRounds : 0));
-				}
-				super.endMove();
-			}
-		);
+        const finishSpawn = AsyncGuard.wrap(
+            'monster_generator_spawn',
+            result =>
+            {
+                const spawnedCount = result != null && Array.isArray(result.spawnedUnits) ? result.spawnedUnits.length : 0;
+                if(spawnedCount > 0)
+                {
+                    generator.spawnedTotal = (generator.spawnedTotal || 0)+spawnedCount;
+                    generator.cooldownLeft = Math.max(0,Math.floor(generator.cooldownRounds != null ? generator.cooldownRounds : 0));
+                }
+                super.endMove();
+            },
+            {
+                timeoutMs: 8000,
+                data: {
+                    x: this.mapX,
+                    y: this.mapY,
+                    generatorId: this.features.generatorId
+                }
+            }
+        );
+
+        MonsterSpawner.spawn({source:this,scene:this.scene,config:spawnConfig},finishSpawn);
 	}
 }
 

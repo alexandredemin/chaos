@@ -793,20 +793,34 @@
         //-        
     }
 
-    function moveEntites() {
+    function moveEntites()
+    {
         let allMoved = true;
-        for (let i = 0; i < entities.length; i++) {
-            if (entities[i].moved === false) {
+        for(let i=0;i<entities.length;i++)
+        {
+            if(entities[i].moved === false)
+            {
                 allMoved = false;
+
+                GameFlowWatchdog.touch('entity_dispatch',{
+                    index:i,
+                    name:entities[i].config ? entities[i].config.name : null,
+                    x:entities[i].mapX,
+                    y:entities[i].mapY
+                });
+
                 entities[i].makeMove();
                 return;
             }
         }
-        if (allMoved) {
+        if(allMoved)
+        {
+            GameFlowWatchdog.endPhase('entity_phase');
+
             entities.forEach(ent => ent.moved = false);
             playerInd = 0;
-            console.log('next player ' + playerInd);
-            console.log('units: ' + players[playerInd].units.length);
+            console.log('next player '+playerInd);
+            console.log('units: '+players[playerInd].units.length);
             startTurn();
         }
     }
@@ -818,6 +832,9 @@
             players[playerInd].icons = [];
         }
         //-
+
+        GameFlowWatchdog.endPhase('ai_turn', {playerInd:playerInd});
+
         if (gameSettings.showEnemyMoves == true || players[playerInd].control === PlayerControl.human) {
             setInteractionScenario(userInteractionScenario.movement);
             if(selectedUnit != null)selectedUnit.resetPipeline();
@@ -825,9 +842,12 @@
         console.log('end turn');
         console.log('prev player ' + playerInd);
         playerInd++;
-        if (playerInd >= players.length) {
+        if(playerInd >= players.length)
+        {
+            GameFlowWatchdog.beginPhase('entity_phase');
             moveEntites();
-        } else {
+        }
+        else {
             console.log('next player ' + playerInd);
             console.log('units: ' + players[playerInd].units.length);
             startTurn();

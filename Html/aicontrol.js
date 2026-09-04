@@ -20,7 +20,12 @@ class AIControl
 
 	startTurn()
 	{
-		if(this.player.units.length === 0)
+        GameFlowWatchdog.beginPhase('ai_turn',{
+            player:this.player ? this.player.name : null,
+            independent:this.player ? this.player.isIndependent === true : false
+        });
+
+        if(this.player.units.length === 0)
 		{
 			setTimeout(endTurn,1);
 			return;
@@ -37,7 +42,13 @@ class AIControl
 
     pass(force=false)
 	{
-		if(!force && this.currentUnit != null && this.traffic.beforePass(this.currentUnit)) return;
+        GameFlowWatchdog.touch('ai_pass',{
+            player:this.player ? this.player.name : null,
+            stage:this.passStage,
+            available:this.availableUnits ? this.availableUnits.length : 0
+        });
+
+        if(!force && this.currentUnit != null && this.traffic.beforePass(this.currentUnit)) return;
 		this.currentUnit = null;
 		if(this.availableUnits.length > 0)
 		{
@@ -73,6 +84,15 @@ class AIControl
 
     step(unit)
 	{
+        GameFlowWatchdog.touch('ai_step',{
+            player:this.player ? this.player.name : null,
+            unitId:unit ? unit.id : null,
+            unit:unit && unit.config ? unit.config.name : null,
+            stage:this.passStage,
+            x:unit ? unit.mapX : null,
+            y:unit ? unit.mapY : null
+        });
+
 		if(unit.died)
 		{
 			this.pass(true);

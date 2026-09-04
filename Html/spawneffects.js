@@ -18,11 +18,30 @@ class MonsterSpawnAnimator
 		const finalVisible = options.finalVisible !== false;
 		let finished = false;
 
+		const safeBatchComplete = AsyncGuard.wrap(
+			'monster_spawn_batch',
+			onComplete,
+			{
+				timeoutMs: 5000,
+				data: {
+					source: source && source.config ? source.config.name : null,
+					x: source ? source.mapX : null,
+					y: source ? source.mapY : null,
+					count: units.length,
+					effect: effectConfig.type || null
+				},
+				onTimeout: () =>
+				{
+					for(let i=0;i<units.length;i++) this.revealUnit(units[i],finalVisible);
+				}
+			}
+		);
+
 		const finishBatch = () =>
 		{
 			if(finished) return;
 			finished = true;
-			if(onComplete != null) onComplete();
+			safeBatchComplete();
 		};
 
 		if(units.length <= 0)
@@ -147,6 +166,24 @@ class MonsterSpawnAnimator
 		const emergeLift = effectConfig.emergeLift != null ? Number(effectConfig.emergeLift) : 2;
 		const emergeDuration = Math.max(1, effectConfig.emergeDuration != null ? Number(effectConfig.emergeDuration) : 150);
 		const moveDuration = Math.max(1, effectConfig.moveDuration != null ? Number(effectConfig.moveDuration) : 320);
+
+		const safeComplete = AsyncGuard.wrap(
+			'spawn_effect_emerge',
+			onComplete,
+			{
+				timeoutMs: emergeDuration+moveDuration+1500,
+				data: {
+					unitId: unit.id,
+					unitName: unit.config ? unit.config.name : null
+				},
+				onTimeout: () =>
+				{
+					if(sprite != null && sprite.active !== false) sprite.destroy();
+					this.revealUnit(unit,finalVisible);
+				}
+			}
+		);
+
 		sprite.setScale(effect.baseScaleX * initialScale, effect.baseScaleY * initialScale);
 		sprite.setAlpha(initialAlpha);
 		unit.setVisible(false);
@@ -163,7 +200,7 @@ class MonsterSpawnAnimator
 				if(sprite.active === false)
 				{
 					this.revealUnit(unit, finalVisible);
-					if(onComplete != null) onComplete();
+					safeComplete();
 					return;
 				}
 				unit.scene.tweens.add({
@@ -175,7 +212,7 @@ class MonsterSpawnAnimator
 					alpha: 1,
 					duration: moveDuration,
 					ease: effectConfig.moveEase || 'Cubic.Out',
-					onComplete: () => {this.finishEffect(sprite, unit, finalVisible, onComplete);}
+					onComplete: () => {this.finishEffect(sprite,unit,finalVisible,safeComplete);}
 				});
 			}
 		});
@@ -199,6 +236,24 @@ class MonsterSpawnAnimator
 		const launchDuration = Math.max(1, effectConfig.launchDuration != null ? Number(effectConfig.launchDuration) : (effectConfig.emergeDuration != null ? Number(effectConfig.emergeDuration) : 110));
 		const moveDuration = Math.max(1, effectConfig.moveDuration != null ? Number(effectConfig.moveDuration) : 240);
 		const settleDuration = Math.max(1, effectConfig.settleDuration != null ? Number(effectConfig.settleDuration) : 90);
+
+		const safeComplete = AsyncGuard.wrap(
+			'spawn_effect_burst',
+			onComplete,
+			{
+				timeoutMs: launchDuration+moveDuration+settleDuration+1500,
+				data: {
+					unitId: unit.id,
+					unitName: unit.config ? unit.config.name : null
+				},
+				onTimeout: () =>
+				{
+					if(sprite != null && sprite.active !== false) sprite.destroy();
+					this.revealUnit(unit,finalVisible);
+				}
+			}
+		);
+
 		sprite.setScale(effect.baseScaleX * initialScale, effect.baseScaleY * initialScale);
 		sprite.setAlpha(initialAlpha);
 		unit.setVisible(false);
@@ -216,7 +271,7 @@ class MonsterSpawnAnimator
 				if(sprite.active === false)
 				{
 					this.revealUnit(unit, finalVisible);
-					if(onComplete != null) onComplete();
+					safeComplete();
 					return;
 				}
 				// Second phase: move to the reserved cell and slightly overshoot the final scale.
@@ -233,8 +288,7 @@ class MonsterSpawnAnimator
 						if(sprite.active === false)
 						{
 							this.revealUnit(unit, finalVisible);
-
-							if(onComplete != null) onComplete();
+							safeComplete();
 							return;
 						}
 						// Third phase: short landing/settling.
@@ -244,7 +298,7 @@ class MonsterSpawnAnimator
 							scaleY: effect.baseScaleY,
 							duration: settleDuration,
 							ease: effectConfig.settleEase || 'Quad.Out',
-							onComplete: () => {this.finishEffect(sprite, unit, finalVisible, onComplete);}
+							onComplete: () => {this.finishEffect(sprite, unit, finalVisible, safeComplete);}
 						});
 					}
 				});
