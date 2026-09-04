@@ -170,7 +170,6 @@ class MonsterSpawner
 			// object, so this relation survives save/load.
 			if(config.spawnSourceId != null) unit.features.spawnSourceId = config.spawnSourceId;
 			result.spawnedUnits.push(unit);
-			result.spawnedUnits.push(unit);
 			result.spawnCells.push({x: cell.x, y: cell.y});
 		}
 		result.success = result.spawnedUnits.length > 0;

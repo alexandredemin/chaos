@@ -14,6 +14,7 @@
     <script type="text/javascript" src="Html/magicbook.js"></script>
     <script type="text/javascript" src="Html/player.js"></script>
     <script type="text/javascript" src="Html/baseunit.js"></script>
+    <script type="text/javascript" src="Html/flowwatchdog.js"></script>
     <script type="text/javascript" src="Html/entity.js"></script>
     <script type="text/javascript" src="Html/item.js"></script>
     <script type="text/javascript" src="Html/unit.js"></script>
@@ -302,23 +303,14 @@
         return objClone;
     }
 
-    function shouldShowActionAnimation(unit = null)
+    function shouldShowActionAnimation(unit=null)
     {
         if(gameSettings.showEnemyMoves === true) return true;
-
-        if(players != null && players[playerInd] != null)
-        {
-            return players[playerInd].control === PlayerControl.human;
-        }
-
-        if(unit != null && unit.player != null)
-        {
-            return unit.player.control === PlayerControl.human;
-        }
-
-        return true;
+        if(unit != null && unit.player != null) return unit.player.control === PlayerControl.human;
+        if(players != null && players[playerInd] != null) return players[playerInd].control === PlayerControl.human;
+        return false;
     }
-    
+        
     const userInteractionScenario = {
         movement: 'movement',
         targetSelection: 'targetSelection',
