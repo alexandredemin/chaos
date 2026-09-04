@@ -178,7 +178,11 @@ class MonsterSpawnAnimator
 				},
 				onTimeout: () =>
 				{
-					if(sprite != null && sprite.active !== false) sprite.destroy();
+					if(sprite != null)
+					{
+						if(unit.scene != null && unit.scene.tweens != null) unit.scene.tweens.killTweensOf(sprite);
+						if(sprite.active !== false) sprite.destroy();
+					}
 					this.revealUnit(unit,finalVisible);
 				}
 			}
@@ -248,7 +252,11 @@ class MonsterSpawnAnimator
 				},
 				onTimeout: () =>
 				{
-					if(sprite != null && sprite.active !== false) sprite.destroy();
+					if(sprite != null)
+					{
+						if(unit.scene != null && unit.scene.tweens != null) unit.scene.tweens.killTweensOf(sprite);
+						if(sprite.active !== false) sprite.destroy();
+					}
 					this.revealUnit(unit,finalVisible);
 				}
 			}
