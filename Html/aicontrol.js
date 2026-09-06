@@ -100,7 +100,24 @@ class AIControl
 		}
 		if(this.passStage > this.normalPassStages)
 		{
-			this.traffic.stepOnly(unit);
+			const handled = this.traffic.stepOnly(unit);
+			if(handled !== true)
+			{
+				console.error('AI traffic step was not handled',{
+					unitId:unit.id,
+					unit:unit.config ? unit.config.name : null,
+					stage:this.passStage,
+					traffic:unit.aiTraffic
+				});
+
+				GameFlowWatchdog.touch('traffic_step_unhandled',{
+					unitId:unit.id,
+					unit:unit.config ? unit.config.name : null,
+					stage:this.passStage
+				});
+
+				this.pass(true);
+			}
 			return;
 		}
 		if(this.traffic.beforeStep(unit)) return;

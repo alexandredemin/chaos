@@ -411,21 +411,39 @@ class AITrafficController
 	{
 		const state = this.getState(unit);
 		const deferred = state.deferred;
-		if(deferred == null) return false;
-		if(deferred.reason === 'failed') return false;
+		if(deferred == null || deferred.reason === 'failed') return false;
 
 		const occupant = getUnitAtMap(deferred.x,deferred.y);
 		if(occupant == null)
 		{
 			if(this.startTrafficStep(unit,[deferred.x,deferred.y],{clearDeferred:true,clearYield:true})) return true;
+
+			GameFlowWatchdog.touch('traffic_deferred_cancel',{
+				unitId:unit.id,
+				reason:'step_failed',
+				x:deferred.x,
+				y:deferred.y
+			});
+
 			state.deferred = null;
-			return false;
+			this.ai.pass(true);
+			return true;
 		}
 
 		if(occupant !== deferred.target)
 		{
+			GameFlowWatchdog.touch('traffic_deferred_cancel',{
+				unitId:unit.id,
+				reason:'target_changed',
+				x:deferred.x,
+				y:deferred.y,
+				oldTargetId:deferred.target ? deferred.target.id : null,
+				newTargetId:occupant ? occupant.id : null
+			});
+
 			state.deferred = null;
-			return false;
+			this.ai.pass(true);
+			return true;
 		}
 
 		if(this.isBusy(occupant))
@@ -507,17 +525,24 @@ class AITrafficController
 	stepOnly(unit)
 	{
 		const state = this.getState(unit);
+
 		if(state.pendingStep != null) return this.finishPendingStep(unit);
 
 		this.processMessages(unit);
+
 		if(state.outgoing != null)
 		{
 			const result = this.resolveOutgoing(unit);
 			if(result === 'move') return true;
 			if(result === 'wait' || result === 'pass') {this.ai.pass(true); return true;}
 		}
+
 		if(state.incoming != null) return this.handleIncoming(unit);
-		if(state.deferred != null && (state.deferred.reason === 'busy' || state.deferred.reason === 'preempted')) return this.handleDeferred(unit);
+
+		if(state.deferred != null && (state.deferred.reason === 'busy' || state.deferred.reason === 'preempted'))
+		{
+			if(this.handleDeferred(unit)) return true;
+		}
 
 		this.ai.pass(true);
 		return true;
