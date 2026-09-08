@@ -765,250 +765,297 @@ function finishUseAction(callbackObject, result)
 	}
 }
 
-function playDoorToggleEffect(door, nextOpen, onComplete=null)
+function playDoorToggleEffect(door,nextOpen,onComplete=null)
 {
-	if(!shouldShowActionAnimation())
-	{
-		door.features.open = nextOpen;
-		door.updateSprite();
-		if(onComplete != null) onComplete();
-		return;
-	}
-	const scene = door.scene;
-	const prevAlpha = door.alpha;
-	const prevDepth = door.depth;
-	const oldFrame = door.getFrameIndex();
-	const oldOpen = door.features.open;
-	door.features.open = nextOpen;
-	const newFrame = door.getFrameIndex();
-	door.features.open = oldOpen;
-	const overlay = scene.add.sprite(door.x,door.y,door.texture.key,newFrame);
-	overlay.setOrigin(door.originX,door.originY);
-	overlay.setDisplayOrigin(door.displayOriginX,door.displayOriginY);
-	overlay.setScale(door.scaleX,door.scaleY);
-	overlay.setRotation(door.rotation);
-	overlay.setFlip(door.flipX,door.flipY);
-	overlay.setDepth(prevDepth+0.01);
-	overlay.setAlpha(0);
-	door.setFrame(oldFrame);
-	door.setAlpha(prevAlpha);
-	let doorTween = null;
-	let overlayTween = null;
-	const finishState = () =>
-	{
-		if(overlay.active !== false) overlay.destroy();
-		door.features.open = nextOpen;
-		door.updateSprite();
-		door.setAlpha(prevAlpha);
-	};
-
-	const finish = AsyncGuard.wrap(
-		'door_toggle',
+	playEntityVisualTransition(
+		door,
+		nextOpen ? 'open' : 'closed',
 		() =>
 		{
-			finishState();
-			if(onComplete != null) onComplete();
+			door.features.open = nextOpen;
+			return true;
 		},
-		{
-			timeoutMs: 1500,
-			data: {
-				x: door.mapX,
-				y: door.mapY,
-				open: nextOpen
-			},
-			onTimeout: () =>
-			{
-				if(doorTween != null) doorTween.stop();
-				if(overlayTween != null) overlayTween.stop();
-			}
-		}
+		onComplete,
+		340
 	);
+}
 
-	doorTween = scene.tweens.add({
-		targets: door,
-		alpha: 0,
-		duration: 340,
-		ease: 'Linear'
-	});
-	overlayTween = scene.tweens.add({
-		targets: overlay,
-		alpha: prevAlpha,
-		duration: 340,
-		ease: 'Linear',
-		onComplete: finish
-	});
+function playDoorUnlockEffect(door,unit,plan,onComplete=null)
+{
+	door._unlocking = true;
+	playEntityVisualTransition(
+		door,
+		'closed',
+		() =>
+		{
+			const result = LockSystem.commitUnlock(unit,door,plan);
+			door._unlocking = false;
+			return result;
+		},
+		onComplete,
+		260
+	);
 }
 
 class DoorEntity extends Entity
 {
-    constructor(scene, x, y, visible=true)
-    {
-        super(entityConfigs['door'], scene, x, y, visible);
-        //this.setOrigin(0.5, 0.5);
-        //this.setDisplayOrigin(13, 18);
-        this.updateSprite();
-    }
-
-    static create(scene, x, y, visible=true)
-    {
-        return new DoorEntity(scene, x, y, visible);
-    }
-
-    start(showStart=true)
-    {
-        this.scale = this.config.scale;
-        this.setDepthFromBottom(-4.1);
-        this.updateSprite();
-    }
-
-    setVisability(visible)
-    {
-        this.features.visible = visible;
-        this.updateSprite();
-        this.visible = true;
-    }
-
-    getVisability()
-    {
-        return this.features.visible;
-    }
-
-    setDepthFromBottom(offset=null)
-    {
-        if(offset != null || this.hasOwnProperty('features') == false || this.features.hasOwnProperty('direction') == false)
-        {
-            super.setDepthFromBottom(offset);
-            return;
-        }
-        if(this.features.direction === 'W' || this.features.direction === 'E')
-        {
-            super.setDepthFromBottom(-16.0);
-        }
-        else
-        {
-            super.setDepthFromBottom(-4.1);
-        }
-    }
-
-    getFrameIndex()
-    {
-        const dir = this.features.direction;;
-        let base = 0;
-        switch(dir)
-        {
-            case 'W': base = 0; break;
-            case 'N': base = 2; break;
-            case 'E': base = 4; break;
-            case 'S': base = 6; break;
-        }
-        return base + (this.features.open && this.features.visible ? 1 : 0);
-    }
-
-    updateSprite()
-    {
-        this.setFrame(this.getFrameIndex());
-        this.setDepthFromBottom(); 
-        this.setAlpha(this.features.visible ? 1 : 0.5);
-        this.features.blocksLOS = !this.features.open;
-    }
-
-    open()
-    {
-        if(this.features.open) return;
-        this.features.open = true;
-        this.updateSprite();
-    }
-
-    close()
-    {
-        if(!this.features.open) return;
-        this.features.open = false;
-        this.updateSprite();
-    }
-
-    onBeforeStepIn(unit, callback=null)
-    {
-        if(this.features.open) return true;
-
-        playDoorToggleEffect(this, true, () =>
-        {
-            if(callback != null) callback(true);
-        });
-
-        return null;
-    }
-
-    onStepIn(unit)
-    {
-        return null;
-    }
-
-    onStepOut(unit, callback=null)
-    {
-        return true;
-    }
-
-    transformFeatures(unit, features)
-    {
-        return features;
-    }
-
-    makeMove()
-    {
-        if (this.features.open && getUnitAtMap(this.mapX, this.mapY) == null) this.close();
-        super.makeMove();
-        super.endMove();
-    }
-
-    getUseCost(unit)
-    {
-        return {
-            abilityPointCost: 0,
-            movePointCost: 1
-        };
-    }
-
-    canUse(unit)
-    {
-        if(unit == null) return false;
-        const dx = Math.abs(this.mapX - unit.mapX);
-        const dy = Math.abs(this.mapY - unit.mapY);
-        if(dx > 1 || dy > 1) return false;
-        if(dx === 0 && dy === 0) return false;
-        if(this.features.open)
-        {
-            return getUnitAtMap(this.mapX, this.mapY) == null;
-        }
-        return true;
-    }
-
-	use(unit, context = {}, callbackObject = null)
+	constructor(scene,x,y,visible=true)
 	{
-		if(!this.canUse(unit))
+		super(entityConfigs['door'],scene,x,y,visible);
+		this.updateSprite();
+	}
+
+	static create(scene,x,y,visible=true)
+	{
+		return new DoorEntity(scene,x,y,visible);
+	}
+
+	start(showStart=true)
+	{
+		this.scale = this.config.scale;
+		this.setDepthFromBottom(-4.1);
+		this.updateSprite();
+	}
+
+	setVisability(visible)
+	{
+		this.features.visible = visible;
+		this.updateSprite();
+		this.visible = true;
+	}
+
+	getVisability()
+	{
+		return this.features.visible;
+	}
+
+	setDepthFromBottom(offset=null)
+	{
+		if(offset != null || !this.hasOwnProperty('features') || !this.features.hasOwnProperty('direction'))
 		{
-			finishUseAction(callbackObject, {
-				success: false,
-                abilityPointCost: 0,
-                movePointCost: 0
-			});
+			super.setDepthFromBottom(offset);
+			return;
+		}
+
+		if(this.features.direction === 'W' || this.features.direction === 'E')
+			super.setDepthFromBottom(-16.0);
+		else
+			super.setDepthFromBottom(-4.1);
+	}
+
+	getVisualState()
+	{
+		if(LockSystem.isLocked(this)) return 'locked';
+		return this.features.open ? 'open' : 'closed';
+	}
+
+	getTextureKeyForState(state)
+	{
+		if(state === 'locked' && this.config.spriteLocked != null)
+		{
+			if(this.scene == null || this.scene.textures == null || this.scene.textures.exists(this.config.spriteLocked))
+				return this.config.spriteLocked;
+		}
+		return this.config.sprite;
+	}
+
+	getFrameForState(state)
+	{
+		const dir = this.features.direction;
+		let base = 0;
+		switch(dir)
+		{
+			case 'W': base = 0; break;
+			case 'N': base = 2; break;
+			case 'E': base = 4; break;
+			case 'S': base = 6; break;
+		}
+		if(state === 'locked')
+		{
+			if(this.config.framesLocked != null && this.config.framesLocked[dir] != null)
+				return this.config.framesLocked[dir];
+
+			if(this.config.frameLocked != null) return this.config.frameLocked;
+			return base;
+		}
+		return base+(state === 'open' && this.features.visible ? 1 : 0);
+	}
+
+	getVisualDescriptor(state=null)
+	{
+		if(state == null) state = this.getVisualState();
+		return {
+			texture:this.getTextureKeyForState(state),
+			frame:this.getFrameForState(state)
+		};
+	}
+
+	getFrameIndex()
+	{
+		return this.getFrameForState(this.getVisualState());
+	}
+
+	updateSprite()
+	{
+		const visual = this.getVisualDescriptor();
+		this.setTexture(visual.texture,visual.frame);
+		this.setDepthFromBottom();
+		this.setAlpha(this.features.visible ? 1 : 0.5);
+		this.features.blocksLOS = !this.features.open;
+	}
+
+	open()
+	{
+		if(this.features.open) return false;
+		this.features.open = true;
+		this.updateSprite();
+		return true;
+	}
+
+	close(force=false)
+	{
+		if(!this.features.open) return false;
+		if(!force && !OpenableSystem.canClose(this)) return false;
+		this.features.open = false;
+		this.updateSprite();
+		return true;
+	}
+
+	evaluateStep(unit)
+	{
+		if(LockSystem.isLocked(this) && !LockSystem.canUnlock(unit,this)) return false;
+		return 1;
+	}
+
+	openForUnit(unit,onComplete=null)
+	{
+		if(this.features.open)
+		{
+			if(onComplete != null) onComplete(true,null);
+			return true;
+		}
+		if(this._unlocking === true)
+		{
+			if(onComplete != null) onComplete(false,'busy');
 			return false;
 		}
 
-		const nextOpen = !this.features.open;
-
-		playDoorToggleEffect(this, nextOpen, () =>
+		const finishOpen = () =>
 		{
-			finishUseAction(callbackObject, {
-                success: true,
-                abilityPointCost: 0,
-                movePointCost: 1
+			playDoorToggleEffect(this,true,() =>
+			{
+				if(onComplete != null) onComplete(true,null);
+			});
+		};
+
+		if(!LockSystem.isLocked(this))
+		{
+			finishOpen();
+			return null;
+		}
+		const plan = LockSystem.prepareUnlock(unit,this);
+		if(plan.success !== true)
+		{
+			if(onComplete != null) onComplete(false,plan.reason);
+			return false;
+		}
+		playDoorUnlockEffect(this,unit,plan,success =>
+		{
+			if(success !== true)
+			{
+				if(onComplete != null) onComplete(false,'unlock_failed');
+				return;
+			}
+			finishOpen();
+		});
+		return null;
+	}
+
+	onBeforeStepIn(unit,callback=null)
+	{
+		if(this.features.open) return true;
+		if(LockSystem.isLocked(this) && !LockSystem.canUnlock(unit,this)) return false;
+		this.openForUnit(unit,success => {if(callback != null) callback(success === true);});
+		return null;
+	}
+
+	onStepIn(unit)
+	{
+		return null;
+	}
+
+	onStepOut(unit,callback=null)
+	{
+		return true;
+	}
+
+	transformFeatures(unit,features)
+	{
+		return features;
+	}
+
+	makeMove()
+	{
+		if(this.features.open && OpenableSystem.shouldAutoClose(this) && getUnitAtMap(this.mapX,this.mapY) == null)
+		{
+			this.close();
+		}
+		super.makeMove();
+		super.endMove();
+	}
+
+	getUseCost(unit)
+	{
+		return {abilityPointCost:0, movePointCost:1};
+	}
+
+	canUse(unit)
+	{
+		if(unit == null || this._unlocking === true) return false;
+		const dx = Math.abs(this.mapX-unit.mapX);
+		const dy = Math.abs(this.mapY-unit.mapY);
+		if(dx > 1 || dy > 1) return false;
+		if(dx === 0 && dy === 0) return false;
+		if(this.features.open)
+		{
+			if(!OpenableSystem.canClose(this)) return false;
+			return getUnitAtMap(this.mapX,this.mapY) == null;
+		}
+		return true;
+	}
+
+	use(unit,context={},callbackObject=null)
+	{
+		if(!this.canUse(unit))
+		{
+			finishUseAction(callbackObject,{success:false,reason:'unavailable',abilityPointCost:0,movePointCost:0});
+			return false;
+		}
+		if(this.features.open)
+		{
+			playDoorToggleEffect(this,false,() =>
+			{
+				finishUseAction(callbackObject,{success:true,abilityPointCost:0,movePointCost:1});
+			});
+			return false;
+		}
+		this.openForUnit(unit,(success,reason) =>
+		{
+			if(success === true)
+			{
+				finishUseAction(callbackObject,{success:true,abilityPointCost:0,movePointCost:1});
+				return;
+			}
+			finishUseAction(callbackObject,{
+				success:false,
+				reason:reason || 'locked',
+				abilityPointCost:0,
+				movePointCost:0
 			});
 		});
-
 		return false;
 	}
 }
-
 
 //---------------------------- Monster generator entity ----------------------------
 class MonsterGeneratorEntity extends Entity

@@ -44,18 +44,13 @@ class Item
 
 	getDisplayName()
 	{
+		if(this.params && this.params.name != null) return this.params.name;
 		if(this.configName === 'spell_scroll')
 		{
 			const spellName = this.params?.spell;
 			const amount = this.params?.amount;
-			if(spellName != null && amount != null)
-			{
-				return this.config.name + ' (' + spellName + ' x' + amount + ')';
-			}
-			if(spellName != null)
-			{
-				return this.config.name + ' (' + spellName + ')';
-			}
+			if(spellName != null && amount != null) return this.config.name+' ('+spellName+' x'+amount+')';
+			if(spellName != null) return this.config.name+' ('+spellName+')';
 		}
 		return this.config.name;
 	}
@@ -1006,66 +1001,36 @@ class ItemEntity extends Entity
 }
 
 //---------------------------- Help functions ----------------------------
-function playContainerToggleEffect(container, nextOpen, onComplete = null)
+function playContainerToggleEffect(container,nextOpen,onComplete=null)
 {
-	if(!shouldShowActionAnimation())
-	{
-		container.features.open = nextOpen;
-		container.updateSprite();
-		if(onComplete != null) onComplete();
-		return;
-	}
-
-	const scene = container.scene;
-	const prevAlpha = container.alpha;
-
-	const oldTexture = container.getTextureKeyForState(container.features.open);
-	const oldFrame = container.getFrameForState(container.features.open);
-
-	const newTexture = container.getTextureKeyForState(nextOpen);
-	const newFrame = container.getFrameForState(nextOpen);
-
-	const overlay = scene.add.image(container.x, container.y, newTexture, newFrame);
-	overlay.setOrigin(container.originX, container.originY);
-	overlay.setScale(container.scaleX, container.scaleY);
-	overlay.setRotation(container.rotation);
-	overlay.setFlip(container.flipX, container.flipY);
-	if(container.features != null && container.features.containerType === 'tall' && nextOpen === true)
-	{
-		overlay.setDepth(container.depth + 1.0);
-	}
-	else
-	{
-		overlay.setDepth(container.depth + 0.01);
-	}
-	overlay.setAlpha(0);
-
-	container.setTexture(oldTexture, oldFrame);
-	container.setAlpha(prevAlpha);
-
-	scene.tweens.add({
-		targets: container,
-		alpha: 0,
-		duration: 170,
-		ease: 'Linear'
-	});
-
-	scene.tweens.add({
-		targets: overlay,
-		alpha: prevAlpha,
-		duration: 170,
-		ease: 'Linear',
-		onComplete: () =>
+	playEntityVisualTransition(
+		container,
+		nextOpen ? 'open' : 'closed',
+		() =>
 		{
-			overlay.destroy();
-
 			container.features.open = nextOpen;
-			container.updateSprite();
-			container.setAlpha(prevAlpha);
+			return true;
+		},
+		onComplete,
+		170
+	);
+}
 
-			if(onComplete != null) onComplete();
-		}
-	});
+function playContainerUnlockEffect(container,unit,plan,onComplete=null)
+{
+	container._unlocking = true;
+	playEntityVisualTransition(
+		container,
+		'closed',
+		() =>
+		{
+			const result = LockSystem.commitUnlock(unit,container,plan);
+			container._unlocking = false;
+			return result;
+		},
+		onComplete,
+		170
+	);
 }
 
 function isCellAvailableForContainerSpill(unit, container, mapX, mapY)
@@ -1209,7 +1174,13 @@ class ContainerEntity extends ItemEntity
 
 	getSpriteKeyForState(isOpen)
 	{
-		return isOpen ? this.config.spriteOpen : this.config.spriteClosed;
+		return this.getTextureKeyForState(isOpen ? 'open' : 'closed');
+	}
+
+	getVisualState()
+	{
+		if(LockSystem.isLocked(this)) return 'locked';
+		return this.features.open ? 'open' : 'closed';
 	}
 
 	start(showStart=true)
@@ -1233,16 +1204,22 @@ class ContainerEntity extends ItemEntity
 		this.stackSprites = [];
 	}
 
-	getTextureKeyForState(isOpen)
+	getTextureKeyForState(state)
 	{
-		if(isOpen && this.config.spriteOpen != null) return this.config.spriteOpen;
-		if(!isOpen && this.config.spriteClosed != null) return this.config.spriteClosed;
+		if(state === 'locked' && this.config.spriteLocked != null)
+		{
+			if(this.scene == null || this.scene.textures == null || this.scene.textures.exists(this.config.spriteLocked))
+				return this.config.spriteLocked;
+		}
+		if(state === 'open' && this.config.spriteOpen != null) return this.config.spriteOpen;
+		if(state === 'closed' && this.config.spriteClosed != null) return this.config.spriteClosed;
 		return this.config.sprite;
 	}
 
-	getFrameForState(isOpen)
+	getFrameForState(state)
 	{
-		if(isOpen) return this.config.frameOpen ?? 0;
+		if(state === 'locked' && this.config.frameLocked != null) return this.config.frameLocked;
+		if(state === 'open') return this.config.frameOpen ?? 0;
 		return this.config.frameClosed ?? 0;
 	}
 

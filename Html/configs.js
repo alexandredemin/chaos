@@ -80,16 +80,20 @@ const entityConfigs = {
     'door': {
         name: 'door',
         sprite: 'door',
+        spriteLocked: null,
+        framesLocked: null,
         scale: 1.0,
-        displayOrigin: {x: 13, y: 18},
+        displayOrigin: {x:13,y:18},
         features: {
-            direction: 'W',      // 'W' | 'E' | 'N' | 'S'
+            direction: 'W',
             open: false,
+            closeMode: 'auto',
+            lock: null,
             visible: true,
             blocksLOS: true,
             health: 3
         },
-        createFunction: (scene, x, y, visible=true) => DoorEntity.create(scene, x, y, visible)
+        createFunction: (scene,x,y,visible=true) => DoorEntity.create(scene,x,y,visible)
     },
 
 	'monster_generator': {
@@ -141,8 +145,10 @@ const entityConfigs = {
     'chest': {
         name: 'chest',
         sprite: 'chest',
+        spriteLocked: null,
         frameClosed: 0,
         frameOpen: 1,
+        frameLocked: null,
         scale: 1.0,
         originMode: 'base',
         depthOffset: -20,
@@ -151,6 +157,8 @@ const entityConfigs = {
             blocksLOS: false,
             items: [],
             open: false,
+            closeMode: 'manual',
+            lock: null,
             destroyWhenEmpty: false,
             containerType: 'low',
             spillOnOpen: false,
@@ -158,35 +166,51 @@ const entityConfigs = {
             monsterSpawnResolved: false,
             monsterSpawn: null
         },
-        createFunction: (scene, x, y, visible=true) => ContainerEntity.create(scene, x, y, visible, [], 'chest')
+        createFunction: (scene,x,y,visible=true) => ContainerEntity.create(scene,x,y,visible,[],'chest')
     },
 
-	'wardrobe': {
-		name: 'wardrobe',
-		sprite: 'wardrobe',
-		frameClosed: 0,
-		frameOpen: 1,
-		scale: 0.2,
+    'wardrobe': {
+        name: 'wardrobe',
+        sprite: 'wardrobe',
+        spriteLocked: null,
+        frameClosed: 0,
+        frameOpen: 1,
+        frameLocked: null,
+        scale: 0.2,
         originMode: 'base',
-		depthOffset: 0,
-		features: {
-			health: 1,
-			blocksLOS: true,
-			items: [],
-			open: false,
-			destroyWhenEmpty: false,
-			containerType: 'tall',
-			spillOnOpen: true,
-			spilled: false,
+        depthOffset: 0,
+        features: {
+            health: 1,
+            blocksLOS: true,
+            items: [],
+            open: false,
+            closeMode: 'manual',
+            lock: null,
+            destroyWhenEmpty: false,
+            containerType: 'tall',
+            spillOnOpen: true,
+            spilled: false,
             monsterSpawnResolved: false,
             monsterSpawn: null
-		},
-		createFunction: (scene, x, y, visible=true) => ContainerEntity.create(scene, x, y, visible, [], 'wardrobe')
-	},    
+        },
+        createFunction: (scene,x,y,visible=true) => ContainerEntity.create(scene,x,y,visible,[],'wardrobe')
+    },
 };
 
 //---------------------------- Item configs ----------------------------
 const itemConfigs = {
+
+    'key': {
+        id: 'key',
+        name: 'Key',
+        sprite: 'scroll',
+        scale: 0.05,
+        stackOffset: {x:0,y:0},
+        actions: {
+            drop: {title:'Drop',abilityPointCost:0,movePointCost:1,consumeItem:true}
+        }
+    },
+
 	'spell_scroll': {
 		id: 'spell_scroll',
 		name: 'Spell scroll',
