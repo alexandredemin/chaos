@@ -6,6 +6,7 @@ class GameFlowWatchdog
 	static stallTimeoutMs = 8000;
 	static ringSize = 120;
 	static storageKey = 'chaos_game_flow_last_stall';
+	static backgrounded = document.hidden;
 
 	static events = [];
 	static waits = new Map();
@@ -95,7 +96,7 @@ class GameFlowWatchdog
 
 	static check()
 	{
-		if(!this.enabled || this.stallReported || document.hidden) return;
+		if(!this.enabled || this.stallReported || document.hidden || this.backgrounded) return;
 		const now = Date.now();
 		let stalledWait = null;
 		for(const wait of this.waits.values())
@@ -289,7 +290,7 @@ class AsyncGuard
 			{
 				timer = null;
 
-				if(document.hidden) return;
+				if(document.hidden || GameFlowWatchdog.backgrounded) return;
 
 				finish(
 					'timeout',
@@ -304,6 +305,16 @@ class AsyncGuard
 		{
 			if(finished) return;
 			arm();
+		};
+
+		guard.pause = () =>
+		{
+			if(finished) return;
+			if(timer != null)
+			{
+				clearTimeout(timer);
+				timer = null;
+			}
 		};
 
 		guard.cancel = () =>
@@ -330,14 +341,27 @@ class AsyncGuard
 		for(const guard of Array.from(this.active))
 			guard.reset();
 	}
+
+	static pauseAll()
+	{
+		for(const guard of Array.from(this.active))
+			guard.pause();
+	}
 }
 
 
 document.addEventListener('visibilitychange',() =>
 {
-	if(document.hidden) return;
+	if(document.hidden)
+	{
+		GameFlowWatchdog.backgrounded = true;
+		AsyncGuard.pauseAll();
+		return;
+	}
+
 	AsyncGuard.resetAll();
 	GameFlowWatchdog.resetAfterBackground();
+	GameFlowWatchdog.backgrounded = false;
 });
 
 GameFlowWatchdog.setEnabled(GameFlowWatchdog.enabled);
