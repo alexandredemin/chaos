@@ -32,73 +32,100 @@ class MapGenerator {
         this.wallAutotileRules = WALL_AUTOTILE_RULES.slice();
     }
 
-    generate() {
+    generate()
+    {
         const map = this._createEmptyMap();
 
+        this.rooms = [];
         this.bspNodes = [];
 
-        // 1) BSP split
         const rootRect = {
-            x: 1,
-            y: 1,
-            w: this.width - 2,
-            h: this.height - 2
-        }
+            x:1,
+            y:1,
+            w:this.width-2,
+            h:this.height-2
+        };
 
-        const { zones, connections }  = this._buildInitialLayout(rootRect);
+        const {zones,connections} = this._buildInitialLayout(rootRect);
 
-        for (let node of zones) {
-            this._bspSplit(node);
-        }
+        for(let node of zones) this._bspSplit(node);
 
-        // 2) generate rooms
-        this._generateRooms(zones, map)
+        this._generateRooms(zones,map);
+        this._connectRooms(zones,map);
+        this._connectZones(connections,map);
 
-        // 3) generate corridors
-        this._connectRooms(zones, map);
-
-        // 4) connect zones
-        this._connectZones(connections, map);
-
-        // 5) generate branching corridors
         //this._generateBranchingCorridors(map);
 
-        // 6) build tile type map
         const tileTypeMap = this._buildTileTypeMap(map);
-
-        // 7) auto-tile walls
         this._autoTile(map,tileTypeMap);
 
         const doors = this._placeDoors(map,tileTypeMap);
 
-     	// start positions
-		const startPositions = this._generateStartPositions();
+        // Special dead-end rooms are selected before start positions and ordinary content.
+        const specialRooms = this._selectSpecialRooms(doors,4);
 
-		// items
-		const items = this._placeItems(startPositions.concat(doors));
+        const startPositions = this._generateStartPositions();
 
-		// chests
-		const chests = this._placeChests(startPositions.concat(doors, items));
+        const items = this._placeItems(startPositions.concat(doors));
+        const chests = this._placeChests(startPositions.concat(doors,items));
+        const wardrobes = this._placeWardrobes(map,startPositions.concat(doors,items,chests));
 
-		// wardrobes
-		const wardrobes = this._placeWardrobes(map, startPositions.concat(doors, items, chests));
+        // Ordinary locked containers use consumable common keys.
+        const commonLockCount = this._lockRandomContainers(chests,wardrobes);
 
-		// independent guards for rooms with many containers
-		const treasureGuards = this._placeTreasureGuards(map, chests, wardrobes, startPositions, startPositions.concat(doors, items, chests, wardrobes));
-    
+        // Reserved special rooms receive explicit premium content.
+        const specialContent = this._populateSpecialRooms(
+            map,
+            specialRooms,
+            startPositions.concat(doors,items,chests,wardrobes)
+        );
+
+        chests.push(...specialContent.chests);
+        wardrobes.push(...specialContent.wardrobes);
+
+        // Keys are placed only after every lock already exists.
+        const keyChests = this._placeLockKeys(
+            map,
+            specialRooms,
+            commonLockCount,
+            chests,
+            wardrobes,
+            startPositions.concat(doors,items,chests,wardrobes)
+        );
+
+        chests.push(...keyChests);
+
+        // independent guards for rooms with many containers
+        const treasureGuards = this._placeTreasureGuards(
+            map,
+            chests,
+            wardrobes,
+            startPositions,
+            startPositions.concat(doors,items,chests,wardrobes)
+        );
+
         // monster generators
-		const monsterGenerators = this._placeMonsterGenerators(map, startPositions, treasureGuards, startPositions.concat(doors, items, chests, wardrobes, treasureGuards));
+        const monsterGenerators = this._placeMonsterGenerators(
+            map,
+            startPositions,
+            treasureGuards,
+            startPositions.concat(doors,items,chests,wardrobes,treasureGuards)
+        );
 
         // independent creatures freely roaming through the dungeon
-		const roamingCreatures = this._placeRoamingCreatures(map, startPositions, startPositions.concat(doors, items, chests, wardrobes, treasureGuards, monsterGenerators));
+        const roamingCreatures = this._placeRoamingCreatures(
+            map,
+            startPositions,
+            startPositions.concat(doors,items,chests,wardrobes,treasureGuards,monsterGenerators)
+        );
 
-        const objects = startPositions.concat(doors, items, chests, wardrobes, treasureGuards, monsterGenerators, roamingCreatures);
+        const objects = startPositions.concat(doors,items,chests,wardrobes,treasureGuards,monsterGenerators,roamingCreatures);
 
         return {
-            width: this.width,
-            height: this.height,
-            ground: map.ground,
-            walls: map.walls,
+            width:this.width,
+            height:this.height,
+            ground:map.ground,
+            walls:map.walls,
             objects
         };
     }
@@ -1007,271 +1034,771 @@ class MapGenerator {
         }
     }
 
-    //--- place items ---
-	_placeItems(occupiedObjects = [])
+	//--- special rooms / locked content ---
+	_getObjectProperty(obj,name)
 	{
-		const objects = [];
-		const itemNames = Object.keys(itemConfigs);
-		if(itemNames.length <= 0) return objects;
+		if(obj == null || !Array.isArray(obj.properties)) return null;
+		const prop = obj.properties.find(p => p && p.name === name);
+		return prop != null ? prop.value : null;
+	}
 
-		const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
-		if(candidateRooms.length <= 0) return objects;
-		const occupied = new Set();
-		for(let i = 0; i < occupiedObjects.length; i++)
+	_setObjectProperty(obj,name,value,type=null)
+	{
+		if(!Array.isArray(obj.properties)) obj.properties = [];
+
+		let prop = obj.properties.find(p => p && p.name === name);
+		if(prop == null)
 		{
-			const obj = occupiedObjects[i];
-			const ox = Math.floor(obj.x / 16);
-			const oy = Math.floor(obj.y / 16);
-			occupied.add(ox + ':' + oy);
+			prop = {name:name,value:value};
+			if(type != null) prop.type = type;
+			obj.properties.push(prop);
+			return;
 		}
-		for(let r = 0; r < candidateRooms.length; r++)
-		{
-			const room = candidateRooms[r];
 
-			// Only 70% chance to place items in a room
-			if(randomInt(1, 100) > 70) continue;
-			const itemCount = randomInt(1, 2);
-			let placed = 0;
-			let attempts = 0;
-			while(placed < itemCount && attempts < 20)
+		prop.value = value;
+		if(type != null) prop.type = type;
+	}
+
+	_getRoomNode(room)
+	{
+		return this.bspNodes.find(n => n.room === room) || null;
+	}
+
+	_isSpecialRoom(room)
+	{
+		const node = this._getRoomNode(room);
+		return node != null && (node.roomType === 'treasury' || node.roomType === 'library');
+	}
+
+	_getRoomAtMap(x,y)
+	{
+		for(const room of this.rooms)
+			if(x >= room.x && x < room.x+room.w && y >= room.y && y < room.y+room.h) return room;
+		return null;
+	}
+
+	_getObjectRoom(obj)
+	{
+		if(obj == null || obj.x == null || obj.y == null) return null;
+		return this._getRoomAtMap(Math.floor(obj.x/16),Math.floor(obj.y/16));
+	}
+
+	_getDoorRoom(door)
+	{
+		const x = Math.floor(door.x/16);
+		const y = Math.floor(door.y/16);
+		const dir = this._getObjectProperty(door,'direction');
+
+		if(dir === 'W') return this._getRoomAtMap(x+1,y);
+		if(dir === 'E') return this._getRoomAtMap(x-1,y);
+		if(dir === 'N') return this._getRoomAtMap(x,y+1);
+		if(dir === 'S') return this._getRoomAtMap(x,y-1);
+
+		return null;
+	}
+
+	_getRoomDoors(room,doors)
+	{
+		return doors.filter(door => this._getDoorRoom(door) === room);
+	}
+
+	_selectSpecialRooms(doors,startCount=4)
+	{
+		const result = [];
+		const normalNodes = this.bspNodes.filter(n => n.room && !n.reserved);
+		const maxSpecial = Math.max(0,normalNodes.length-startCount);
+		if(maxSpecial <= 0) return result;
+
+		let candidates = normalNodes.map(node =>
+		{
+			const roomDoors = this._getRoomDoors(node.room,doors);
+			return {node:node,room:node.room,doors:roomDoors};
+		}).filter(c => c.doors.length === 1 && c.room.w*c.room.h >= 16);
+
+		if(candidates.length <= 0) return result;
+
+		for(let i=candidates.length-1;i>0;i--)
+		{
+			const j = randomInt(0,i);
+			const tmp = candidates[i]; candidates[i] = candidates[j]; candidates[j] = tmp;
+		}
+
+		const desired = Math.max(1,Math.floor(normalNodes.length/10));
+		const count = Math.min(3,maxSpecial,candidates.length,desired);
+
+		let types = [];
+		if(count === 1) types.push(Math.random() < 0.65 ? 'treasury' : 'library');
+		else
+		{
+			types.push('treasury','library');
+			while(types.length < count) types.push(Math.random() < 0.65 ? 'treasury' : 'library');
+		}
+
+		for(let i=0;i<count;i++)
+		{
+			const candidate = candidates[i];
+			const type = types[i];
+			const keyId = 'special_room_'+(i+1)+'_'+candidate.room.x+'_'+candidate.room.y;
+
+			candidate.node.reserved = true;
+			candidate.node.roomType = type;
+
+			for(const door of candidate.doors)
 			{
-				attempts++;
-				const x = randomInt(room.x, room.x + room.w - 1);
-				const y = randomInt(room.y, room.y + room.h - 1);
-				const key = x + ':' + y;
-				if(occupied.has(key)) continue;
-				const itemName = itemNames[randomInt(0, itemNames.length - 1)];
-				objects.push({
-					type: "entity",
-					name: "item",
-					x: x * 16,
-					y: y * 16,
-					properties: [],
-					items: [
-						createItemData(itemName, {})
-					]
+				this._setObjectProperty(door,'lock',{
+					locked:true,
+					type:'key',
+					keyId:keyId,
+					consumeKey:false
 				});
-				occupied.add(key);
-				placed++;
+			}
+
+			result.push({
+				node:candidate.node,
+				room:candidate.room,
+				doors:candidate.doors,
+				type:type,
+				keyId:keyId,
+				keyName:type === 'library' ? 'Library key' : 'Treasury key'
+			});
+		}
+
+		return result;
+	}
+
+	_getNormalLootItemNames()
+	{
+		return Object.keys(itemConfigs).filter(name => name !== 'key');
+	}
+
+	_getPremiumPotionNames()
+	{
+		const preferred = ['strength_potion','defense_potion','speed_potion','invisible_potion','mana_potion'];
+		const result = preferred.filter(name => itemConfigs[name] != null);
+		return result.length > 0 ? result : this._getNormalLootItemNames().filter(name => name !== 'spell_scroll');
+	}
+
+	_chooseSpellForLootTier(tier)
+	{
+		let spells = Object.keys(spellConfigs).filter(id =>
+		{
+			const cost = spellConfigs[id]?.cost || 0;
+			if(tier === 'normal') return cost <= 4;
+			if(tier === 'rare') return cost >= 5 && cost <= 7;
+			if(tier === 'legendary') return cost >= 8;
+			return true;
+		});
+
+		if(spells.length <= 0)
+		{
+			spells = Object.keys(spellConfigs);
+			if(tier === 'normal') spells = spells.filter(id => id !== 'demon');
+		}
+
+		return spells.length > 0 ? spells[randomInt(0,spells.length-1)] : null;
+	}
+
+	_createSpellScroll(source='normal')
+	{
+		let tier = 'normal';
+
+		if(source === 'locked')
+			tier = Math.random() < 0.25 ? 'legendary' : 'rare';
+		else if(source === 'special')
+			tier = Math.random() < 0.45 ? 'legendary' : 'rare';
+
+		const spell = this._chooseSpellForLootTier(tier);
+		if(spell == null) return createItemData('spell_scroll',{});
+
+		const cost = Math.max(1,spellConfigs[spell]?.cost || 1);
+		let points = source === 'normal' ? randomInt(8,14) : source === 'locked' ? randomInt(10,18) : randomInt(12,20);
+		let amount = Math.max(1,Math.round(points/cost));
+
+		if(cost >= 8) amount = 1;
+		if(amount > 12) amount = 12;
+
+		return createItemData('spell_scroll',{spell:spell,amount:amount});
+	}
+
+	_createLootItem(tier='normal')
+	{
+		if(tier === 'library')
+		{
+			if(Math.random() < 0.75) return this._createSpellScroll('special');
+
+			const pool = ['mana_potion','invisible_potion'].filter(name => itemConfigs[name] != null);
+			if(pool.length > 0) return createItemData(pool[randomInt(0,pool.length-1)],{});
+			return this._createSpellScroll('special');
+		}
+
+		if(tier === 'treasury')
+		{
+			if(Math.random() < 0.35) return this._createSpellScroll('special');
+
+			const pool = this._getPremiumPotionNames();
+			return createItemData(pool[randomInt(0,pool.length-1)],{});
+		}
+
+		if(tier === 'locked')
+		{
+			if(Math.random() < 0.45) return this._createSpellScroll('locked');
+
+			const pool = this._getPremiumPotionNames();
+			return createItemData(pool[randomInt(0,pool.length-1)],{});
+		}
+
+		const pool = this._getNormalLootItemNames();
+		if(pool.length <= 0) return null;
+
+		const itemName = pool[randomInt(0,pool.length-1)];
+		if(itemName === 'spell_scroll') return this._createSpellScroll('normal');
+
+		return createItemData(itemName,{});
+	}
+
+	_createLoot(count,tier='normal')
+	{
+		const result = [];
+		for(let i=0;i<count;i++)
+		{
+			const item = this._createLootItem(tier);
+			if(item != null) result.push(item);
+		}
+		return result;
+	}
+
+	_getContainerSpawnConfig(name)
+	{
+		if(name === 'wardrobe')
+		{
+			return {
+				probability:0.30,
+				minCount:1,
+				maxCount:2,
+				monsterTypes:['rat','bat'],
+				sameTypePerBatch:true,
+				factionId:'dungeon_creatures',
+				minSpawnRadius:1,
+				spawnRadius:2,
+				allowPassableEntityCells:true,
+				behavior:{
+					type:'roam',
+					minGoalDistance:8,
+					maxGoalDistance:24,
+					goalTolerance:1,
+					stuckTurnLimit:3,
+					aggroRadius:6,
+					pursuitRadius:12,
+					pursuitCooldownTurns:1,
+					targetAggression:1,
+					travelAggression:3,
+					combatAggression:6
+				},
+				spawnEffect:{
+					type:'emerge',
+					initialScale:0.18,
+					intermediateScale:0.45,
+					initialAlpha:0.35,
+					sourceOffsetX:0,
+					sourceOffsetY:4,
+					emergeLift:2,
+					emergeDuration:150,
+					moveDuration:320,
+					staggerDelay:100,
+					maxStaggerDelay:400,
+					playMoveAnimation:true
+				}
+			};
+		}
+
+		return {
+			probability:0.30,
+			minCount:1,
+			maxCount:2,
+			monsterTypes:['rat'],
+			sameTypePerBatch:true,
+			factionId:'dungeon_creatures',
+			minSpawnRadius:1,
+			spawnRadius:2,
+			allowPassableEntityCells:true,
+			behavior:{
+				type:'roam',
+				minGoalDistance:8,
+				maxGoalDistance:24,
+				goalTolerance:1,
+				stuckTurnLimit:3,
+				aggroRadius:6,
+				pursuitRadius:12,
+				pursuitCooldownTurns:1,
+				targetAggression:1,
+				travelAggression:3,
+				combatAggression:6
+			},
+			spawnEffect:{
+				type:'burst',
+				initialScale:0.25,
+				launchScale:0.72,
+				overshootScale:1.10,
+				sourceOffsetX:0,
+				sourceOffsetY:-2,
+				jumpHeight:7,
+				launchDuration:110,
+				moveDuration:240,
+				settleDuration:90,
+				staggerDelay:90,
+				maxStaggerDelay:360,
+				playMoveAnimation:true
+			}
+		};
+	}
+
+	_createContainerObject(name,x,y,items=[],lock=null)
+	{
+		const properties = [
+			{name:'monsterSpawnResolved',value:false},
+			{name:'monsterSpawn',value:this._getContainerSpawnConfig(name)}
+		];
+
+		if(lock != null) properties.push({name:'lock',value:clone(lock)});
+
+		return {
+			type:'entity',
+			name:name,
+			x:x*16,
+			y:y*16,
+			properties:properties,
+			items:items
+		};
+	}
+
+	_collectOccupied(objects=[])
+	{
+		const result = new Set();
+
+		for(const obj of objects)
+		{
+			if(obj == null || obj.x == null || obj.y == null) continue;
+			result.add(Math.floor(obj.x/16)+':'+Math.floor(obj.y/16));
+		}
+
+		return result;
+	}
+
+	_findFreeRoomCell(map,room,occupied)
+	{
+		for(let attempt=0;attempt<60;attempt++)
+		{
+			const x = randomInt(room.x,room.x+room.w-1);
+			const y = randomInt(room.y,room.y+room.h-1);
+			const key = x+':'+y;
+
+			if(occupied.has(key)) continue;
+			if(map.walls[y][x] !== null) continue;
+
+			return {x:x,y:y};
+		}
+
+		for(let y=room.y;y<room.y+room.h;y++)
+			for(let x=room.x;x<room.x+room.w;x++)
+			{
+				const key = x+':'+y;
+				if(!occupied.has(key) && map.walls[y][x] === null) return {x:x,y:y};
+			}
+
+		return null;
+	}
+
+	_findWardrobeCell(map,room,occupied)
+	{
+		const y = room.y;
+		const minX = room.x+1;
+		const maxX = room.x+room.w-2;
+		if(maxX < minX) return null;
+
+		for(let attempt=0;attempt<40;attempt++)
+		{
+			const x = randomInt(minX,maxX);
+			if(occupied.has(x+':'+y)) continue;
+			if(occupied.has(x+':'+(y-1))) continue;
+			if(map.walls[y][x] !== null) continue;
+
+			return {x:x,y:y};
+		}
+
+		return null;
+	}
+
+	_populateSpecialRooms(map,specialRooms,occupiedObjects=[])
+	{
+		const result = {chests:[],wardrobes:[]};
+		const occupied = this._collectOccupied(occupiedObjects);
+
+		for(const special of specialRooms)
+		{
+			if(special.type === 'treasury')
+			{
+				const count = randomInt(3,5);
+
+				for(let i=0;i<count;i++)
+				{
+					const cell = this._findFreeRoomCell(map,special.room,occupied);
+					if(cell == null) break;
+
+					const chest = this._createContainerObject(
+						'chest',
+						cell.x,
+						cell.y,
+						this._createLoot(randomInt(3,5),'treasury')
+					);
+
+					result.chests.push(chest);
+					occupied.add(cell.x+':'+cell.y);
+				}
+			}
+			else
+			{
+				const maxWardrobes = Math.max(1,special.room.w-2);
+				const count = Math.min(randomInt(3,5),maxWardrobes);
+
+				for(let i=0;i<count;i++)
+				{
+					const cell = this._findWardrobeCell(map,special.room,occupied);
+					if(cell == null) break;
+
+					const wardrobe = this._createContainerObject(
+						'wardrobe',
+						cell.x,
+						cell.y,
+						this._createLoot(randomInt(2,4),'library')
+					);
+
+					result.wardrobes.push(wardrobe);
+					occupied.add(cell.x+':'+cell.y);
+				}
 			}
 		}
-		return objects;
+
+		return result;
 	}
+
+	_lockRandomContainers(chests=[],wardrobes=[])
+	{
+		const containers = chests.concat(wardrobes);
+		if(containers.length < 4) return 0;
+
+		for(let i=containers.length-1;i>0;i--)
+		{
+			const j = randomInt(0,i);
+			const tmp = containers[i]; containers[i] = containers[j]; containers[j] = tmp;
+		}
+
+		const count = Math.min(containers.length,Math.max(1,Math.round(containers.length*0.12)));
+
+		for(let i=0;i<count;i++)
+		{
+			const container = containers[i];
+
+			this._setObjectProperty(container,'lock',{
+				locked:true,
+				type:'key',
+				keyId:'common',
+				consumeKey:true
+			});
+
+			if(!Array.isArray(container.items)) container.items = [];
+
+			const premiumItem = this._createLootItem('locked');
+			if(premiumItem != null) container.items.push(premiumItem);
+		}
+
+		return count;
+	}
+
+	_isObjectLocked(obj)
+	{
+		const lock = this._getObjectProperty(obj,'lock');
+		return lock != null && lock.locked === true;
+	}
+
+	_getKeyContainerCandidates(chests=[],wardrobes=[])
+	{
+		return chests.concat(wardrobes).filter(container =>
+		{
+			if(this._isObjectLocked(container)) return false;
+
+			const room = this._getObjectRoom(container);
+			if(room == null) return false;
+
+			const node = this._getRoomNode(room);
+			return node != null && !node.reserved;
+		});
+	}
+
+	_createFallbackKeyChest(map,targetRoom,occupied)
+	{
+		let rooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
+		if(rooms.length <= 0) return null;
+
+		if(targetRoom != null)
+		{
+			const target = this._roomCenter(targetRoom);
+
+			rooms.sort((a,b) =>
+			{
+				const ca = this._roomCenter(a);
+				const cb = this._roomCenter(b);
+				const da = Math.abs(ca.x-target.x)+Math.abs(ca.y-target.y);
+				const db = Math.abs(cb.x-target.x)+Math.abs(cb.y-target.y);
+				return db-da;
+			});
+		}
+
+		for(const room of rooms)
+		{
+			const cell = this._findFreeRoomCell(map,room,occupied);
+			if(cell == null) continue;
+
+			occupied.add(cell.x+':'+cell.y);
+
+			return this._createContainerObject(
+				'chest',
+				cell.x,
+				cell.y,
+				this._createLoot(randomInt(1,2),'normal')
+			);
+		}
+
+		return null;
+	}
+
+	_placeLockKeys(map,specialRooms,commonLockCount,chests=[],wardrobes=[],occupiedObjects=[])
+	{
+		const extraChests = [];
+		const occupied = this._collectOccupied(occupiedObjects);
+		const usedUniqueContainers = new Set();
+
+		const getCandidates = () => this._getKeyContainerCandidates(chests.concat(extraChests),wardrobes);
+
+		for(const special of specialRooms)
+		{
+			let candidates = getCandidates();
+
+			if(candidates.length <= 0)
+			{
+				const chest = this._createFallbackKeyChest(map,special.room,occupied);
+				if(chest != null)
+				{
+					extraChests.push(chest);
+					candidates = [chest];
+				}
+			}
+
+			if(candidates.length <= 0) continue;
+
+			let unused = candidates.filter(container => !usedUniqueContainers.has(container));
+			if(unused.length <= 0) unused = candidates;
+
+			const targetCenter = this._roomCenter(special.room);
+
+			unused.sort((a,b) =>
+			{
+				const ra = this._getObjectRoom(a);
+				const rb = this._getObjectRoom(b);
+				const ca = ra != null ? this._roomCenter(ra) : targetCenter;
+				const cb = rb != null ? this._roomCenter(rb) : targetCenter;
+
+				const da = Math.abs(ca.x-targetCenter.x)+Math.abs(ca.y-targetCenter.y);
+				const db = Math.abs(cb.x-targetCenter.x)+Math.abs(cb.y-targetCenter.y);
+
+				return db-da;
+			});
+
+			const topCount = Math.max(1,Math.ceil(unused.length*0.30));
+			const container = unused[randomInt(0,topCount-1)];
+
+			if(!Array.isArray(container.items)) container.items = [];
+			container.items.push(createItemData('key',{
+				keyId:special.keyId,
+				name:special.keyName
+			}));
+
+			usedUniqueContainers.add(container);
+		}
+
+		for(let i=0;i<commonLockCount;i++)
+		{
+			let candidates = getCandidates();
+
+			if(candidates.length <= 0)
+			{
+				const chest = this._createFallbackKeyChest(map,null,occupied);
+				if(chest != null)
+				{
+					extraChests.push(chest);
+					candidates = [chest];
+				}
+			}
+
+			if(candidates.length <= 0) break;
+
+			const container = candidates[randomInt(0,candidates.length-1)];
+			if(!Array.isArray(container.items)) container.items = [];
+
+			container.items.push(createItemData('key',{
+				keyId:'common',
+				name:'Common key'
+			}));
+		}
+
+		return extraChests;
+	}
+
+    //--- place items ---
+    _placeItems(occupiedObjects=[])
+    {
+        const objects = [];
+        const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
+        if(candidateRooms.length <= 0) return objects;
+
+        const occupied = this._collectOccupied(occupiedObjects);
+
+        for(const room of candidateRooms)
+        {
+            if(randomInt(1,100) > 70) continue;
+
+            const itemCount = randomInt(1,2);
+            let placed = 0;
+            let attempts = 0;
+
+            while(placed < itemCount && attempts < 20)
+            {
+                attempts++;
+
+                const x = randomInt(room.x,room.x+room.w-1);
+                const y = randomInt(room.y,room.y+room.h-1);
+                const key = x+':'+y;
+
+                if(occupied.has(key)) continue;
+
+                const item = this._createLootItem('normal');
+                if(item == null) continue;
+
+                objects.push({
+                    type:'entity',
+                    name:'item',
+                    x:x*16,
+                    y:y*16,
+                    properties:[],
+                    items:[item]
+                });
+
+                occupied.add(key);
+                placed++;
+            }
+        }
+
+        return objects;
+    }
 
     //--- place chests---
-	_placeChests(occupiedObjects = [])
-	{
-		const objects = [];
-		const itemNames = Object.keys(itemConfigs);
-		if(itemNames.length <= 0) return objects;
+    _placeChests(occupiedObjects=[])
+    {
+        const objects = [];
+        const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
+        if(candidateRooms.length <= 0) return objects;
 
-		const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
-		if(candidateRooms.length <= 0) return objects;
-		const occupied = new Set();
-		for(let i = 0; i < occupiedObjects.length; i++)
-		{
-			const obj = occupiedObjects[i];
-			const ox = Math.floor(obj.x / 16);
-			const oy = Math.floor(obj.y / 16);
-			occupied.add(ox + ':' + oy);
-		}
-		for(let r = 0; r < candidateRooms.length; r++)
-		{
-			const room = candidateRooms[r];
+        const occupied = this._collectOccupied(occupiedObjects);
 
-			// Only 30% chance to place a chest in a room
-			if(randomInt(1, 100) > 30) continue;
-			let attempts = 0;
-			while(attempts < 20)
-			{
-				attempts++;
-				const x = randomInt(room.x, room.x + room.w - 1);
-				const y = randomInt(room.y, room.y + room.h - 1);
-				const key = x + ':' + y;
-				if(occupied.has(key)) continue;
-				const chestItemCount = randomInt(1, 5);
-				let chestItems = [];
-				for(let i = 0; i < chestItemCount; i++)
-				{
-					const itemName = itemNames[randomInt(0, itemNames.length - 1)];
-					chestItems.push(createItemData(itemName, {}));
-				}
-				objects.push({
-					type: "entity",
-					name: "chest",
-					x: x * 16,
-					y: y * 16,
-					properties: [
-                        {
-                            name: "monsterSpawnResolved",
-                            value: false
-                        },
-                        {
-                            name: "monsterSpawn",
-                            value: {
-                                probability: 0.30,
-                                minCount: 1,
-                                maxCount: 2,
-                                monsterTypes: ["rat"],
-                                sameTypePerBatch: true,
-                                factionId: 'dungeon_creatures',
-                                minSpawnRadius: 1,
-                                spawnRadius: 2,
-                                allowPassableEntityCells: true,
-                                behavior: {
-                                    type: "roam",
-                                    minGoalDistance: 8,
-                                    maxGoalDistance: 24,
-                                    goalTolerance: 1,
-                                    stuckTurnLimit: 3,
-                                    aggroRadius: 6,
-                                    pursuitRadius: 12,
-                                    pursuitCooldownTurns: 1,
-                                    targetAggression: 1,
-                                    travelAggression: 3,
-                                    combatAggression: 6
-                                },
-                                spawnEffect: {
-                                    type: "burst",
-                                    initialScale: 0.25,
-                                    launchScale: 0.72,
-                                    overshootScale: 1.10,
-                                    sourceOffsetX: 0,
-                                    sourceOffsetY: -2,
-                                    jumpHeight: 7,
-                                    launchDuration: 110,
-                                    moveDuration: 240,
-                                    settleDuration: 90,
-                                    staggerDelay: 90,
-                                    maxStaggerDelay: 360,
-                                    playMoveAnimation: true
-                                }
-                            }
-                        }
-                    ],
-					items: chestItems
-				});
-				occupied.add(key);
-				break;
-			}
-		}
-		return objects;
-	}
+        for(const room of candidateRooms)
+        {
+            if(randomInt(1,100) > 30) continue;
 
-	_placeWardrobes(map, occupiedObjects = [])
-	{
-		const objects = [];
-		const itemNames = Object.keys(itemConfigs);
-		if(itemNames.length <= 0) return objects;
+            let attempts = 0;
 
-		const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
-		if(candidateRooms.length <= 0) return objects;
-		const occupied = new Set();
-		for(let i = 0; i < occupiedObjects.length; i++)
-		{
-			const obj = occupiedObjects[i];
-			const ox = Math.floor(obj.x / 16);
-			const oy = Math.floor(obj.y / 16);
-			occupied.add(ox + ':' + oy);
-		}
-		for(let r = 0; r < candidateRooms.length; r++)
-		{
-			const room = candidateRooms[r];
-			// Only 20% chance to place wardrobes in a room
-			if(randomInt(1, 100) > 20) continue;
-			const y = room.y;
-			const minX = room.x + 1;
-			const maxX = room.x + room.w - 2;
-			if(maxX < minX) continue;
-			const maxWardrobes = Math.min(3, maxX - minX + 1);
-			const wardrobeCount = randomInt(1, maxWardrobes);
-			let placed = 0;
-			let attempts = 0;
-			while(placed < wardrobeCount && attempts < 40)
-			{
-				attempts++;
-				const x = randomInt(minX, maxX);
-				const key = x + ':' + y;
-				if(occupied.has(key)) continue;
-				// Do not place a wardrobe if there is already an occupied cell above it (to avoid blocking doors)
-				if(occupied.has(x + ':' + (y - 1))) continue;
-				if(map != null && map.walls != null)
-				{
-					if(y < 0 || y >= map.walls.length) continue;
-					if(x < 0 || x >= map.walls[y].length) continue;
-					if(map.walls[y][x] !== null) continue;
-				}
-				const itemCount = randomInt(1, 4);
-				let wardrobeItems = [];
-				for(let i = 0; i < itemCount; i++)
-				{
-					const itemName = itemNames[randomInt(0, itemNames.length - 1)];
+            while(attempts < 20)
+            {
+                attempts++;
 
-					wardrobeItems.push({
-						configName: itemName,
-						params: {}
-					});
-				}
-				objects.push({
-					type: "entity",
-					name: "wardrobe",
-					x: x * 16,
-					y: y * 16,
-					properties: [
-                        {
-                            name: "monsterSpawnResolved",
-                            value: false
-                        },
-                        {
-                            name: "monsterSpawn",
-                            value: {
-                                probability: 0.30,
-                                minCount: 1,
-                                maxCount: 2,
-                                monsterTypes: ["rat", "bat"],
-                                sameTypePerBatch: true,
-                                factionId: 'dungeon_creatures',
-                                minSpawnRadius: 1,
-                                spawnRadius: 2,
-                                allowPassableEntityCells: true,
-                                behavior: {
-                                    type: "roam",
-                                    minGoalDistance: 8,
-                                    maxGoalDistance: 24,
-                                    goalTolerance: 1,
-                                    stuckTurnLimit: 3,
-                                    aggroRadius: 6,
-                                    pursuitRadius: 12,
-                                    pursuitCooldownTurns: 1,
-                                    targetAggression: 1,
-                                    travelAggression: 3,
-                                    combatAggression: 6
-                                },
-                                spawnEffect: {
-                                    type: "emerge",
-                                    initialScale: 0.18,
-                                    intermediateScale: 0.45,
-                                    initialAlpha: 0.35,
-                                    sourceOffsetX: 0,
-                                    sourceOffsetY: 4,
-                                    emergeLift: 2,
-                                    emergeDuration: 150,
-                                    moveDuration: 320,
-                                    staggerDelay: 100,
-                                    maxStaggerDelay: 400,
-                                    playMoveAnimation: true
-                                }
-                            }
-                        }
-                    ],
-					items: wardrobeItems
-				});
-				occupied.add(key);
-				placed++;
-			}
-		}
-		return objects;
-	}
+                const x = randomInt(room.x,room.x+room.w-1);
+                const y = randomInt(room.y,room.y+room.h-1);
+                const key = x+':'+y;
+
+                if(occupied.has(key)) continue;
+
+                objects.push(
+                    this._createContainerObject(
+                        'chest',
+                        x,
+                        y,
+                        this._createLoot(randomInt(1,5),'normal')
+                    )
+                );
+
+                occupied.add(key);
+                break;
+            }
+        }
+
+        return objects;
+    }
+
+    _placeWardrobes(map,occupiedObjects=[])
+    {
+        const objects = [];
+        const candidateRooms = this.bspNodes.filter(n => n.room && !n.reserved).map(n => n.room);
+        if(candidateRooms.length <= 0) return objects;
+
+        const occupied = this._collectOccupied(occupiedObjects);
+
+        for(const room of candidateRooms)
+        {
+            if(randomInt(1,100) > 20) continue;
+
+            const y = room.y;
+            const minX = room.x+1;
+            const maxX = room.x+room.w-2;
+
+            if(maxX < minX) continue;
+
+            const maxWardrobes = Math.min(3,maxX-minX+1);
+            const wardrobeCount = randomInt(1,maxWardrobes);
+
+            let placed = 0;
+            let attempts = 0;
+
+            while(placed < wardrobeCount && attempts < 40)
+            {
+                attempts++;
+
+                const x = randomInt(minX,maxX);
+                const key = x+':'+y;
+
+                if(occupied.has(key)) continue;
+                if(occupied.has(x+':'+(y-1))) continue;
+
+                if(map != null && map.walls != null)
+                {
+                    if(y < 0 || y >= map.walls.length) continue;
+                    if(x < 0 || x >= map.walls[y].length) continue;
+                    if(map.walls[y][x] !== null) continue;
+                }
+
+                objects.push(
+                    this._createContainerObject(
+                        'wardrobe',
+                        x,
+                        y,
+                        this._createLoot(randomInt(1,4),'normal')
+                    )
+                );
+
+                occupied.add(key);
+                placed++;
+            }
+        }
+
+        return objects;
+    }
 
     _placeTreasureGuards(map, chests=[], wardrobes=[], startPositions=[], occupiedObjects=[])
 	{
