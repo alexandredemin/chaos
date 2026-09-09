@@ -95,9 +95,8 @@ class GameFlowWatchdog
 
 	static check()
 	{
-		if(!this.enabled || this.stallReported) return;
+		if(!this.enabled || this.stallReported || document.hidden) return;
 		const now = Date.now();
-
 		let stalledWait = null;
 		for(const wait of this.waits.values())
 		{
@@ -107,13 +106,10 @@ class GameFlowWatchdog
 				break;
 			}
 		}
-
 		const phaseStalled = this.activePhase != null && now-this.lastProgressAt >= this.stallTimeoutMs;
 		if(stalledWait == null && !phaseStalled) return;
-
 		this.stallReported = true;
 		const snapshot = this.buildSnapshot(stalledWait != null ? 'async_wait_timeout' : 'phase_no_progress',stalledWait);
-
 		try
 		{
 			localStorage.setItem(this.storageKey,JSON.stringify(snapshot));
@@ -122,8 +118,22 @@ class GameFlowWatchdog
 		{
 			console.warn('GameFlowWatchdog: unable to save stall snapshot.',error);
 		}
-
 		console.error('GAME FLOW STALL',snapshot);
+	}
+
+	static resetAfterBackground()
+	{
+		if(!this.enabled) return;
+		const now = Date.now();
+		this.lastProgressAt = now;
+		this.stallReported = false;
+		if(this.activePhase != null) this.activePhase.startedAt = now;
+		for(const wait of this.waits.values())
+			wait.startedAt = now;
+		this.push('page_visible',{
+			waits:this.waits.size,
+			phase:this.activePhase ? this.activePhase.name : null
+		});
 	}
 
 	static buildSnapshot(reason, stalledWait=null)
@@ -235,6 +245,7 @@ class AsyncGuard
 {
 	static enabled = true;
 	static defaultTimeoutMs = 5000;
+	static active = new Set();
 
 	static wrap(label, callback, options={})
 	{
@@ -247,11 +258,14 @@ class AsyncGuard
 		{
 			if(finished) return false;
 			finished = true;
+
 			if(timer != null) clearTimeout(timer);
+			this.active.delete(guard);
 
 			if(source === 'timeout')
 			{
 				GameFlowWatchdog.push('async_timeout',{label:label,data:options.data || null});
+
 				if(typeof options.onTimeout === 'function')
 				{
 					try {options.onTimeout();}
@@ -261,22 +275,69 @@ class AsyncGuard
 
 			GameFlowWatchdog.done(waitId,{source:source});
 			if(typeof callback === 'function') callback(...args);
+
 			return true;
 		};
 
-		if(this.enabled && timeoutMs > 0)
-			timer = setTimeout(() => finish('timeout',Array.isArray(options.timeoutArgs) ? options.timeoutArgs : []),timeoutMs);
+		const arm = () =>
+		{
+			if(finished || !this.enabled || timeoutMs <= 0) return;
 
-		const guarded = (...args) => finish('callback',args);
-		guarded.cancel = () =>
+			if(timer != null) clearTimeout(timer);
+
+			timer = setTimeout(() =>
+			{
+				timer = null;
+
+				if(document.hidden) return;
+
+				finish(
+					'timeout',
+					Array.isArray(options.timeoutArgs) ? options.timeoutArgs : []
+				);
+			},timeoutMs);
+		};
+
+		const guard = (...args) => finish('callback',args);
+
+		guard.reset = () =>
 		{
 			if(finished) return;
+			arm();
+		};
+
+		guard.cancel = () =>
+		{
+			if(finished) return;
+
 			finished = true;
 			if(timer != null) clearTimeout(timer);
+
+			this.active.delete(guard);
 			GameFlowWatchdog.done(waitId,{source:'cancel'});
 		};
-		return guarded;
+
+		this.active.add(guard);
+		arm();
+
+		return guard;
+	}
+
+	static resetAll()
+	{
+		if(!this.enabled) return;
+
+		for(const guard of Array.from(this.active))
+			guard.reset();
 	}
 }
+
+
+document.addEventListener('visibilitychange',() =>
+{
+	if(document.hidden) return;
+	AsyncGuard.resetAll();
+	GameFlowWatchdog.resetAfterBackground();
+});
 
 GameFlowWatchdog.setEnabled(GameFlowWatchdog.enabled);
