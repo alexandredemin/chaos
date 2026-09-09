@@ -1223,11 +1223,26 @@ class ContainerEntity extends ItemEntity
 		return this.config.frameClosed ?? 0;
 	}
 
+	getVisualDescriptor(state=null)
+	{
+		if(state == null) state = this.getVisualState();
+
+		return {
+			texture:this.getTextureKeyForState(state),
+			frame:this.getFrameForState(state)
+		};
+	}
+
+	getTransitionDepthForState(state)
+	{
+		if(this.features.containerType === 'tall' && state === 'open') return this.depth+1.0;
+		return this.depth+0.01;
+	}
+
 	updateSprite()
 	{
-		const textureKey = this.getTextureKeyForState(this.features.open);
-		const frame = this.getFrameForState(this.features.open);
-		this.setTexture(textureKey, frame);
+		const visual = this.getVisualDescriptor();
+		this.setTexture(visual.texture,visual.frame);
 		this.setScale(this.config.scale || 1.0);
 		this.setDepthFromBottom();
 	}
@@ -1235,19 +1250,75 @@ class ContainerEntity extends ItemEntity
 	canAccessItems(unit)
 	{
 		if(unit == null) return false;
-		if(this.features.open !== true) return false;
-
-		if(this.features.containerType === 'low')
-		{
-			return unit.mapX === this.mapX && unit.mapY === this.mapY;
-		}
-
+		if(this.features.open !== true || LockSystem.isLocked(this)) return false;
+		if(this.features.containerType === 'low') return unit.mapX === this.mapX && unit.mapY === this.mapY;
 		return false;
 	}
 
 	canStepOn(unit)
 	{
 		return this.features.containerType !== 'tall';
+	}
+
+	open()
+	{
+		if(this.features.open) return false;
+		this.features.open = true;
+		this.updateSprite();
+		return true;
+	}
+
+	close(force=false)
+	{
+		if(!this.features.open) return false;
+		if(!force && !OpenableSystem.canClose(this)) return false;
+		this.features.open = false;
+		this.updateSprite();
+		return true;
+	}
+
+	openForUnit(unit,onComplete=null)
+	{
+		if(this.features.open)
+		{
+			if(onComplete != null) onComplete(true,null);
+			return true;
+		}
+		if(this._unlocking === true)
+		{
+			if(onComplete != null) onComplete(false,'busy');
+			return false;
+		}
+
+		const finishOpen = () =>
+		{
+			playContainerToggleEffect(this,true,() =>
+			{
+				if(onComplete != null) onComplete(true,null);
+			});
+		};
+
+		if(!LockSystem.isLocked(this))
+		{
+			finishOpen();
+			return null;
+		}
+		const plan = LockSystem.prepareUnlock(unit,this);
+		if(plan.success !== true)
+		{
+			if(onComplete != null) onComplete(false,plan.reason);
+			return false;
+		}
+		playContainerUnlockEffect(this,unit,plan,success =>
+		{
+			if(success !== true)
+			{
+				if(onComplete != null) onComplete(false,'unlock_failed');
+				return;
+			}
+			finishOpen();
+		});
+		return null;
 	}
 
 	getUseCost(unit)
@@ -1260,14 +1331,12 @@ class ContainerEntity extends ItemEntity
 
 	canUse(unit)
 	{
-		if(unit == null) return false;
-
-		const dx = Math.abs(this.mapX - unit.mapX);
-		const dy = Math.abs(this.mapY - unit.mapY);
-
+		if(unit == null || this._unlocking === true) return false;
+		const dx = Math.abs(this.mapX-unit.mapX);
+		const dy = Math.abs(this.mapY-unit.mapY);
 		if(dx > 1 || dy > 1) return false;
 		if(dx === 0 && dy === 0) return false;
-
+		if(this.features.open && !OpenableSystem.canClose(this)) return false;
 		return true;
 	}
 
@@ -1308,82 +1377,36 @@ class ContainerEntity extends ItemEntity
 		}
 	}
 
-	/*
-	use(unit, context = {}, callbackObject = null)
+	use(unit,context={},callbackObject=null)
 	{
 		if(!this.canUse(unit))
 		{
-			finishUseAction(callbackObject, {
-				success: false,
-				abilityPointCost: 0,
-				movePointCost: 0
-			});
+			finishUseAction(callbackObject,{success:false,reason:'unavailable',abilityPointCost:0,movePointCost:0});
 			return false;
 		}
-
-		const nextOpen = !this.features.open;
-
-		playContainerToggleEffect(this, nextOpen, () =>
+		const finishContainerUse = () =>
 		{
-			if(nextOpen === true &&
-				this.features.containerType === 'tall' &&
-				this.features.spillOnOpen === true &&
-				this.features.spilled !== true &&
-				this.getItemCount() > 0)
+			finishUseAction(callbackObject,{success:true,abilityPointCost:0,movePointCost:1});
+		};
+		if(this.features.open)
+		{
+			playContainerToggleEffect(this,false,finishContainerUse);
+			return false;
+		}
+		this.openForUnit(unit,(success,reason) =>
+		{
+			if(success !== true)
 			{
-				this.features.spilled = true;
-				this.spillItemsToNearbyCells(unit, () =>
-				{
-					finishUseAction(callbackObject, {
-						success: true,
-						abilityPointCost: 0,
-						movePointCost: 1
-					});
+				finishUseAction(callbackObject,{
+					success:false,
+					reason:reason || 'locked',
+					abilityPointCost:0,
+					movePointCost:0
 				});
 				return;
 			}
-
-			finishUseAction(callbackObject, {
-				success: true,
-				abilityPointCost: 0,
-				movePointCost: 1
-			});
+			this.processFirstOpen(unit,finishContainerUse);
 		});
-
-		return false;
-	}
-	*/
-
-	use(unit, context = {}, callbackObject = null)
-	{
-		if(!this.canUse(unit))
-		{
-			finishUseAction(callbackObject, {success: false, abilityPointCost: 0, movePointCost: 0});
-			return false;
-		}
-		const nextOpen = !this.features.open;
-
-		const finishContainerUse = () =>
-		{
-			finishUseAction(callbackObject, {success: true, abilityPointCost: 0, movePointCost: 1});
-		};
-
-		playContainerToggleEffect(this, nextOpen, () =>
-			{
-				// Closing never triggers item spill or monster spawn.
-				if(nextOpen !== true)
-				{
-					finishContainerUse();
-					return;
-				}
-				// On the first opening:
-				// 1. resolve the one-time monster probability;
-				// 2. finish spillOnOpen, when applicable;
-				// 3. create monsters;
-				// 4. complete UseAbility.
-				this.processFirstOpen(unit, finishContainerUse);
-			}
-		);
 		return false;
 	}
 
@@ -1471,5 +1494,11 @@ class ContainerEntity extends ItemEntity
 		}
 		// Wait until every item animation and ItemEntity creation has completed, then create monsters.
 		this.spillItemsToNearbyCells(unit, afterSpill);
+	}
+
+	makeMove()
+	{
+		if(this.features.open && OpenableSystem.shouldAutoClose(this) && getUnitAtMap(this.mapX,this.mapY) == null) this.close();
+		super.makeMove();
 	}
 }

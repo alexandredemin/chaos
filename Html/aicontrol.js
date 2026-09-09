@@ -1023,59 +1023,68 @@ class AIControl
         {
             let border2 = [];
             for(let i=0;i<map.height;i++)
-                for(let j=0;j<map.width;j++)if(cellInd[i][j] >= 0)cellInd[i][j]=-1;
+                for(let j=0;j<map.width;j++)
+                    if(cellInd[i][j] >= 0) cellInd[i][j]=-1;
             for(let k=0;k<border.length;k++)
             {
                 let cell = border[k];
-                cellInd[cell[1]][cell[0]] = -10;
+                cellInd[cell[1]][cell[0]]=-10;
             }
             while(border.length > 0)
             {
                 let cell = border.pop();
-                for(let yy=cell[1]-1; yy<=cell[1]+1; yy++)
-                    for(let xx=cell[0]-1; xx<=cell[0]+1; xx++)
+                for(let yy=cell[1]-1;yy<=cell[1]+1;yy++)
+                    for(let xx=cell[0]-1;xx<=cell[0]+1;xx++)
                     {
-                        if((xx<0)||(xx>=map.width)||(yy<0)||(yy>=map.height)||( (xx===cell[0])&&(yy===cell[1])))continue;
-                        if(cellInd[yy][xx] < -1)continue;
+                        if(xx<0 || xx>=map.width || yy<0 || yy>=map.height || (xx===cell[0] && yy===cell[1])) continue;
+                        if(cellInd[yy][xx] < -1) continue;
                         let d = 1;
                         let wallTile = wallsLayer.getTileAt(xx,yy);
                         if(wallTile != null && wallTile.properties['collides'] === true) continue;
-                        let unt = getUnitAtMap(xx, yy, unit.player);
-                        if(unt != null && unt.died == false) {
-                            if(onUnit) {
+                        let unt = getUnitAtMap(xx,yy,unit.player);
+                        if(unt != null && unt.died == false)
+                        {
+                            if(onUnit)
+                            {
                                 if(onUnit(unt) === false) continue;
                             }
-                            else{
-                                if(unt.player === unit.player) d = d + unit.config.features.move;
-                                else d = d + unt.config.features.health * unit.config.features.move;
+                            else
+                            {
+                                if(unt.player === unit.player) d += unit.config.features.move;
+                                else d += unt.config.features.health*unit.config.features.move;
                             }
                         }
-                        let entity = Entity.getEntityAtMap(xx, yy);
-                        if(entity != null) {
-                            if(onEntity) {
+                        let entity = Entity.getEntityAtMap(xx,yy);
+                        if(entity != null)
+                        {
+                            if(onEntity)
+                            {
                                 if(onEntity(entity) === false) continue;
                             }
-                            else{
-                                d = d + Math.floor(entity.evaluateStep(unit)+0.5) * unit.config.features.move;
+                            else
+                            {
+                                const stepCost = entity.evaluateStep(unit);
+                                if(stepCost === false) continue;
+                                d += Math.floor(stepCost+0.5)*unit.config.features.move;
                             }
                         }
-                        if(onCell){
-                            if(onCell([xx,yy]) === false) continue;
-                        }
-                        if(penaltyMap){
-                            d = d + penaltyMap[yy][xx];
-                        }
+                        if(onCell && onCell([xx,yy]) === false) continue;
+                        if(penaltyMap) d += penaltyMap[yy][xx];
                         if(distMap[yy][xx] > -1 && cell[2]+d >= distMap[yy][xx]) continue;
-                        if(maxDist > 0 && cell[2]+d > startCost + maxDist) continue;
-                        if(cellInd[yy][xx] >= 0) border2[cellInd[yy][xx]][2] = cell[2]+d;
-                        else{
-                            border2.push([xx,yy,cell[2]+d]);
-                            cellInd[yy][xx] = border2.length-1;
+                        if(maxDist > 0 && cell[2]+d > startCost+maxDist) continue;
+                        if(cellInd[yy][xx] >= 0)
+                        {
+                            border2[cellInd[yy][xx]][2]=cell[2]+d;
                         }
-                        distMap[yy][xx] = cell[2]+d;
+                        else
+                        {
+                            border2.push([xx,yy,cell[2]+d]);
+                            cellInd[yy][xx]=border2.length-1;
+                        }
+                        distMap[yy][xx]=cell[2]+d;
                     }
             }
-            border = border2;
+            border=border2;
         }
         return distMap;
     }
