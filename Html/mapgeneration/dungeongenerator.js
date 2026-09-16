@@ -1623,23 +1623,34 @@ globalThis.ZoneGraphMapGenerator = ZoneGraphMapGenerator;
 class DungeonPortalBuilder {
 	static build(dungeon) {
 		if (!dungeon || !Array.isArray(dungeon.rooms)) return [];
+
 		const width = dungeon.map?.kind?.[0]?.length || dungeon.layout?.width || 0;
 		const portals = [];
 		const occupied = new Map();
 		const zoneById = new Map((dungeon.zones || []).map(z => [z.id, z]));
 		let seq = 0;
 
+		const priority = {
+			special_entrance: 50,
+			alcove_entrance: 40,
+			alcove_tunnel_entrance: 35,
+			room_entrance: 30,
+			zone_gate: 20
+		};
+
 		const add = portal => {
 			if (portal == null || portal.x == null || portal.y == null) return null;
 			if (portal.x < 0 || portal.y < 0) return null;
+
 			const key = portal.x + ':' + portal.y;
 			const prev = occupied.get(key);
-			const priority = { special_entrance: 50, alcove_entrance: 40, alcove_tunnel_entrance: 35, zone_gate: 30, room_entrance: 20 };
 			if (prev && (priority[prev.type] || 0) >= (priority[portal.type] || 0)) return prev;
+
 			if (prev) {
 				const index = portals.indexOf(prev);
 				if (index >= 0) portals.splice(index, 1);
 			}
+
 			portal.id = portal.id || 'portal_' + (seq++);
 			portal.doorSuitable = portal.doorSuitable !== false;
 			portal.lockSuitable = portal.lockSuitable !== false;
@@ -1649,6 +1660,10 @@ class DungeonPortalBuilder {
 			return portal;
 		};
 
+		const xy = key => [key % width, Math.floor(key / width)];
+
+		// Direction names are the same as in the old door system:
+		// W means that the room/alcove lies east of the door, etc.
 		const outsideDirection = (room, x, y) => {
 			if (x === room.x - 1 && y >= room.y && y < room.y + room.h) return 'W';
 			if (x === room.x + room.w && y >= room.y && y < room.y + room.h) return 'E';
@@ -1656,13 +1671,7 @@ class DungeonPortalBuilder {
 			if (y === room.y + room.h && x >= room.x && x < room.x + room.w) return 'S';
 			return null;
 		};
-		const boundaryDirection = (room, cell) => {
-			if (cell.y === room.y) return 'N';
-			if (cell.y === room.y + room.h - 1) return 'S';
-			if (cell.x === room.x) return 'W';
-			if (cell.x === room.x + room.w - 1) return 'E';
-			return null;
-		};
+
 		const directionToward = (door, target) => {
 			if (!door || !target) return null;
 			if (target.x === door.x - 1 && target.y === door.y) return 'E';
@@ -1672,69 +1681,208 @@ class DungeonPortalBuilder {
 			return null;
 		};
 
-		// Special rooms have one explicit semantic entrance; do not also emit a generic room entrance there.
+		const adjacent = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1;
+		const oppositeDirections = (a, b) =>
+			(a === 'E' && b === 'W') ||
+			(a === 'W' && b === 'E') ||
+			(a === 'N' && b === 'S') ||
+			(a === 'S' && b === 'N');
+
+		// Alcove carving registers the tunnel attachment in anchorRoom.doorOutside.
+		// Those cells belong to the alcove connection and must not later become an
+		// additional generic room door.
+		const alcoveOwnedRoomDoorCells = new Set();
+		for (const alcove of dungeon.alcoves || []) {
+			if (Array.isArray(alcove.tunnel) && alcove.tunnel.length > 0) {
+				const last = alcove.tunnel[alcove.tunnel.length - 1];
+				alcoveOwnedRoomDoorCells.add(last.x + ':' + last.y);
+			}
+			else if (alcove.door) {
+				// For a direct attachment _carveAlcove() historically stores the
+				// inner alcove cell in anchorRoom.doorOutside. Suppress that alias.
+				alcoveOwnedRoomDoorCells.add(alcove.door.x + ':' + alcove.door.y);
+			}
+		}
+
+		// SPECIAL ROOMS
+		// room.specialDoor is the INNER room cell. The actual door entity belongs
+		// on the unique outside doorway cell, otherwise it appears one tile deep
+		// inside the room.
 		for (const room of dungeon.rooms.filter(r => r.special && r.specialDoor)) {
 			const zone = zoneById.get(room.zoneId);
 			const type = room.roomType || zone?.specialType || zone?.role || 'special';
+			let outside = null;
+
+			if (room.doorOutside instanceof Set) {
+				for (const key of room.doorOutside) {
+					const [x, y] = xy(key);
+					if (Math.abs(x - room.specialDoor.x) + Math.abs(y - room.specialDoor.y) === 1) {
+						outside = { x, y };
+						break;
+					}
+				}
+			}
+
+			// Defensive fallback for old/fallback-generated special rooms.
+			if (!outside) {
+				let side = null;
+				if (room.specialDoor.y === room.y) side = 'N';
+				else if (room.specialDoor.y === room.y + room.h - 1) side = 'S';
+				else if (room.specialDoor.x === room.x) side = 'W';
+				else if (room.specialDoor.x === room.x + room.w - 1) side = 'E';
+
+				const delta = {
+					N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0]
+				}[side];
+				if (delta) {
+					outside = {
+						x: room.specialDoor.x + delta[0],
+						y: room.specialDoor.y + delta[1]
+					};
+				}
+			}
+
+			if (!outside) continue;
+			const direction = outsideDirection(room, outside.x, outside.y);
+			if (!direction) continue;
+
 			add({
 				type: 'special_entrance',
-				x: room.specialDoor.x,
-				y: room.specialDoor.y,
-				direction: boundaryDirection(room, room.specialDoor),
+				x: outside.x,
+				y: outside.y,
+				direction,
 				roomId: room.id,
 				zoneId: room.zoneId,
 				specialType: type,
 				lockedByDefault: true,
 				keyId: 'special:' + room.zoneId,
-				keyName: type === 'library' ? 'Library key' : type === 'treasury' ? 'Treasury key' : 'Special room key',
+				keyName: type === 'library'
+					? 'Library key'
+					: type === 'treasury'
+						? 'Treasury key'
+						: 'Special room key',
 				hiddenSuitable: false
 			});
 		}
 
+		// NORMAL ROOM ENTRANCES
 		for (const room of dungeon.rooms.filter(r => !r.special)) {
 			if (!(room.doorOutside instanceof Set)) continue;
-			for (const k of room.doorOutside) {
-				const x = k % width, y = Math.floor(k / width);
+
+			for (const key of room.doorOutside) {
+				const [x, y] = xy(key);
+				if (alcoveOwnedRoomDoorCells.has(x + ':' + y)) continue;
+
 				const direction = outsideDirection(room, x, y);
 				if (!direction) continue;
+
 				add({
-					type: 'room_entrance', x, y, direction,
-					roomId: room.id, zoneId: room.zoneId,
-					lockedByDefault: false, hiddenSuitable: false
+					type: 'room_entrance',
+					x, y, direction,
+					roomId: room.id,
+					zoneId: room.zoneId,
+					lockedByDefault: false,
+					hiddenSuitable: false
 				});
 			}
 		}
 
+		// ZONE GATES
+		// A gate is a macro connection between zones, not necessarily a unique
+		// architectural doorway. We still create the semantic portal here, but a
+		// later normalization pass suppresses its physical door if a more precise
+		// room/special/alcove doorway is immediately adjacent.
 		for (const gate of dungeon.gates || []) {
-			const c = gate.aCell;
-			if (!c) continue;
+			const cell = gate.aCell;
+			if (!cell) continue;
+
 			add({
-				type: 'zone_gate', x: c.x, y: c.y,
+				type: 'zone_gate',
+				x: cell.x,
+				y: cell.y,
 				direction: gate.aSide || null,
-				gateId: gate.id, edgeId: gate.edgeId,
-				zoneA: gate.a, zoneB: gate.b,
-				lockedByDefault: false, hiddenSuitable: false
+				gateId: gate.id,
+				edgeId: gate.edgeId,
+				zoneA: gate.a,
+				zoneB: gate.b,
+				lockedByDefault: false,
+				hiddenSuitable: false
 			});
 		}
 
+		// ALCOVES / NICHES
+		// The room-side alcove.door is an INNER cell too. The near door therefore
+		// belongs on doorOutside / tunnel[0]. A second door is useful only when a
+		// real tunnel exists: length >= 3 leaves at least one floor cell between
+		// the two doors. Length 0..2 gets exactly one door.
 		for (const alcove of dungeon.alcoves || []) {
-			if (alcove.door) {
-				const pseudoRoom = { x: alcove.rect.x, y: alcove.rect.y, w: alcove.rect.w, h: alcove.rect.h };
+			const pseudoRoom = {
+				x: alcove.rect.x,
+				y: alcove.rect.y,
+				w: alcove.rect.w,
+				h: alcove.rect.h
+			};
+			const tunnel = Array.isArray(alcove.tunnel) ? alcove.tunnel : [];
+			const near = tunnel.length > 0
+				? tunnel[0]
+				: (alcove.doorOutside || alcove.attachment);
+
+			if (near) {
 				add({
-					type: 'alcove_entrance', x: alcove.door.x, y: alcove.door.y,
-					direction: boundaryDirection(pseudoRoom, alcove.door),
-					alcoveId: alcove.id, alcoveType: alcove.type,
-					lockedByDefault: false, hiddenSuitable: true
+					type: 'alcove_entrance',
+					x: near.x,
+					y: near.y,
+					direction: outsideDirection(pseudoRoom, near.x, near.y),
+					alcoveId: alcove.id,
+					alcoveType: alcove.type,
+					lockedByDefault: false,
+					hiddenSuitable: true
 				});
 			}
-			if (Array.isArray(alcove.tunnel) && alcove.tunnel.length > 0 && alcove.attachment) {
-				const cell = alcove.tunnel[alcove.tunnel.length - 1];
+
+			if (tunnel.length >= 3 && alcove.attachment) {
+				const far = tunnel[tunnel.length - 1];
 				add({
-					type: 'alcove_tunnel_entrance', x: cell.x, y: cell.y,
-					direction: directionToward(cell, alcove.attachment),
-					alcoveId: alcove.id, alcoveType: alcove.type,
-					lockedByDefault: false, hiddenSuitable: true
+					type: 'alcove_tunnel_entrance',
+					x: far.x,
+					y: far.y,
+					direction: directionToward(far, alcove.attachment),
+					alcoveId: alcove.id,
+					alcoveType: alcove.type,
+					lockedByDefault: false,
+					hiddenSuitable: true
 				});
+			}
+		}
+
+		// --- Physical door normalization ---
+
+		// 1) If a gate sits directly next to a real room/special/alcove doorway,
+		// the gate door is redundant. Keep the gate metadata but do not materialize
+		// a second/third door in the same one-cell connector.
+		for (const gate of portals.filter(p => p.type === 'zone_gate' && p.doorSuitable)) {
+			const hasAdjacentDoor = portals.some(p =>
+				p !== gate &&
+				p.doorSuitable &&
+				p.type !== 'zone_gate' &&
+				adjacent(p, gate)
+			);
+			if (hasAdjacentDoor) gate.doorSuitable = false;
+		}
+
+		// 2) Multiple routes may enter the same room through adjacent cells.
+		// Likewise, a two-cell corridor between two rooms produces two facing
+		// entrance candidates (DD). One physical door is enough in both cases.
+		const roomPortals = portals.filter(p => p.type === 'room_entrance' && p.doorSuitable);
+		for (let i = 0; i < roomPortals.length; i++) {
+			for (let j = i + 1; j < roomPortals.length; j++) {
+				const a = roomPortals[i];
+				const b = roomPortals[j];
+				if (!a.doorSuitable || !b.doorSuitable || !adjacent(a, b)) continue;
+
+				if (a.roomId === b.roomId || oppositeDirections(a.direction, b.direction)) {
+					b.doorSuitable = false;
+				}
 			}
 		}
 
