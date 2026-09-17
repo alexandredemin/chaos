@@ -119,8 +119,8 @@ const MAP_GENERATION_CONFIG = {
 
 		// Guaranteed side-area loot. Alcove rooms are always premium; niches mix normal and premium loot.
 		alcoves: {
-			room: { lootCount: [1, 2], premiumChance: 1 },
-			niche: { lootCount: [1, 1], premiumChance: .35 }
+			room: { lootCount: [1, 3], premiumChance: 1, chestMinLootCount: 3 },
+			niche: { lootCount: [1, 2], premiumChance: .35 }
 		},
 
 		containers: {
