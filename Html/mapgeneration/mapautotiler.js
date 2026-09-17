@@ -1,5 +1,6 @@
 // Converts semantic dungeon floor/rock geometry into the existing Chaos tile arrays.
 class MapAutotiler {
+
 	constructor(cfg = {}) {
 		this.TILE = { FLOOR: 0, WALL: 1, ROCK: 2 };
 		this.groundTile = cfg.groundTileIndex || 2;
@@ -43,7 +44,9 @@ class MapAutotiler {
 		}
 		return { ground, walls };
 	}
+
 	_inMapRect(x, y) { return x >= 0 && y >= 0 && x < this.width && y < this.height; }
+
 	_markWallsFromRock(tileTypeMap) {
 		const dirs = [
 			{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1},
@@ -61,6 +64,7 @@ class MapAutotiler {
 			}
 		}
 	}
+
 	_autoTileWalls(tileTypeMap, map) {
 		for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {
 			if (tileTypeMap[y][x] !== this.TILE.WALL) continue;
@@ -68,18 +72,21 @@ class MapAutotiler {
 			if (rule) map.walls[y][x] = rule.tile;
 		}
 	}
+
 	_buildPattern(cx, cy, tileTypeMap) {
 		let result = '';
 		for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
 			result += this._tileToSymbol(tileTypeMap, cx + dx, cy + dy);
 		return result;
 	}
+
 	_tileToSymbol(tileTypeMap, x, y) {
 		if (!this._inMapRect(x, y)) return 'R';
 		if (tileTypeMap[y][x] === this.TILE.FLOOR) return 'F';
 		if (tileTypeMap[y][x] === this.TILE.WALL) return 'W';
 		return 'R';
 	}
+
 	_findMatchingRule(pattern) {
 		let bestRule = null, bestScore = -Infinity;
 		for (const rule of this.wallAutotileRules) {
@@ -89,6 +96,7 @@ class MapAutotiler {
 		}
 		return bestRule;
 	}
+
 	_matchPattern(actual, rule) {
 		for (let i = 0; i < 9; i++) {
 			if (rule[i] === '*') continue;
@@ -96,6 +104,7 @@ class MapAutotiler {
 		}
 		return true;
 	}
+
 	_applyDoorAutotileRules(x, y, dir, map) {
 		for (const rule of DOOR_AUTOTILE_RULES) {
 			if (!rule.directions.includes(dir)) continue;
@@ -110,4 +119,5 @@ class MapAutotiler {
 		}
 	}
 }
+
 globalThis.MapAutotiler = MapAutotiler;

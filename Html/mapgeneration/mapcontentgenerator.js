@@ -3,6 +3,7 @@
 const MAP_CONTENT_RNG_SALT = 0xB5297A4D;
 
 class MapContentGenerator {
+
 	constructor(cfg, dungeon, tiledMap, seed) {
 		this.cfg = cfg || {};
 		this.dungeon = dungeon;
@@ -71,49 +72,66 @@ class MapContentGenerator {
 	}
 
 	_random() { return this.rng.next(); }
+
 	_rand(a, b) { return this.rng.int(a, b); }
+
 	_shuffle(array) { return this.rng.shuffle(array); }
+
 	_clone(value) {
 		if (typeof clone === 'function') return clone(value);
 		return value == null ? value : JSON.parse(JSON.stringify(value));
 	}
+
 	_buildRoomAt() {
 		const grid = Array.from({length:this.height}, () => Array(this.width).fill(null));
 		for (const room of this.rooms) for (let y = room.y; y < room.y + room.h; y++) for (let x = room.x; x < room.x + room.w; x++)
 			if (x >= 0 && y >= 0 && x < this.width && y < this.height) grid[y][x] = room;
 		return grid;
 	}
+
 	_roomCenter(room) { return {x:room.x + Math.floor(room.w / 2), y:room.y + Math.floor(room.h / 2)}; }
+
 	_dist2(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; }
+
 	_zoneForRoom(room) { return room ? this.zoneById.get(room.zoneId) || null : null; }
+
 	_getRoomAtMap(x, y) { return this.roomAt[y]?.[x] || null; }
+
 	_getObjectRoom(obj) {
 		if (!obj || obj.x == null || obj.y == null) return null;
 		return this._getRoomAtMap(Math.floor(obj.x / 16), Math.floor(obj.y / 16));
 	}
+
 	_isOrdinaryRoom(room) {
 		const zone = this._zoneForRoom(room);
 		return !!room && !room.special && !!zone && zone.type === 'normal';
 	}
+
 	_isKeySafeRoom(room) {
 		// Any non-special chamber is reachable without opening a special-room door.
 		// This includes the arena and auxiliary rooms inside special zones.
 		return !!room && room.special !== true && this._zoneForRoom(room) != null;
 	}
+
 	_ordinaryRooms() { return this.rooms.filter(r => this._isOrdinaryRoom(r)); }
+
 	_specialRooms() { return this.rooms.filter(r => r.special === true); }
+
 	_isFloor(x, y) { return y >= 0 && y < this.map.walls.length && x >= 0 && x < this.map.walls[y].length && this.map.walls[y][x] === null; }
+
 	_collectOccupied(objects = []) {
 		const result = new Set();
 		for (const obj of objects) if (obj && obj.x != null && obj.y != null)
 			result.add(Math.floor(obj.x / 16) + ':' + Math.floor(obj.y / 16));
 		return result;
 	}
+
 	_getObjectProperty(obj, name) {
 		if (!obj || !Array.isArray(obj.properties)) return null;
 		const prop = obj.properties.find(p => p && p.name === name);
 		return prop != null ? prop.value : null;
 	}
+
 	_setObjectProperty(obj, name, value, type = null) {
 		if (!Array.isArray(obj.properties)) obj.properties = [];
 		let prop = obj.properties.find(p => p && p.name === name);
@@ -121,6 +139,7 @@ class MapContentGenerator {
 		prop.value = value;
 		if (type != null) prop.type = type;
 	}
+
 	_isObjectLocked(obj) {
 		const lock = this._getObjectProperty(obj, 'lock');
 		return lock != null && lock.locked === true;
@@ -131,6 +150,7 @@ class MapContentGenerator {
 		if (portal.type !== 'special_entrance') return null;
 		return { locked:true, type:'key', keyId:portal.keyId, consumeKey:false };
 	}
+
 	_createDoors() {
 		const doors = [];
 		for (const portal of this.portals) {
@@ -147,6 +167,7 @@ class MapContentGenerator {
 		}
 		return doors;
 	}
+
 	_getSpecialRoomDescriptors(doors) {
 		const doorByPortalId = new Map();
 		for (const d of doors) doorByPortalId.set(this._getObjectProperty(d, 'portalId'), d);
@@ -192,11 +213,13 @@ class MapContentGenerator {
 	}
 
 	_getNormalLootItemNames() { return Object.keys(itemConfigs).filter(name => name !== 'key'); }
+
 	_getPremiumPotionNames() {
 		const preferred = ['strength_potion','defense_potion','speed_potion','invisible_potion','mana_potion'];
 		const result = preferred.filter(name => itemConfigs[name] != null);
 		return result.length ? result : this._getNormalLootItemNames().filter(name => name !== 'spell_scroll');
 	}
+
 	_chooseSpellForLootTier(tier) {
 		let spells = Object.keys(spellConfigs).filter(id => {
 			const cost = spellConfigs[id]?.cost || 0;
@@ -208,6 +231,7 @@ class MapContentGenerator {
 		if (!spells.length) { spells = Object.keys(spellConfigs); if (tier === 'normal') spells = spells.filter(id => id !== 'demon'); }
 		return spells.length ? spells[this._rand(0, spells.length - 1)] : null;
 	}
+
 	_createSpellScroll(source = 'normal') {
 		let tier = 'normal';
 		if (source === 'locked') tier = this._random() < .25 ? 'legendary' : 'rare';
@@ -221,6 +245,7 @@ class MapContentGenerator {
 		amount = Math.min(amount, 12);
 		return createItemData('spell_scroll', {spell, amount});
 	}
+
 	_createLootItem(tier = 'normal') {
 		if (tier === 'library') {
 			if (this._random() < .75) return this._createSpellScroll('special');
@@ -242,11 +267,13 @@ class MapContentGenerator {
 		const itemName = pool[this._rand(0,pool.length-1)];
 		return itemName === 'spell_scroll' ? this._createSpellScroll('normal') : createItemData(itemName, {});
 	}
+
 	_createLoot(count, tier = 'normal') {
 		const result = [];
 		for (let i = 0; i < count; i++) { const item = this._createLootItem(tier); if (item) result.push(item); }
 		return result;
 	}
+
 	_getContainerSpawnConfig(name) {
 		const wardrobe = name === 'wardrobe';
 		return {
@@ -258,6 +285,7 @@ class MapContentGenerator {
 				: {type:'burst',initialScale:.25,launchScale:.72,overshootScale:1.10,sourceOffsetX:0,sourceOffsetY:-2,jumpHeight:7,launchDuration:110,moveDuration:240,settleDuration:90,staggerDelay:90,maxStaggerDelay:360,playMoveAnimation:true}
 		};
 	}
+
 	_createContainerObject(name, x, y, items = [], lock = null) {
 		const properties = [
 			{name:'monsterSpawnResolved',value:false},
@@ -266,6 +294,7 @@ class MapContentGenerator {
 		if (lock) properties.push({name:'lock',value:this._clone(lock)});
 		return {type:'entity',name,x:x*16,y:y*16,properties,items};
 	}
+
 	_findFreeRoomCell(room, occupied) {
 		for (let attempt = 0; attempt < 60; attempt++) {
 			const x = this._rand(room.x, room.x + room.w - 1), y = this._rand(room.y, room.y + room.h - 1), key = x + ':' + y;
@@ -275,6 +304,7 @@ class MapContentGenerator {
 			if (!occupied.has(x+':'+y) && this._isFloor(x,y)) return {x,y};
 		return null;
 	}
+	
 	_findWardrobeCell(room, occupied) {
 		const y = room.y, minX = room.x + 1, maxX = room.x + room.w - 2;
 		if (maxX < minX) return null;
