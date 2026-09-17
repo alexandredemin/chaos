@@ -15,6 +15,7 @@ class MapContentGenerator {
 		this.width = dungeon.layout?.width || tiledMap.walls[0].length;
 		this.height = dungeon.layout?.height || tiledMap.walls.length;
 		this.rooms = dungeon.rooms || [];
+		this.alcoves = dungeon.alcoves || []; // Semantic side areas used for guaranteed loot and preferred key placement.
 		this.zones = dungeon.zones || [];
 		this.portals = dungeon.portals || [];
 		this.zoneById = new Map(this.zones.map(z => [z.id, z]));
@@ -34,34 +35,45 @@ class MapContentGenerator {
 		const chests = this._placeChests(startPositions.concat(doors, items));
 		const wardrobes = this._placeWardrobes(startPositions.concat(doors, items, chests));
 		const commonLockCount = this._lockRandomContainers(chests, wardrobes);
+
 		const specialContent = this._populateSpecialRooms(specialRooms, startPositions.concat(doors, items, chests, wardrobes));
 		chests.push(...specialContent.chests);
 		wardrobes.push(...specialContent.wardrobes);
-		const keyChests = this._placeLockKeys(
-		specialRooms,
-		commonLockCount,
-		chests,
-		wardrobes,
-		startPositions.concat(doors, items, chests, wardrobes)
+
+		const alcoveLoot = this._populateAlcoves(startPositions.concat(doors, items, chests, wardrobes));
+		items.push(...alcoveLoot);
+
+		const keyPlacement = this._placeLockKeys(
+			specialRooms,
+			commonLockCount,
+			chests,
+			wardrobes,
+			alcoveLoot,
+			startPositions.concat(doors, items, chests, wardrobes)
 		);
-		chests.push(...keyChests);
+		chests.push(...keyPlacement.extraChests);
+
 		const treasureGuards = this._placeTreasureGuards(
-		chests,
-		wardrobes,
-		startPositions,
-		startPositions.concat(doors, items, chests, wardrobes)
+			chests,
+			wardrobes,
+			startPositions,
+			startPositions.concat(doors, items, chests, wardrobes)
 		);
 		const monsterGenerators = this._placeMonsterGenerators(
-		startPositions,
-		treasureGuards,
-		startPositions.concat(doors, items, chests, wardrobes, treasureGuards)
+			startPositions,
+			treasureGuards,
+			startPositions.concat(doors, items, chests, wardrobes, treasureGuards)
 		);
 		const roamingCreatures = this._placeRoamingCreatures(
-		startPositions,
-		startPositions.concat(doors, items, chests, wardrobes, treasureGuards, monsterGenerators)
+			startPositions,
+			startPositions.concat(doors, items, chests, wardrobes, treasureGuards, monsterGenerators)
 		);
+
+		const alcovesWithLoot = alcoveLoot.filter(o => o._alcove?.type === 'room').length;
+		const nichesWithLoot = alcoveLoot.filter(o => o._alcove?.type === 'niche').length;
 		const objects = startPositions.concat(doors, items, chests, wardrobes, treasureGuards, monsterGenerators, roamingCreatures);
 		this._validate(objects, doors, specialRooms, startPositions);
+
 		return {
 			objects,
 			stats: {
@@ -69,6 +81,11 @@ class MapContentGenerator {
 				lockedSpecialDoors: doors.filter(d => this._isObjectLocked(d)).length,
 				starts: startPositions.length,
 				items: items.length,
+				alcovesWithLoot,
+				nichesWithLoot,
+				keysInContainers: keyPlacement.stats.container,
+				keysInAlcoves: keyPlacement.stats.alcove,
+				keysInNiches: keyPlacement.stats.niche,
 				chests: chests.length,
 				wardrobes: wardrobes.length,
 				guards: treasureGuards.length,
@@ -139,6 +156,22 @@ class MapContentGenerator {
 		const result = new Set();
 		for (const obj of objects) if (obj && obj.x != null && obj.y != null) result.add(Math.floor(obj.x / this.tileSize) + ':' + Math.floor(obj.y / this.tileSize));
 		return result;
+	}
+
+	_objectCell(obj) {
+		if (!obj || obj.x == null || obj.y == null) return null;
+		return {x: Math.floor(obj.x / this.tileSize), y: Math.floor(obj.y / this.tileSize)};
+	}
+
+	// Finds a free floor cell inside an alcove/niche rectangle.
+	_findFreeAlcoveCell(alcove, occupied) {
+		const cells = [];
+		for (let y = alcove.rect.y; y < alcove.rect.y + alcove.rect.h; y++)
+			for (let x = alcove.rect.x; x < alcove.rect.x + alcove.rect.w; x++)
+				if (this._isFloor(x, y) && !occupied.has(x + ':' + y)) cells.push({x, y});
+		if (!cells.length) return null;
+		this._shuffle(cells);
+		return cells[0];
 	}
 
 	// Reads one Tiled-style property value from a generated object.
@@ -306,6 +339,11 @@ class MapContentGenerator {
 			const pool = this._getPremiumPotionNames();
 			return pool.length ? createItemData(pool[this._rand(0, pool.length-1)], {}) : null;
 		}
+		if (tier === 'premium') {
+			if (this._random() < this.settings.loot.tiers.premium.scrollChance) return this._createSpellScroll('premium');
+			const pool = this._getPremiumPotionNames();
+			return pool.length ? createItemData(pool[this._rand(0, pool.length-1)], {}) : null;
+		}
 		if (tier === 'locked') {
 			if (this._random() < this.settings.loot.tiers.locked.scrollChance) return this._createSpellScroll('locked');
 			const pool = this._getPremiumPotionNames();
@@ -447,6 +485,36 @@ class MapContentGenerator {
 		return result;
 	}
 
+	// Places guaranteed loose loot in every generated alcove and niche.
+	_populateAlcoves(occupiedObjects = []) {
+		const objects = [], occupied = this._collectOccupied(occupiedObjects);
+		for (const alcove of this.alcoves) {
+			const cfg = alcove.type === 'room' ? this.settings.alcoves.room : this.settings.alcoves.niche;
+			const cell = this._findFreeAlcoveCell(alcove, occupied);
+			if (!cell) continue;
+
+			const loot = [];
+			for (let i = 0, count = this._rand(...cfg.lootCount); i < count; i++) {
+				const tier = this._random() < cfg.premiumChance ? 'premium' : 'normal';
+				const item = this._createLootItem(tier) || this._createLootItem('normal');
+				if (item) loot.push(item);
+			}
+			if (!loot.length) continue;
+
+			objects.push({
+				type: 'entity',
+				name: 'item',
+				x: cell.x * this.tileSize,
+				y: cell.y * this.tileSize,
+				properties: [],
+				items: loot,
+				_alcove: alcove // Internal metadata used by weighted key placement; removed before returning the map.
+			});
+			occupied.add(cell.x + ':' + cell.y);
+		}
+		return objects;
+	}
+
 	// ----- Locks and key placement -----
 
 	// Applies existing common consumable locks to a subset of ordinary containers. Returns the lock count.
@@ -474,67 +542,118 @@ class MapContentGenerator {
 		});
 	}
 
-	// Creates an extra reachable chest when no existing safe container can hold a required key.
+	// Builds weighted key-placement candidates from normal containers plus alcove/niche loot holders.
+	_getKeyPlacementCandidates(chests = [], wardrobes = [], alcoveLoot = []) {
+		const weights = this.settings.locks.keyPlacement.weights, result = [];
+		for (const holder of this._getKeyContainerCandidates(chests, wardrobes)) {
+			const point = this._objectCell(holder);
+			if (point) result.push({holder, kind: 'container', weight: weights.container, point});
+		}
+		for (const holder of alcoveLoot) {
+			if (!holder?._alcove) continue;
+			const point = this._objectCell(holder), kind = holder._alcove.type === 'room' ? 'alcove' : 'niche';
+			if (point) result.push({holder, kind, weight: weights[kind], point});
+		}
+		return result;
+	}
+
+	// Returns one random candidate proportionally to its weight. Optional multipliers can add context-specific bias.
+	_pickWeightedCandidate(candidates, multiplier = null) {
+		if (!candidates.length) return null;
+		const weighted = candidates.map(candidate => ({
+			candidate,
+			weight: Math.max(0, candidate.weight * (multiplier ? multiplier(candidate) : 1))
+		}));
+		let total = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+		if (total <= 0) return candidates[this._rand(0, candidates.length - 1)];
+		let roll = this._random() * total;
+		for (const entry of weighted) {
+			roll -= entry.weight;
+			if (roll <= 0) return entry.candidate;
+		}
+		return weighted[weighted.length - 1].candidate;
+	}
+
+	// Creates an extra reachable chest when no existing safe place can hold a required key.
 	_createFallbackKeyChest(targetRoom, occupied) {
 		let rooms = this.rooms.filter(r => this._isKeySafeRoom(r)).slice();
 		if (!rooms.length) return null;
 		if (targetRoom) {
 			const target = this._roomCenter(targetRoom);
 			rooms.sort((a, b) => {
-				const ca=this._roomCenter(a), cb=this._roomCenter(b);
+				const ca = this._roomCenter(a), cb = this._roomCenter(b);
 				return (Math.abs(cb.x-target.x)+Math.abs(cb.y-target.y))-(Math.abs(ca.x-target.x)+Math.abs(ca.y-target.y));
 			});
 		}
 		for (const room of rooms) {
-			const cell=this._findFreeRoomCell(room, occupied);
+			const cell = this._findFreeRoomCell(room, occupied);
 			if (!cell) continue;
-			occupied.add(cell.x+':'+cell.y);
+			occupied.add(cell.x + ':' + cell.y);
 			return this._createContainerObject('chest', cell.x, cell.y, this._createLoot(this._rand(...this.settings.locks.common.fallbackChestLootCount), 'normal'));
 		}
 		return null;
 	}
 
-	// Places special-room keys and common consumable keys into reachable containers. Returns any fallback chests created.
-	_placeLockKeys(specialRooms, commonLockCount, chests = [], wardrobes = [], occupiedObjects = []) {
-		const extraChests = [], occupied = this._collectOccupied(occupiedObjects), usedUniqueContainers = new Set();
-		const candidates = () => this._getKeyContainerCandidates(chests.concat(extraChests), wardrobes);
+	// Appends a key item to a container or loose alcove/niche loot holder and updates placement statistics.
+	_addKeyToCandidate(candidate, keyId, keyName, stats) {
+		if (!candidate || !candidate.holder) return false;
+		if (!Array.isArray(candidate.holder.items)) candidate.holder.items = [];
+		candidate.holder.items.push(createItemData('key', {keyId, name: keyName}));
+		stats[candidate.kind]++;
+		return true;
+	}
+
+	// Places special-room and common consumable keys using weighted containers/alcoves/niches. Returns fallback chests and placement stats.
+	_placeLockKeys(specialRooms, commonLockCount, chests = [], wardrobes = [], alcoveLoot = [], occupiedObjects = []) {
+		const extraChests = [], occupied = this._collectOccupied(occupiedObjects), usedHolders = new Set();
+		const stats = {container: 0, alcove: 0, niche: 0};
+		const candidates = () => this._getKeyPlacementCandidates(chests.concat(extraChests), wardrobes, alcoveLoot);
+
 		for (const special of specialRooms) {
-			let list=candidates();
+			let list = candidates();
 			if (!list.length) {
-				const chest=this._createFallbackKeyChest(special.room, occupied);
-				if (chest){
+				const chest = this._createFallbackKeyChest(special.room, occupied);
+				if (chest) {
 					extraChests.push(chest);
-					list=[chest];
+					list = candidates();
 				}
 			}
 			if (!list.length) continue;
-			let unused=list.filter(c => !usedUniqueContainers.has(c));
-			if (!unused.length) unused=list;
-			const target=this._roomCenter(special.room);
-			unused.sort((a, b) => {
-				const ra=this._getObjectRoom(a), rb=this._getObjectRoom(b), ca=ra?this._roomCenter(ra): target, cb=rb?this._roomCenter(rb): target;
-				return (Math.abs(cb.x-target.x)+Math.abs(cb.y-target.y))-(Math.abs(ca.x-target.x)+Math.abs(ca.y-target.y));
+
+			let pool = list.filter(c => !usedHolders.has(c.holder));
+			if (!pool.length) pool = list;
+
+			const target = this._roomCenter(special.room);
+			const distances = pool.map(c => Math.abs(c.point.x-target.x) + Math.abs(c.point.y-target.y));
+			const maxDistance = Math.max(1, ...distances);
+			const distanceBias = this.settings.locks.keyPlacement.specialDistanceBias;
+			const candidate = this._pickWeightedCandidate(pool, c => {
+				const distance = Math.abs(c.point.x-target.x) + Math.abs(c.point.y-target.y);
+				return 1 + distanceBias * distance / maxDistance;
 			});
-			const container=unused[this._rand(0, Math.max(0, Math.ceil(unused.length*this.settings.locks.specialKeyCandidateTopFraction)-1))];
-			if (!Array.isArray(container.items)) container.items=[];
-			container.items.push(createItemData('key', {keyId: special.keyId, name: special.keyName}));
-			usedUniqueContainers.add(container);
+
+			if (this._addKeyToCandidate(candidate, special.keyId, special.keyName, stats)) usedHolders.add(candidate.holder);
 		}
-		for (let i=0;i<commonLockCount;i++) {
-			let list=candidates();
-			if (!list.length){
-				const chest=this._createFallbackKeyChest(null, occupied);
-				if (chest){
+
+		for (let i = 0; i < commonLockCount; i++) {
+			let list = candidates();
+			if (!list.length) {
+				const chest = this._createFallbackKeyChest(null, occupied);
+				if (chest) {
 					extraChests.push(chest);
-					list=[chest];
+					list = candidates();
 				}
 			}
-			if (!list.length)break;
-			const container=list[this._rand(0, list.length-1)];
-			if (!Array.isArray(container.items))container.items=[];
-			container.items.push(createItemData('key', {keyId: this.settings.locks.common.keyId, name: this.settings.locks.common.keyName}));
+			if (!list.length) break;
+
+			let pool = list.filter(c => !usedHolders.has(c.holder));
+			if (!pool.length) pool = list;
+			const candidate = this._pickWeightedCandidate(pool);
+			if (this._addKeyToCandidate(candidate, this.settings.locks.common.keyId, this.settings.locks.common.keyName, stats))
+				usedHolders.add(candidate.holder);
 		}
-		return extraChests;
+
+		return {extraChests, stats};
 	}
 
 	// ----- Guards, roaming creatures and monster generators -----
@@ -716,6 +835,7 @@ class MapContentGenerator {
 		for (const s of starts)if (!this._isFloor(Math.floor(s.x/this.tileSize), Math.floor(s.y/this.tileSize)))errors.push('start not on floor');
 		if (errors.length)throw new Error('Map content validation failed: '+errors.join('; '));
 		for (const d of doors) delete d._portal;
+		for (const obj of objects) if (obj?._alcove) delete obj._alcove;
 	}
 }
 globalThis.MapContentGenerator = MapContentGenerator;

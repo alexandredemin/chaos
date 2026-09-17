@@ -102,6 +102,7 @@ const MAP_GENERATION_CONFIG = {
 			},
 			scrolls: {
 				normal: { points: [8, 14], legendaryChance: 0 },
+				premium: { points: [10, 18], legendaryChance: .30 },
 				locked: { points: [10, 18], legendaryChance: .25 },
 				special: { points: [12, 20], legendaryChance: .45 },
 				expensiveSpellCost: 8,
@@ -109,10 +110,17 @@ const MAP_GENERATION_CONFIG = {
 				maxAmount: 12
 			},
 			tiers: {
+				premium: { scrollChance: .45 },
 				library: { scrollChance: .75, fallbackItems: ['mana_potion', 'invisible_potion'] },
 				treasury: { scrollChance: .35 },
 				locked: { scrollChance: .45 }
 			}
+		},
+
+		// Guaranteed side-area loot. Alcove rooms are always premium; niches mix normal and premium loot.
+		alcoves: {
+			room: { lootCount: [1, 2], premiumChance: 1 },
+			niche: { lootCount: [1, 1], premiumChance: .35 }
 		},
 
 		containers: {
@@ -157,7 +165,12 @@ const MAP_GENERATION_CONFIG = {
 				consumeKey: true,
 				fallbackChestLootCount: [1, 2]
 			},
-			specialKeyCandidateTopFraction: .30
+
+			// Weighted key placement. Side areas are intentionally preferred over ordinary containers.
+			keyPlacement: {
+				weights: { container: 1, alcove: 5, niche: 3 },
+				specialDistanceBias: 2
+			}
 		},
 
 		guards: {
