@@ -1,12 +1,15 @@
 // Game-specific population policy for a GeneratedDungeon.
 // Geometry stays in DungeonGenerator; this layer creates Tiled-like objects consumed by GameScene.
 const MAP_CONTENT_RNG_SALT = 0xB5297A4D;
+const MAP_CONTENT_CONFIG = MAP_GENERATION_CONFIG.content;
 
 // Populates a GeneratedDungeon with game objects: doors, starts, loot, containers, keys, guards and monsters.
 class MapContentGenerator {
 
 	constructor(cfg, dungeon, tiledMap, seed) {
 		this.cfg = cfg || {};
+		this.settings = MAP_CONTENT_CONFIG; // Central content/balance policy.
+		this.tileSize = MAP_GENERATION_CONFIG.map.tileSize;
 		this.dungeon = dungeon;
 		this.map = tiledMap;
 		this.width = dungeon.layout?.width || tiledMap.walls[0].length;
@@ -26,7 +29,7 @@ class MapContentGenerator {
 	generate() {
 		const doors = this._createDoors();
 		const specialRooms = this._getSpecialRoomDescriptors(doors);
-		const startPositions = this._generateStartPositions(this.cfg.startCount || 4);
+		const startPositions = this._generateStartPositions(this.cfg.startCount || this.settings.startCount);
 		const items = this._placeItems(startPositions.concat(doors));
 		const chests = this._placeChests(startPositions.concat(doors, items));
 		const wardrobes = this._placeWardrobes(startPositions.concat(doors, items, chests));
@@ -109,7 +112,7 @@ class MapContentGenerator {
 
 	_getObjectRoom(obj) {
 		if (!obj || obj.x == null || obj.y == null) return null;
-		return this._getRoomAtMap(Math.floor(obj.x / 16), Math.floor(obj.y / 16));
+		return this._getRoomAtMap(Math.floor(obj.x / this.tileSize), Math.floor(obj.y / this.tileSize));
 	}
 
 	// Returns true for non-special rooms belonging to normal zones.
@@ -134,7 +137,7 @@ class MapContentGenerator {
 	// Returns a set of map cells already occupied by supplied game objects.
 	_collectOccupied(objects = []) {
 		const result = new Set();
-		for (const obj of objects) if (obj && obj.x != null && obj.y != null) result.add(Math.floor(obj.x / 16) + ':' + Math.floor(obj.y / 16));
+		for (const obj of objects) if (obj && obj.x != null && obj.y != null) result.add(Math.floor(obj.x / this.tileSize) + ':' + Math.floor(obj.y / this.tileSize));
 		return result;
 	}
 
@@ -172,7 +175,7 @@ class MapContentGenerator {
 	// Defines the current generic door-lock policy. Only special-room entrances are locked by default.
 	_doorLockForPortal(portal) {
 		if (portal.type !== 'special_entrance') return null;
-		return { locked: true, type: 'key', keyId: portal.keyId, consumeKey: false };
+		return { ...this.settings.doors.specialEntranceLock, keyId: portal.keyId };
 	}
 
 	// Converts door-suitable semantic portals into door entity objects and applies the current lock policy.
@@ -188,7 +191,7 @@ class MapContentGenerator {
 			];
 			const lock = this._doorLockForPortal(portal);
 			if (lock) properties.push({name: 'lock', value: lock});
-			doors.push({type: 'entity', name: 'door', x: portal.x * 16, y: portal.y * 16, properties, _portal: portal});
+			doors.push({type: 'entity', name: 'door', x: portal.x * this.tileSize, y: portal.y * this.tileSize, properties, _portal: portal});
 		}
 		return doors;
 	}
@@ -206,7 +209,7 @@ class MapContentGenerator {
 				portal,
 				doors: portal ? [doorByPortalId.get(portal.id)].filter(Boolean) : [],
 				keyId: portal?.keyId || ('special:' + room.zoneId),
-				keyName: portal?.keyName || (type === 'library' ? 'Library key' : type === 'treasury' ? 'Treasury key' : 'Special room key')
+				keyName: portal?.keyName || this.settings.doors.keyNames[type] || this.settings.doors.keyNames.default
 			};
 		});
 	}
@@ -248,7 +251,7 @@ class MapContentGenerator {
 			selected.push(bestCandidate);
 			candidates.splice(candidates.indexOf(bestCandidate), 1);
 		}
-		for (const s of selected) objects.push({type: 'start', name: 'start', x: s.center.x * 16, y: s.center.y * 16});
+		for (const s of selected) objects.push({type: 'start', name: 'start', x: s.center.x * this.tileSize, y: s.center.y * this.tileSize});
 		return objects;
 	}
 
@@ -257,19 +260,17 @@ class MapContentGenerator {
 	_getNormalLootItemNames() { return Object.keys(itemConfigs).filter(name => name !== 'key'); }
 
 	_getPremiumPotionNames() {
-		const preferred = ['strength_potion', 'defense_potion', 'speed_potion', 'invisible_potion', 'mana_potion'];
+		const preferred = this.settings.loot.premiumPotions;
 		const result = preferred.filter(name => itemConfigs[name] != null);
 		return result.length ? result : this._getNormalLootItemNames().filter(name => name !== 'spell_scroll');
 	}
 
 	// Selects a spell compatible with the requested loot tier. Returns a spell ID or null.
 	_chooseSpellForLootTier(tier) {
+		const tierConfig = this.settings.loot.spellCostTiers[tier];
 		let spells = Object.keys(spellConfigs).filter(id => {
 			const cost = spellConfigs[id]?.cost || 0;
-			if (tier === 'normal') return cost <= 4;
-			if (tier === 'rare') return cost >= 5 && cost <= 7;
-			if (tier === 'legendary') return cost >= 8;
-			return true;
+			return !tierConfig || (cost >= tierConfig.min && cost <= tierConfig.max);
 		});
 		if (!spells.length) {
 			spells = Object.keys(spellConfigs);
@@ -280,33 +281,33 @@ class MapContentGenerator {
 
 	// Creates a spell-scroll item whose spell and charge count depend on loot source quality.
 	_createSpellScroll(source = 'normal') {
+		const scrollConfig = this.settings.loot.scrolls[source] || this.settings.loot.scrolls.normal;
 		let tier = 'normal';
-		if (source === 'locked') tier = this._random() < .25 ? 'legendary' : 'rare';
-		else if (source === 'special') tier = this._random() < .45 ? 'legendary' : 'rare';
+		if (source !== 'normal') tier = this._random() < scrollConfig.legendaryChance ? 'legendary' : 'rare';
 		const spell = this._chooseSpellForLootTier(tier);
 		if (spell == null) return createItemData('spell_scroll', {});
 		const cost = Math.max(1, spellConfigs[spell]?.cost || 1);
-		let points = source === 'normal' ? this._rand(8, 14) : source === 'locked' ? this._rand(10, 18) : this._rand(12, 20);
+		let points = this._rand(scrollConfig.points[0], scrollConfig.points[1]);
 		let amount = Math.max(1, Math.round(points / cost));
-		if (cost >= 8) amount = 1;
-		amount = Math.min(amount, 12);
+		if (cost >= this.settings.loot.scrolls.expensiveSpellCost) amount = this.settings.loot.scrolls.expensiveSpellAmount;
+		amount = Math.min(amount, this.settings.loot.scrolls.maxAmount);
 		return createItemData('spell_scroll', {spell, amount});
 	}
 
 	// Creates one loot item for normal, locked, library or treasury content tiers.
 	_createLootItem(tier = 'normal') {
 		if (tier === 'library') {
-			if (this._random() < .75) return this._createSpellScroll('special');
-			const pool = ['mana_potion', 'invisible_potion'].filter(name => itemConfigs[name] != null);
+			if (this._random() < this.settings.loot.tiers.library.scrollChance) return this._createSpellScroll('special');
+			const pool = this.settings.loot.tiers.library.fallbackItems.filter(name => itemConfigs[name] != null);
 			return pool.length ? createItemData(pool[this._rand(0, pool.length-1)], {}) : this._createSpellScroll('special');
 		}
 		if (tier === 'treasury') {
-			if (this._random() < .35) return this._createSpellScroll('special');
+			if (this._random() < this.settings.loot.tiers.treasury.scrollChance) return this._createSpellScroll('special');
 			const pool = this._getPremiumPotionNames();
 			return pool.length ? createItemData(pool[this._rand(0, pool.length-1)], {}) : null;
 		}
 		if (tier === 'locked') {
-			if (this._random() < .45) return this._createSpellScroll('locked');
+			if (this._random() < this.settings.loot.tiers.locked.scrollChance) return this._createSpellScroll('locked');
 			const pool = this._getPremiumPotionNames();
 			return pool.length ? createItemData(pool[this._rand(0, pool.length-1)], {}) : null;
 		}
@@ -330,19 +331,9 @@ class MapContentGenerator {
 
 	// Returns monster-spawn behavior embedded in chest/wardrobe entities.
 	_getContainerSpawnConfig(name) {
-		const wardrobe = name === 'wardrobe';
-		return {
-			probability: .30, minCount: 1, maxCount: 2,
-			monsterTypes: wardrobe ? ['rat', 'bat'] : ['rat'], sameTypePerBatch: true,
-			factionId: 'dungeon_creatures', minSpawnRadius: 1, spawnRadius: 2, allowPassableEntityCells: true,
-			behavior: {type: 'roam', minGoalDistance: 8, maxGoalDistance: 24, goalTolerance: 1, stuckTurnLimit: 3, aggroRadius: 6, pursuitRadius: 12,
-				pursuitCooldownTurns: 1, targetAggression: 1, travelAggression: 3, combatAggression: 6},
-			spawnEffect: wardrobe ? {type: 'emerge', initialScale: .18, intermediateScale: .45, initialAlpha: .35, sourceOffsetX: 0,
-				sourceOffsetY: 4, emergeLift: 2, emergeDuration: 150, moveDuration: 320, staggerDelay: 100, maxStaggerDelay: 400,
-				playMoveAnimation: true}
-				: {type: 'burst', initialScale: .25, launchScale: .72, overshootScale: 1.10, sourceOffsetX: 0, sourceOffsetY: -2, jumpHeight: 7,
-					launchDuration: 110, moveDuration: 240, settleDuration: 90, staggerDelay: 90, maxStaggerDelay: 360, playMoveAnimation: true}
-		};
+		const common = this.settings.containers.monsterSpawn.common;
+		const specific = this.settings.containers.monsterSpawn[name] || this.settings.containers.monsterSpawn.chest;
+		return this._clone({ ...common, ...specific, factionId: this.settings.factionId, behavior: common.behavior, spawnEffect: specific.spawnEffect });
 	}
 
 	// Builds a Tiled-like chest/wardrobe entity with loot, optional lock and spawn metadata.
@@ -352,12 +343,12 @@ class MapContentGenerator {
 			{name: 'monsterSpawn', value: this._getContainerSpawnConfig(name)}
 		];
 		if (lock) properties.push({name: 'lock', value: this._clone(lock)});
-		return {type: 'entity', name, x: x*16, y: y*16, properties, items};
+		return {type: 'entity', name, x: x*this.tileSize, y: y*this.tileSize, properties, items};
 	}
 
 	// Finds an unoccupied floor cell in a room, using random attempts followed by deterministic scan fallback.
 	_findFreeRoomCell(room, occupied) {
-		for (let attempt = 0; attempt < 60; attempt++) {
+		for (let attempt = 0; attempt < this.settings.placement.freeRoomCellAttempts; attempt++) {
 			const x = this._rand(room.x, room.x + room.w - 1), y = this._rand(room.y, room.y + room.h - 1), key = x + ':' + y;
 			if (!occupied.has(key) && this._isFloor(x, y)) return {x, y};
 		}
@@ -370,7 +361,7 @@ class MapContentGenerator {
 	_findWardrobeCell(room, occupied) {
 		const y = room.y, minX = room.x + 1, maxX = room.x + room.w - 2;
 		if (maxX < minX) return null;
-		for (let attempt = 0; attempt < 40; attempt++) {
+		for (let attempt = 0; attempt < this.settings.placement.wardrobeCellAttempts; attempt++) {
 			const x = this._rand(minX, maxX);
 			if (occupied.has(x+':'+y) || occupied.has(x+':'+(y-1)) || !this._isFloor(x, y)) continue;
 			return {x, y};
@@ -382,15 +373,15 @@ class MapContentGenerator {
 	_placeItems(occupiedObjects = []) {
 		const objects = [], occupied = this._collectOccupied(occupiedObjects);
 		for (const room of this._ordinaryRooms()) {
-			if (this._rand(1, 100) > 70) continue;
-			const itemCount = this._rand(1, 2);
+			if (this._rand(1, 100) > this.settings.containers.looseItems.chancePercent) continue;
+			const itemCount = this._rand(...this.settings.containers.looseItems.count);
 			let placed = 0, attempts = 0;
-			while (placed < itemCount && attempts++ < 20) {
+			while (placed < itemCount && attempts++ < this.settings.containers.looseItems.attempts) {
 				const x = this._rand(room.x, room.x+room.w-1), y = this._rand(room.y, room.y+room.h-1), key=x+':'+y;
 				if (occupied.has(key) || !this._isFloor(x, y)) continue;
 				const item = this._createLootItem('normal');
 				if (!item) continue;
-				objects.push({type: 'entity', name: 'item', x: x*16, y: y*16, properties: [], items: [item]});
+				objects.push({type: 'entity', name: 'item', x: x*this.tileSize, y: y*this.tileSize, properties: [], items: [item]});
 				occupied.add(key);
 				placed++;
 			}
@@ -402,11 +393,11 @@ class MapContentGenerator {
 	_placeChests(occupiedObjects = []) {
 		const objects = [], occupied = this._collectOccupied(occupiedObjects);
 		for (const room of this._ordinaryRooms()) {
-			if (this._rand(1, 100) > 30) continue;
-			for (let attempt = 0; attempt < 20; attempt++) {
+			if (this._rand(1, 100) > this.settings.containers.chests.chancePercent) continue;
+			for (let attempt = 0; attempt < this.settings.containers.chests.attempts; attempt++) {
 				const cell = this._findFreeRoomCell(room, occupied);
 				if (!cell) break;
-				objects.push(this._createContainerObject('chest', cell.x, cell.y, this._createLoot(this._rand(1, 5), 'normal')));
+				objects.push(this._createContainerObject('chest', cell.x, cell.y, this._createLoot(this._rand(...this.settings.containers.chests.lootCount), 'normal')));
 				occupied.add(cell.x+':'+cell.y);
 				break;
 			}
@@ -418,14 +409,14 @@ class MapContentGenerator {
 	_placeWardrobes(occupiedObjects = []) {
 		const objects = [], occupied = this._collectOccupied(occupiedObjects);
 		for (const room of this._ordinaryRooms()) {
-			if (this._rand(1, 100) > 20) continue;
-			const maxWardrobes = Math.min(3, Math.max(0, room.w - 2));
+			if (this._rand(1, 100) > this.settings.containers.wardrobes.chancePercent) continue;
+			const maxWardrobes = Math.min(this.settings.containers.wardrobes.maxPerRoom, Math.max(0, room.w - 2));
 			if (!maxWardrobes) continue;
 			const count = this._rand(1, maxWardrobes);
 			for (let i = 0; i < count; i++) {
 				const cell = this._findWardrobeCell(room, occupied);
 				if (!cell) break;
-				objects.push(this._createContainerObject('wardrobe', cell.x, cell.y, this._createLoot(this._rand(1, 4), 'normal')));
+				objects.push(this._createContainerObject('wardrobe', cell.x, cell.y, this._createLoot(this._rand(...this.settings.containers.wardrobes.lootCount), 'normal')));
 				occupied.add(cell.x+':'+cell.y);
 			}
 		}
@@ -437,18 +428,18 @@ class MapContentGenerator {
 		const result = {chests: [], wardrobes: []}, occupied = this._collectOccupied(occupiedObjects);
 		for (const special of specialRooms) {
 			if (special.type === 'treasury') {
-				for (let i = 0, count = this._rand(3, 5); i < count; i++) {
+				for (let i = 0, count = this._rand(...this.settings.containers.specialRooms.treasury.containerCount); i < count; i++) {
 					const cell = this._findFreeRoomCell(special.room, occupied);
 					if (!cell) break;
-					result.chests.push(this._createContainerObject('chest', cell.x, cell.y, this._createLoot(this._rand(3, 5), 'treasury')));
+					result.chests.push(this._createContainerObject('chest', cell.x, cell.y, this._createLoot(this._rand(...this.settings.containers.specialRooms.treasury.lootCount), 'treasury')));
 					occupied.add(cell.x+':'+cell.y);
 				}
 			} else {
-				const count = Math.min(this._rand(3, 5), Math.max(1, special.room.w-2));
+				const count = Math.min(this._rand(...this.settings.containers.specialRooms.library.containerCount), Math.max(1, special.room.w-2));
 				for (let i = 0; i < count; i++) {
 					const cell = this._findWardrobeCell(special.room, occupied);
 					if (!cell) break;
-					result.wardrobes.push(this._createContainerObject('wardrobe', cell.x, cell.y, this._createLoot(this._rand(2, 4), 'library')));
+					result.wardrobes.push(this._createContainerObject('wardrobe', cell.x, cell.y, this._createLoot(this._rand(...this.settings.containers.specialRooms.library.lootCount), 'library')));
 					occupied.add(cell.x+':'+cell.y);
 				}
 			}
@@ -461,12 +452,12 @@ class MapContentGenerator {
 	// Applies existing common consumable locks to a subset of ordinary containers. Returns the lock count.
 	_lockRandomContainers(chests = [], wardrobes = []) {
 		const containers = chests.concat(wardrobes);
-		if (containers.length < 4) return 0;
+		if (containers.length < this.settings.locks.common.minContainers) return 0;
 		this._shuffle(containers);
-		const count = Math.min(containers.length, Math.max(1, Math.round(containers.length * .12)));
+		const count = Math.min(containers.length, Math.max(1, Math.round(containers.length * this.settings.locks.common.fraction)));
 		for (let i = 0; i < count; i++) {
 			const container = containers[i];
-			this._setObjectProperty(container, 'lock', {locked: true, type: 'key', keyId: 'common', consumeKey: true});
+			this._setObjectProperty(container, 'lock', {locked: true, type: 'key', keyId: this.settings.locks.common.keyId, consumeKey: this.settings.locks.common.consumeKey});
 			if (!Array.isArray(container.items)) container.items=[];
 			const premium = this._createLootItem('locked');
 			if (premium) container.items.push(premium);
@@ -498,7 +489,7 @@ class MapContentGenerator {
 			const cell=this._findFreeRoomCell(room, occupied);
 			if (!cell) continue;
 			occupied.add(cell.x+':'+cell.y);
-			return this._createContainerObject('chest', cell.x, cell.y, this._createLoot(this._rand(1, 2), 'normal'));
+			return this._createContainerObject('chest', cell.x, cell.y, this._createLoot(this._rand(...this.settings.locks.common.fallbackChestLootCount), 'normal'));
 		}
 		return null;
 	}
@@ -524,7 +515,7 @@ class MapContentGenerator {
 				const ra=this._getObjectRoom(a), rb=this._getObjectRoom(b), ca=ra?this._roomCenter(ra): target, cb=rb?this._roomCenter(rb): target;
 				return (Math.abs(cb.x-target.x)+Math.abs(cb.y-target.y))-(Math.abs(ca.x-target.x)+Math.abs(ca.y-target.y));
 			});
-			const container=unused[this._rand(0, Math.max(0, Math.ceil(unused.length*.30)-1))];
+			const container=unused[this._rand(0, Math.max(0, Math.ceil(unused.length*this.settings.locks.specialKeyCandidateTopFraction)-1))];
 			if (!Array.isArray(container.items)) container.items=[];
 			container.items.push(createItemData('key', {keyId: special.keyId, name: special.keyName}));
 			usedUniqueContainers.add(container);
@@ -541,7 +532,7 @@ class MapContentGenerator {
 			if (!list.length)break;
 			const container=list[this._rand(0, list.length-1)];
 			if (!Array.isArray(container.items))container.items=[];
-			container.items.push(createItemData('key', {keyId: 'common', name: 'Common key'}));
+			container.items.push(createItemData('key', {keyId: this.settings.locks.common.keyId, name: this.settings.locks.common.keyName}));
 		}
 		return extraChests;
 	}
@@ -549,40 +540,40 @@ class MapContentGenerator {
 	// ----- Guards, roaming creatures and monster generators -----
 
 	_doorCells(objects) {
-		return objects.filter(o => o?.type === 'entity' && o.name === 'door').map(o => ({x: Math.floor(o.x/16), y: Math.floor(o.y/16)}));
+		return objects.filter(o => o?.type === 'entity' && o.name === 'door').map(o => ({x: Math.floor(o.x/this.tileSize), y: Math.floor(o.y/this.tileSize)}));
 	}
 
 	_isNearAny(cell, cells, radius = 1) { return cells.some(c => Math.abs(cell.x-c.x)<=radius && Math.abs(cell.y-c.y)<=radius); }
 
 	_roomHasObject(room, objects) {
 		return objects.some(obj => {
-			if (!obj||obj.x==null||obj.y==null)return false; const x=Math.floor(obj.x/16), y=Math.floor(obj.y/16); return x>=room.x&&x<room.x+room.w&&y>=room.y&&y<room.y+room.h;
+			if (!obj||obj.x==null||obj.y==null)return false; const x=Math.floor(obj.x/this.tileSize), y=Math.floor(obj.y/this.tileSize); return x>=room.x&&x<room.x+room.w&&y>=room.y&&y<room.y+room.h;
 		});
 	}
 
 	// Places guards near valuable containers while respecting starts, doors and occupied cells.
 	_placeTreasureGuards(chests = [], wardrobes = [], startPositions = [], occupiedObjects = []) {
 		const result=[], containers=chests.concat(wardrobes), occupied=this._collectOccupied(occupiedObjects), doorCells=this._doorCells(occupiedObjects);
-		const guardTypes=Object.keys(unitConfigs).filter(n => !['wizard', 'rat', 'bat'].includes(n));
+		const guardTypes=Object.keys(unitConfigs).filter(n => !this.settings.guards.excludedUnitTypes.includes(n));
 		if (!guardTypes.length)return result;
 		for (const room of this.rooms) {
 			if (this._roomHasObject(room, startPositions))continue;
 			let n=0;
 			for (const c of containers)if (this._getObjectRoom(c)===room)n++;
-			if (n<2)continue;
+			if (n<this.settings.guards.minContainersInRoom)continue;
 			let cells=[];
 			for (let y=room.y;y<room.y+room.h;y++)for (let x=room.x;x<room.x+room.w;x++){
 				const cell={x, y};
-				if (!this._isFloor(x, y)||occupied.has(x+':'+y)||this._isNearAny(cell, doorCells, 1))continue;
+				if (!this._isFloor(x, y)||occupied.has(x+':'+y)||this._isNearAny(cell, doorCells, this.settings.placement.doorClearance))continue;
 				cells.push(cell);
 			}
 			if (!cells.length)continue;
 			this._shuffle(cells);
-			const count=Math.min(this._random()<.40?2: 1, cells.length), type=guardTypes[this._rand(0, guardTypes.length-1)], aggro=Math.max(4, Math.ceil(Math.max(room.w, room.h)/2)+1);
+			const count=Math.min(this._random()<this.settings.guards.extraGuardChance?this.settings.guards.maxGuardsPerRoom: 1, cells.length), type=guardTypes[this._rand(0, guardTypes.length-1)], aggro=Math.max(this.settings.guards.minAggroRadius, Math.ceil(Math.max(room.w, room.h)/2)+1);
 			for (let i=0;i<count;i++){
 				const c=cells[i];
-				result.push({type: 'independent_unit', name: type, x: c.x*16, y: c.y*16, factionId: 'dungeon_creatures',
-					independentAI: {type: 'guard', homeX: c.x, homeY: c.y, aggroRadius: aggro, leashRadius: aggro+3, patrolRadius: 3, aggression: 4, patrolAggression: 2, returnAggression: 1}});
+				result.push({type: 'independent_unit', name: type, x: c.x*this.tileSize, y: c.y*this.tileSize, factionId: this.settings.factionId,
+					independentAI: {type: 'guard', homeX: c.x, homeY: c.y, aggroRadius: aggro, leashRadius: aggro+this.settings.guards.leashExtra, patrolRadius: this.settings.guards.patrolRadius, aggression: this.settings.guards.aggression, patrolAggression: this.settings.guards.patrolAggression, returnAggression: this.settings.guards.returnAggression}});
 				occupied.add(c.x+':'+c.y);
 			}
 		}
@@ -591,27 +582,26 @@ class MapContentGenerator {
 
 	// Places free-roaming dungeon creatures in reachable non-special areas.
 	_placeRoamingCreatures(startPositions = [], occupiedObjects = []) {
-		const result=[], factionId='dungeon_creatures', scale=(this.width*this.height)/(20*20);
-		const profiles=[
-			{count: this._rand(Math.max(1, Math.round(1*scale)), Math.max(1, Math.round(2*scale))), types: ['chort', 'muddy', 'demon', 'troll'],
-				dist: 3,
-				behavior: {type: 'roam', minGoalDistance: 16, maxGoalDistance: 40, goalTolerance: 1, stuckTurnLimit: 3, aggroRadius: 7,
-					pursuitRadius: 14, pursuitCooldownTurns: 1, targetAggression: 1, travelAggression: 3, combatAggression: 6}},
-			{count: this._rand(Math.max(1, Math.round(5*scale)), Math.max(1, Math.round(7*scale))), types: ['rat', 'bat'], dist: 2,
-				behavior: {type: 'roam', minGoalDistance: 8, maxGoalDistance: 24, goalTolerance: 1, stuckTurnLimit: 3, aggroRadius: 4, pursuitRadius: 7,
-					pursuitCooldownTurns: 2, targetAggression: .1, travelAggression: .5, combatAggression: 2}}
-		];
+		const result=[], factionId=this.settings.factionId, scale=(this.width*this.height)/this.settings.roamingCreatures.baseArea;
+		const profiles=this.settings.roamingCreatures.profiles.map(profile => ({
+			...profile,
+			count: this._rand(
+				Math.max(1, Math.round(profile.count[0]*scale)),
+				Math.max(1, Math.round(profile.count[1]*scale))
+			),
+			dist: profile.minDistance
+		}));
 		const occupied=this._collectOccupied(occupiedObjects), doors=this._doorCells(occupiedObjects), placed=[];
 		const arena=this.rooms.find(r => this._zoneForRoom(r)?.type==='arena'&&!this._roomHasObject(r, startPositions));
 		let central=this.rooms.filter(r => !r.special&&this._zoneForRoom(r)?.type!=='special'&&!this._roomHasObject(r, startPositions)&&r!==arena);
 		const mc={x: Math.floor(this.width/2), y: Math.floor(this.height/2)};
 		central.sort((a, b) => this._dist2(this._roomCenter(a), mc)-this._dist2(this._roomCenter(b), mc));
-		central=central.slice(0, Math.min(central.length, Math.max(4, Math.ceil(central.length/2))));
+		central=central.slice(0, Math.min(central.length, Math.max(this.settings.roamingCreatures.centralRoomMinCount, Math.ceil(central.length*this.settings.roamingCreatures.centralRoomFraction))));
 		const cellsFor=(room, dist) => {
 			const arr=[];
 			for (let y=room.y;y<room.y+room.h;y++)for (let x=room.x;x<room.x+room.w;x++){
 				const c={x, y};
-				if (!this._isFloor(x, y)||occupied.has(x+':'+y)||this._isNearAny(c, doors, 1))continue;
+				if (!this._isFloor(x, y)||occupied.has(x+':'+y)||this._isNearAny(c, doors, this.settings.placement.doorClearance))continue;
 				if (placed.some(p => Math.max(Math.abs(p.x-x), Math.abs(p.y-y))<dist))continue;
 				arr.push(c);
 			}
@@ -641,7 +631,7 @@ class MapContentGenerator {
 				}
 				if (!cell)break;
 				const type=types[this._rand(0, types.length-1)];
-				result.push({type: 'independent_unit', name: type, x: cell.x*16, y: cell.y*16, factionId, independentAI: Object.assign({}, p.behavior, {homeX: cell.x, homeY: cell.y})});
+				result.push({type: 'independent_unit', name: type, x: cell.x*this.tileSize, y: cell.y*this.tileSize, factionId, independentAI: Object.assign({}, p.behavior, {homeX: cell.x, homeY: cell.y})});
 				occupied.add(cell.x+':'+cell.y);
 				placed.push(cell);
 			}
@@ -651,14 +641,15 @@ class MapContentGenerator {
 
 	// Builds one monster-generator entity with its generation options serialized as object properties.
 	_createMonsterGeneratorObject(x, y, options={}) {
-		return {type: 'entity', name: 'monster_generator', x: x*16, y: y*16, properties: [
-				{name: 'visualSprite', value: options.visualSprite||'hole'}, {name: 'visualScale', value: options.visualScale??.15},
-					{name: 'visualFrame', value: options.visualFrame??0}, {name: 'visualOriginMode', value: options.visualOriginMode||'center'},
-					{name: 'depthOffset', value: options.depthOffset??-40}, {name: 'blocksLOS', value: options.blocksLOS===true},
-					{name: 'passable', value: options.passable!==false}, {name: 'stepCost', value: options.stepCost??1},
-					{name: 'destructible', value: options.destructible===true}, {name: 'generatorId', value: options.generatorId||null},
-					{name: 'generator', value: this._clone(options.generator||{})}
-			]};
+		const visual = {...this.settings.monsterGenerators.visual, ...options};
+		return {type: 'entity', name: 'monster_generator', x: x*this.tileSize, y: y*this.tileSize, properties: [
+			{name: 'visualSprite', value: visual.visualSprite}, {name: 'visualScale', value: visual.visualScale},
+			{name: 'visualFrame', value: visual.visualFrame}, {name: 'visualOriginMode', value: visual.visualOriginMode},
+			{name: 'depthOffset', value: visual.depthOffset}, {name: 'blocksLOS', value: visual.blocksLOS===true},
+			{name: 'passable', value: visual.passable!==false}, {name: 'stepCost', value: visual.stepCost},
+			{name: 'destructible', value: visual.destructible===true}, {name: 'generatorId', value: options.generatorId||null},
+			{name: 'generator', value: this._clone(options.generator||{})}
+		]};
 	}
 
 	// Places room-based monster generators away from starts, guards, doors and special chambers.
@@ -666,24 +657,12 @@ class MapContentGenerator {
 		const result=[], occupied=this._collectOccupied(occupiedObjects), doors=this._doorCells(occupiedObjects);
 		let rooms=this.rooms.filter(r => !r.special&&this._zoneForRoom(r)?.type!=='special'&&!this._roomHasObject(r, startPositions)&&!this._roomHasObject(r, guards));
 		if (!rooms.length)return result;
-		const areaScale=Math.sqrt((this.width*this.height)/(20*20)), hard=Math.min(5, rooms.length, Math.max(1, Math.ceil(rooms.length/3))),
-			min=Math.min(hard, Math.max(1, Math.floor(1.5*areaScale))), max=Math.min(hard, Math.max(min, Math.ceil(2*areaScale))),
+		const genCfg=this.settings.monsterGenerators, areaScale=Math.sqrt((this.width*this.height)/genCfg.baseArea),
+			hard=Math.min(genCfg.maxPerMap, rooms.length, Math.max(1, Math.ceil(rooms.length/genCfg.roomsPerGeneratorCap))),
+			min=Math.min(hard, Math.max(1, Math.floor(genCfg.minScaleFactor*areaScale))), max=Math.min(hard, Math.max(min, Math.ceil(genCfg.maxScaleFactor*areaScale))),
 			count=this._rand(min, max);
 		this._shuffle(rooms);
-		const roam={type: 'roam', minGoalDistance: 8, maxGoalDistance: 24, goalTolerance: 1, stuckTurnLimit: 3, aggroRadius: 5, pursuitRadius: 10, pursuitCooldownTurns: 1};
-		const profiles=[
-			{type: 'rat', weight: 42, spawnChance: .18, minCount: 1, maxCount: 2, cooldownRounds: 1, maxAlive: 4, maxTotal: 10,
-				behavior: Object.assign({}, roam, {targetAggression: .35, travelAggression: 1, combatAggression: 3})},
-			{type: 'bat', weight: 35, spawnChance: .18, minCount: 1, maxCount: 2, cooldownRounds: 1, maxAlive: 4, maxTotal: 10,
-				behavior: Object.assign({}, roam, {aggroRadius: 6, pursuitRadius: 12, targetAggression: .45, travelAggression: 1, combatAggression: 3})},
-			{type: 'spider', weight: 16, spawnChance: .12, minCount: 1, maxCount: 1, cooldownRounds: 2, maxAlive: 3, maxTotal: 6,
-				behavior: Object.assign({}, roam, {targetAggression: .7, travelAggression: 2, combatAggression: 4})},
-			{type: 'muddy', weight: 4, strong: true, spawnChance: .08, minCount: 1, maxCount: 1, cooldownRounds: 3, maxAlive: 1, maxTotal: 3,
-				behavior: Object.assign({}, roam,
-					{minGoalDistance: 14, maxGoalDistance: 36, aggroRadius: 7, pursuitRadius: 14, targetAggression: 1, travelAggression: 3, combatAggression: 6})},
-			{type: 'chort', weight: 3, strong: true, spawnChance: .10, minCount: 1, maxCount: 1, cooldownRounds: 3, maxAlive: 2, maxTotal: 4,
-				behavior: Object.assign({}, roam, {minGoalDistance: 14, maxGoalDistance: 36, aggroRadius: 7, pursuitRadius: 14, targetAggression: 1, travelAggression: 3, combatAggression: 6})}
-		].filter(p => unitConfigs[p.type]!=null);
+		const profiles=genCfg.profiles.map(p => ({...p, behavior: Object.assign({}, genCfg.baseBehavior, p.behavior)})).filter(p => unitConfigs[p.type]!=null);
 		let strong=false;
 		const pick=() => {
 			const a=profiles.filter(p => !p.strong||!strong);
@@ -700,22 +679,22 @@ class MapContentGenerator {
 			const cells=[];
 			for (let y=room.y;y<room.y+room.h;y++)for (let x=room.x;x<room.x+room.w;x++){
 				const c={x, y};
-				if (this._isFloor(x, y)&&!occupied.has(x+':'+y)&&!this._isNearAny(c, doors, 1))cells.push(c);
+				if (this._isFloor(x, y)&&!occupied.has(x+':'+y)&&!this._isNearAny(c, doors, this.settings.placement.doorClearance))cells.push(c);
 			}
 			if (!cells.length)continue;
 			const c=cells[this._rand(0, cells.length-1)], p=pick();
 			if (!p)continue;
 			if (p.strong)strong=true;
-			result.push(this._createMonsterGeneratorObject(c.x, c.y,
-				{visualSprite: 'hole', visualScale: 1, visualOriginMode: 'center', depthOffset: -40, blocksLOS: false, passable: true, stepCost: 1,
-					destructible: false,
-					generator: {enabled: true, spawnChance: p.spawnChance, minCount: p.minCount, maxCount: p.maxCount, cooldownRounds: p.cooldownRounds,
-						maxAlive: p.maxAlive, maxTotal: p.maxTotal, spawnedTotal: 0, factionId: 'dungeon_creatures', minSpawnRadius: 1, spawnRadius: 2,
-						allowPassableEntityCells: false, units: [{configName: p.type, weight: 1, behavior: this._clone(p.behavior)}],
-						spawnEffect: p.strong?{type: 'burst', initialScale: .2, launchScale: .7, overshootScale: 1.1, jumpHeight: 6, launchDuration: 120,
-							moveDuration: 250, settleDuration: 90, staggerDelay: 100, playMoveAnimation: true}: {type: 'emerge', initialScale: .15,
-							intermediateScale: .4, initialAlpha: .35, sourceOffsetY: 3, emergeLift: 2, emergeDuration: 150, moveDuration: 300, staggerDelay: 100,
-							playMoveAnimation: true}}}));
+			result.push(this._createMonsterGeneratorObject(c.x, c.y, {
+				...genCfg.visual,
+				generator: {
+					...genCfg.spawn,
+					spawnChance: p.spawnChance, minCount: p.minCount, maxCount: p.maxCount, cooldownRounds: p.cooldownRounds,
+					maxAlive: p.maxAlive, maxTotal: p.maxTotal, spawnedTotal: 0, factionId: this.settings.factionId,
+					units: [{configName: p.type, weight: 1, behavior: this._clone(p.behavior)}],
+					spawnEffect: this._clone(p.strong ? genCfg.strongSpawnEffect : genCfg.normalSpawnEffect)
+				}
+			}));
 			occupied.add(c.x+':'+c.y);
 		}
 		return result;
@@ -733,8 +712,8 @@ class MapContentGenerator {
 			const hasKey=objects.some(o => Array.isArray(o.items)&&o.items.some(i => i?.keyId===special.keyId||i?.params?.keyId===special.keyId||i?.features?.keyId===special.keyId));
 			if (!hasKey)errors.push('no key placed for '+special.keyId);
 		}
-		for (const door of doors)if (door._portal?.type!=='special_entrance'&&this._isObjectLocked(door))errors.push('non-special door locked at '+door.x/16+','+door.y/16);
-		for (const s of starts)if (!this._isFloor(Math.floor(s.x/16), Math.floor(s.y/16)))errors.push('start not on floor');
+		for (const door of doors)if (door._portal?.type!=='special_entrance'&&this._isObjectLocked(door))errors.push('non-special door locked at '+door.x/this.tileSize+','+door.y/this.tileSize);
+		for (const s of starts)if (!this._isFloor(Math.floor(s.x/this.tileSize), Math.floor(s.y/this.tileSize)))errors.push('start not on floor');
 		if (errors.length)throw new Error('Map content validation failed: '+errors.join('; '));
 		for (const d of doors) delete d._portal;
 	}

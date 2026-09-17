@@ -1,31 +1,33 @@
 // Chaos universal dungeon geometry engine (v5.7)
 // Pure geometry: no Phaser entities, loot, monsters, or autotiling.
+const DUNGEON_CONFIG = MAP_GENERATION_CONFIG.geometry;
+const PORTAL_CONFIG = MAP_GENERATION_CONFIG.portals;
 
 // Pure dungeon geometry engine. Generates rooms, corridors, gates, loops, special rooms and alcoves from a resolved ZoneLayout.
 class DungeonGenerator {
 
 	constructor(cfg = {}) {
-		this.width = cfg.width || 40;
-		this.height = cfg.height || 32;
-		this.seed = cfg.seed || 1;
-		this.specialCount = Math.max(0, Math.min(8, cfg.specialCount ?? 2));
-		this.allowUnzonedAlcoves = !!cfg.allowUnzonedAlcoves;
-		this.loopRatio = cfg.loopRatio ?? .15; // Probability of selecting each eligible optional loop candidate.
-		this.zoneAttempts = Math.max(1, cfg.zoneAttempts || 40); // Stochastic retries per zone before deterministic fallback.
-		this.minRoomSize = cfg.minRoomSize || 4;
-		this.maxRoomSize = cfg.maxRoomSize || 14;
-		this.roomAreaTarget = cfg.roomAreaTarget || 68; // Approximate zone area allocated per desired room.
-		this.maxRoomsPerZone = cfg.maxRoomsPerZone || 12;
-		this.specialMinRoomSize = cfg.specialMinRoomSize || 4;
-		this.specialMaxRoomSize = cfg.specialMaxRoomSize || 7;
-		this.alcoveRoomCount = Math.max(0, cfg.alcoveRoomCount ?? 2);
-		this.alcoveRoomMin = Math.max(1, cfg.alcoveRoomMin ?? 2);
-		this.alcoveRoomMax = Math.max(this.alcoveRoomMin, cfg.alcoveRoomMax ?? 3);
-		this.alcoveRoomTunnel = Math.max(0, cfg.alcoveRoomTunnel ?? 4);
-		this.alcoveNicheCount = Math.max(0, cfg.alcoveNicheCount ?? 3);
-		this.alcoveNicheMin = Math.max(1, cfg.alcoveNicheMin ?? 1);
-		this.alcoveNicheMax = Math.max(this.alcoveNicheMin, cfg.alcoveNicheMax ?? 2);
-		this.alcoveNicheTunnel = Math.max(0, cfg.alcoveNicheTunnel ?? 1);
+		this.width = cfg.width || MAP_GENERATION_CONFIG.layout.defaultWidth;
+		this.height = cfg.height || MAP_GENERATION_CONFIG.layout.defaultHeight;
+		this.seed = cfg.seed || DUNGEON_CONFIG.seed;
+		this.specialCount = Math.max(0, Math.min(MAP_GENERATION_CONFIG.skirmish.maxSpecialCount, cfg.specialCount ?? DUNGEON_CONFIG.specialCount));
+		this.allowUnzonedAlcoves = cfg.allowUnzonedAlcoves ?? DUNGEON_CONFIG.allowUnzonedAlcoves;
+		this.loopRatio = cfg.loopRatio ?? DUNGEON_CONFIG.loopRatio; // Probability of selecting each eligible optional loop candidate.
+		this.zoneAttempts = Math.max(1, cfg.zoneAttempts || DUNGEON_CONFIG.zoneAttempts); // Stochastic retries per zone before deterministic fallback.
+		this.minRoomSize = cfg.minRoomSize || DUNGEON_CONFIG.minRoomSize;
+		this.maxRoomSize = cfg.maxRoomSize || DUNGEON_CONFIG.maxRoomSize;
+		this.roomAreaTarget = cfg.roomAreaTarget || DUNGEON_CONFIG.roomAreaTarget; // Approximate zone area allocated per desired room.
+		this.maxRoomsPerZone = cfg.maxRoomsPerZone || DUNGEON_CONFIG.maxRoomsPerZone;
+		this.specialMinRoomSize = cfg.specialMinRoomSize || DUNGEON_CONFIG.specialMinRoomSize;
+		this.specialMaxRoomSize = cfg.specialMaxRoomSize || DUNGEON_CONFIG.specialMaxRoomSize;
+		this.alcoveRoomCount = Math.max(0, cfg.alcoveRoomCount ?? DUNGEON_CONFIG.alcoveRoomCount);
+		this.alcoveRoomMin = Math.max(1, cfg.alcoveRoomMin ?? DUNGEON_CONFIG.alcoveRoomMin);
+		this.alcoveRoomMax = Math.max(this.alcoveRoomMin, cfg.alcoveRoomMax ?? DUNGEON_CONFIG.alcoveRoomMax);
+		this.alcoveRoomTunnel = Math.max(0, cfg.alcoveRoomTunnel ?? DUNGEON_CONFIG.alcoveRoomTunnel);
+		this.alcoveNicheCount = Math.max(0, cfg.alcoveNicheCount ?? DUNGEON_CONFIG.alcoveNicheCount);
+		this.alcoveNicheMin = Math.max(1, cfg.alcoveNicheMin ?? DUNGEON_CONFIG.alcoveNicheMin);
+		this.alcoveNicheMax = Math.max(this.alcoveNicheMin, cfg.alcoveNicheMax ?? DUNGEON_CONFIG.alcoveNicheMax);
+		this.alcoveNicheTunnel = Math.max(0, cfg.alcoveNicheTunnel ?? DUNGEON_CONFIG.alcoveNicheTunnel);
 		this._resetRandomStreams(this.seed);
 		this._resetGenerationState();
 	}
@@ -1919,16 +1921,16 @@ class ZoneGraphMapGenerator {
 			: null;
 		this._scenarioSpec = this._manualSpec || this._autoSpec;
 		const specGeneration = this._scenarioSpec ? this._scenarioSpec.generation : {};
-		this.cfg = this._scenarioSpec ? { ...cfg, ...specGeneration, seed: cfg.seed ?? specGeneration.seed ?? 1, plannerMode: this.plannerMode,
+		this.cfg = this._scenarioSpec ? { ...cfg, ...specGeneration, seed: cfg.seed ?? specGeneration.seed ?? DUNGEON_CONFIG.seed, plannerMode: this.plannerMode,
 			zoneGraphSpec: this._scenarioSpec } : { ...cfg };
 		const specMap = this._scenarioSpec ? this._scenarioSpec.map : {};
-		this.width = specMap.width ?? this.cfg.width ?? 40;
-		this.height = specMap.height ?? this.cfg.height ?? 32;
-		this.seed = this.cfg.seed || 1;
-		this.specialCount = this._scenarioSpec ? this._scenarioSpec.zones.filter(z => z.generator === 'special' || z.role === 'special' || z.specialType).length : Math.max(0, Math.min(8, this.cfg.specialCount ?? 2));
-		this.arenaWeight = this.cfg.arenaWeight ?? 4;
-		this.loopRatio = this.cfg.loopRatio ?? .15;
-		this.zoneAttempts = Math.max(1, this.cfg.zoneAttempts || 40);
+		this.width = specMap.width ?? this.cfg.width ?? MAP_GENERATION_CONFIG.layout.defaultWidth;
+		this.height = specMap.height ?? this.cfg.height ?? MAP_GENERATION_CONFIG.layout.defaultHeight;
+		this.seed = this.cfg.seed || DUNGEON_CONFIG.seed;
+		this.specialCount = this._scenarioSpec ? this._scenarioSpec.zones.filter(z => z.generator === 'special' || z.role === 'special' || z.specialType).length : Math.max(0, Math.min(MAP_GENERATION_CONFIG.skirmish.maxSpecialCount, this.cfg.specialCount ?? DUNGEON_CONFIG.specialCount));
+		this.arenaWeight = this.cfg.arenaWeight ?? MAP_GENERATION_CONFIG.layout.arenaZone.weight;
+		this.loopRatio = this.cfg.loopRatio ?? DUNGEON_CONFIG.loopRatio;
+		this.zoneAttempts = Math.max(1, this.cfg.zoneAttempts || DUNGEON_CONFIG.zoneAttempts);
 		this._lastEngine = null;
 		this._lastSpec = null;
 		this._lastLayout = null;
@@ -1978,7 +1980,7 @@ class ZoneGraphMapGenerator {
 			cfg.width = planned.layout.width;
 			cfg.height = planned.layout.height;
 			cfg.specialCount = planned.layout.zones.filter(z => z.type === 'special').length;
-			cfg.allowUnzonedAlcoves = true;
+			cfg.allowUnzonedAlcoves = DUNGEON_CONFIG.resolvedLayoutAllowsUnzonedAlcoves;
 		} else if (this.plannerMode === 'skirmish') {
 			const spec = SkirmishZoneGraphFactory.create(SKIRMISH_ARENA_TEMPLATE, cfg, effectiveSpecial, attemptSeed);
 			const planner = new AutomaticZoneLayoutPlanner(spec, { width: cfg.width, height: cfg.height, seed: attemptSeed });
@@ -1987,7 +1989,7 @@ class ZoneGraphMapGenerator {
 			cfg.width = planned.layout.width;
 			cfg.height = planned.layout.height;
 			cfg.specialCount = planned.layout.zones.filter(z => z.type === 'special').length;
-			cfg.allowUnzonedAlcoves = true;
+			cfg.allowUnzonedAlcoves = DUNGEON_CONFIG.resolvedLayoutAllowsUnzonedAlcoves;
 		} else {
 			throw new Error('Unknown plannerMode: ' + this.plannerMode);
 		}
@@ -2015,8 +2017,8 @@ class ZoneGraphMapGenerator {
 		let lastError = null;
 		let layoutTry = 0;
 		if (this.plannerMode === 'manual' || this.plannerMode === 'auto') {
-			for (let pass = 0; pass < 8; pass++, layoutTry++) {
-				const effectiveLoop = pass < 4 ? requestedLoop : requestedLoop * .35;
+			for (let pass = 0; pass < DUNGEON_CONFIG.retries.scenarioPasses; pass++, layoutTry++) {
+				const effectiveLoop = pass < DUNGEON_CONFIG.retries.fullLoopPasses ? requestedLoop : requestedLoop * DUNGEON_CONFIG.retries.degradedLoopFactor;
 				const attemptSeed = (baseSeed + Math.imul(layoutTry + 1, LAYOUT_RETRY_STEP)) >>> 0;
 				try {
 					const result = this._generateAttempt(requestedSpecial, effectiveLoop, attemptSeed);
@@ -2041,9 +2043,9 @@ class ZoneGraphMapGenerator {
 			throw lastError || new Error('Scenario map generation failed after all retries');
 		}
 		for (let effectiveSpecial = requestedSpecial; effectiveSpecial >= 0; effectiveSpecial--) {
-			const passes = effectiveSpecial === requestedSpecial ? 8 : 4;
+			const passes = effectiveSpecial === requestedSpecial ? DUNGEON_CONFIG.retries.skirmishPrimaryPasses : DUNGEON_CONFIG.retries.skirmishDegradedPasses;
 			for (let pass = 0; pass < passes; pass++, layoutTry++) {
-				const effectiveLoop = pass < 4 ? requestedLoop : requestedLoop * .35;
+				const effectiveLoop = pass < DUNGEON_CONFIG.retries.fullLoopPasses ? requestedLoop : requestedLoop * DUNGEON_CONFIG.retries.degradedLoopFactor;
 				const attemptSeed = (baseSeed + Math.imul(layoutTry + 1, LAYOUT_RETRY_STEP)) >>> 0;
 				try {
 					const result = this._generateAttempt(effectiveSpecial, effectiveLoop, attemptSeed);
@@ -2122,13 +2124,7 @@ class DungeonPortalBuilder {
 		const zoneById = new Map((dungeon.zones || []).map(z => [z.id, z]));
 		let seq = 0;
 
-		const priority = {
-			special_entrance: 50,
-			alcove_entrance: 40,
-			alcove_tunnel_entrance: 35,
-			room_entrance: 30,
-			zone_gate: 20
-		};
+		const priority = PORTAL_CONFIG.priority; // Higher priority wins when several semantic portals share one cell.
 
 		const add = portal => {
 			if (portal == null || portal.x == null || portal.y == null) return null;
@@ -2332,7 +2328,7 @@ class DungeonPortalBuilder {
 				});
 			}
 
-			if (tunnel.length >= 3 && alcove.attachment) {
+			if (tunnel.length >= PORTAL_CONFIG.alcoveSecondDoorMinTunnelLength && alcove.attachment) {
 				const far = tunnel[tunnel.length - 1];
 				add({
 					type: 'alcove_tunnel_entrance',

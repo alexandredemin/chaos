@@ -1,6 +1,10 @@
 // Chaos universal map generation: ZoneGraph infrastructure (v5.7)
 // Ported from the validated standalone simulator. Keep this layer game-agnostic.
 
+const ZONE_LAYOUT_CONFIG = MAP_GENERATION_CONFIG.layout;
+const ZONE_GEOMETRY_CONFIG = MAP_GENERATION_CONFIG.geometry;
+const SKIRMISH_CONFIG = MAP_GENERATION_CONFIG.skirmish;
+
 const DIR4 = Object.freeze([[1, 0], [-1, 0], [0, 1], [0, -1]]);
 const LOOP_RNG_SALT = 0xA511E9B3; // Keeps optional loop randomness independent from base geometry.
 const ALCOVE_RNG_SALT = 0x6C8E9CF5; // Keeps alcove placement independent from rooms and loops.
@@ -412,31 +416,31 @@ class SkirmishZoneGraphFactory {
 	// Builds a skirmish ZoneGraphSpec from the arena template, chooses feasible special slots and returns the resulting spec.
 	static create(template, cfg = {}, specialCount = null, seed = null) {
 		const raw = template instanceof ZoneGraphSpec ? template.toJSON() : cloneJSON(template || SKIRMISH_ARENA_TEMPLATE);
-		const actualSeed = seed ?? cfg.seed ?? 1;
-		const requestedSpecial = Math.max(0, Math.min(8, specialCount ?? cfg.specialCount ?? raw.meta?.defaultSpecialCount ?? 2));
+		const actualSeed = seed ?? cfg.seed ?? ZONE_GEOMETRY_CONFIG.seed;
+		const requestedSpecial = Math.max(0, Math.min(SKIRMISH_CONFIG.maxSpecialCount, specialCount ?? cfg.specialCount ?? raw.meta?.defaultSpecialCount ?? SKIRMISH_CONFIG.factoryFallbackSpecialCount));
 		raw.id = raw.id || 'skirmish-arena-auto';
-		raw.map = { ...(raw.map || {}), width: cfg.width ?? raw.map?.width ?? 40, height: cfg.height ?? raw.map?.height ?? 40, margin: raw.map?.margin ?? 1 };
+		raw.map = { ...(raw.map || {}), width: cfg.width ?? raw.map?.width ?? ZONE_LAYOUT_CONFIG.defaultWidth, height: cfg.height ?? raw.map?.height ?? ZONE_LAYOUT_CONFIG.defaultHeight, margin: raw.map?.margin ?? ZONE_LAYOUT_CONFIG.margin };
 		raw.layout = cloneJSON(raw.layout || {});
 		raw.layout.type = 'auto';
-		raw.layout.auto = { ...(raw.layout.auto || {}), maxBacktracks: raw.layout.auto?.maxBacktracks ?? 50000 };
+		raw.layout.auto = { ...(raw.layout.auto || {}), maxBacktracks: raw.layout.auto?.maxBacktracks ?? ZONE_LAYOUT_CONFIG.autoMaxBacktracks };
 		delete raw.layout.auto.seed;
 		raw.generation = {
 			...(raw.generation || {}),
-			loopRatio: cfg.loopRatio ?? raw.generation?.loopRatio ?? .15,
-			zoneAttempts: cfg.zoneAttempts ?? raw.generation?.zoneAttempts ?? 40,
-			roomAreaTarget: cfg.roomAreaTarget ?? raw.generation?.roomAreaTarget ?? 68,
-			alcoveRoomCount: cfg.alcoveRoomCount ?? raw.generation?.alcoveRoomCount ?? 2,
-			alcoveRoomMin: cfg.alcoveRoomMin ?? raw.generation?.alcoveRoomMin ?? 2,
-			alcoveRoomMax: cfg.alcoveRoomMax ?? raw.generation?.alcoveRoomMax ?? 3,
-			alcoveRoomTunnel: cfg.alcoveRoomTunnel ?? raw.generation?.alcoveRoomTunnel ?? 4,
-			alcoveNicheCount: cfg.alcoveNicheCount ?? raw.generation?.alcoveNicheCount ?? 3,
-			alcoveNicheMin: cfg.alcoveNicheMin ?? raw.generation?.alcoveNicheMin ?? 1,
-			alcoveNicheMax: cfg.alcoveNicheMax ?? raw.generation?.alcoveNicheMax ?? 2,
-			alcoveNicheTunnel: cfg.alcoveNicheTunnel ?? raw.generation?.alcoveNicheTunnel ?? 1
+			loopRatio: cfg.loopRatio ?? raw.generation?.loopRatio ?? ZONE_GEOMETRY_CONFIG.loopRatio,
+			zoneAttempts: cfg.zoneAttempts ?? raw.generation?.zoneAttempts ?? ZONE_GEOMETRY_CONFIG.zoneAttempts,
+			roomAreaTarget: cfg.roomAreaTarget ?? raw.generation?.roomAreaTarget ?? ZONE_GEOMETRY_CONFIG.roomAreaTarget,
+			alcoveRoomCount: cfg.alcoveRoomCount ?? raw.generation?.alcoveRoomCount ?? ZONE_GEOMETRY_CONFIG.alcoveRoomCount,
+			alcoveRoomMin: cfg.alcoveRoomMin ?? raw.generation?.alcoveRoomMin ?? ZONE_GEOMETRY_CONFIG.alcoveRoomMin,
+			alcoveRoomMax: cfg.alcoveRoomMax ?? raw.generation?.alcoveRoomMax ?? ZONE_GEOMETRY_CONFIG.alcoveRoomMax,
+			alcoveRoomTunnel: cfg.alcoveRoomTunnel ?? raw.generation?.alcoveRoomTunnel ?? ZONE_GEOMETRY_CONFIG.alcoveRoomTunnel,
+			alcoveNicheCount: cfg.alcoveNicheCount ?? raw.generation?.alcoveNicheCount ?? ZONE_GEOMETRY_CONFIG.alcoveNicheCount,
+			alcoveNicheMin: cfg.alcoveNicheMin ?? raw.generation?.alcoveNicheMin ?? ZONE_GEOMETRY_CONFIG.alcoveNicheMin,
+			alcoveNicheMax: cfg.alcoveNicheMax ?? raw.generation?.alcoveNicheMax ?? ZONE_GEOMETRY_CONFIG.alcoveNicheMax,
+			alcoveNicheTunnel: cfg.alcoveNicheTunnel ?? raw.generation?.alcoveNicheTunnel ?? ZONE_GEOMETRY_CONFIG.alcoveNicheTunnel
 		};
 		const arena = raw.zones.find(z => z.id === 'arena' || z.role === 'arena' || z.generator === 'arena');
 		if (!arena) throw new Error('Skirmish template requires one arena zone');
-		arena.size = { ...(arena.size || {}), weight: cfg.arenaWeight ?? arena.size?.weight ?? 4 };
+		arena.size = { ...(arena.size || {}), weight: cfg.arenaWeight ?? arena.size?.weight ?? ZONE_LAYOUT_CONFIG.arenaZone.weight };
 		const candidates = raw.zones.filter(z => z.metadata?.skirmishSlot);
 		for (const z of candidates) {
 			z.role = 'normal';
@@ -445,23 +449,23 @@ class SkirmishZoneGraphFactory {
 		}
 		// The template is a fixed 3x3 logical graph. Estimate its resolved row/column spans
 		// with the same allocator used by AutomaticZoneLayoutPlanner, without invoking a second planner.
-		const margin = raw.map.margin ?? 1, innerW = raw.map.width - margin * 2, innerH = raw.map.height - margin * 2;
-		const centerWeight = Math.sqrt(arena.size?.weight || 4);
-		const colSizes = GridAllocator.allocateWithMinimum(innerW, [1, centerWeight, 1], [5, 8, 5]);
-		const rowSizes = GridAllocator.allocateWithMinimum(innerH, [1, centerWeight, 1], [5, 8, 5]);
+		const margin = raw.map.margin ?? ZONE_LAYOUT_CONFIG.margin, innerW = raw.map.width - margin * 2, innerH = raw.map.height - margin * 2;
+		const centerWeight = Math.sqrt(arena.size?.weight || ZONE_LAYOUT_CONFIG.arenaZone.weight);
+		const colSizes = GridAllocator.allocateWithMinimum(innerW, [ZONE_LAYOUT_CONFIG.defaultZone.weight, centerWeight, ZONE_LAYOUT_CONFIG.defaultZone.weight], [ZONE_LAYOUT_CONFIG.defaultZone.minWidth, ZONE_LAYOUT_CONFIG.arenaZone.minWidth, ZONE_LAYOUT_CONFIG.defaultZone.minWidth]);
+		const rowSizes = GridAllocator.allocateWithMinimum(innerH, [ZONE_LAYOUT_CONFIG.defaultZone.weight, centerWeight, ZONE_LAYOUT_CONFIG.defaultZone.weight], [ZONE_LAYOUT_CONFIG.defaultZone.minHeight, ZONE_LAYOUT_CONFIG.arenaZone.minHeight, ZONE_LAYOUT_CONFIG.defaultZone.minHeight]);
 		const slotCell = { nw: [0, 0], n: [1, 0], ne: [2, 0], w: [0, 1], e: [2, 1], sw: [0, 2], s: [1, 2], se: [2, 2] };
 		const feasible = candidates.filter(z => {
 			const cell = slotCell[z.metadata?.skirmishSlot];
 			if (!cell) return false;
 			const rw = colSizes[cell[0]], rh = rowSizes[cell[1]];
-			return z.metadata?.slotClass === 'corner' ? Math.min(rw, rh) >= 5 : Math.min(rw, rh) >= 7;
+			return z.metadata?.slotClass === 'corner' ? Math.min(rw, rh) >= SKIRMISH_CONFIG.cornerSpecialMinSpan : Math.min(rw, rh) >= SKIRMISH_CONFIG.middleSpecialMinSpan;
 		});
 		if (feasible.length < requestedSpecial)
 			throw new Error('Skirmish template has only ' + feasible.length + ' geometrically feasible special slots at ' + raw.map.width + 'x' + raw.map.height + ', requested ' + requestedSpecial);
 		const rng = new RNG((actualSeed ^ SKIRMISH_SPEC_RNG_SALT) >>> 0);
 		const shuffled = rng.shuffle(feasible.slice());
 		const selected = shuffled.slice(0, requestedSpecial);
-		const types = ['treasury', 'library'];
+		const types = SKIRMISH_CONFIG.specialTypes;
 		selected.forEach((z, i) => {
 			const t = types[i % types.length];
 			z.role = t;
@@ -487,9 +491,9 @@ class ManualZoneLayoutPlanner {
 
 	constructor(spec, cfg = {}) {
 		this.spec = spec instanceof ZoneGraphSpec ? spec : new ZoneGraphSpec(spec || {});
-		this.width = this.spec.map.width ?? cfg.width ?? 40;
-		this.height = this.spec.map.height ?? cfg.height ?? 40;
-		this.margin = this.spec.map.margin ?? 1;
+		this.width = this.spec.map.width ?? cfg.width ?? ZONE_LAYOUT_CONFIG.defaultWidth;
+		this.height = this.spec.map.height ?? cfg.height ?? ZONE_LAYOUT_CONFIG.defaultHeight;
+		this.margin = this.spec.map.margin ?? ZONE_LAYOUT_CONFIG.margin;
 	}
 
 	_allocate(total, weights) { return GridAllocator.allocate(total, weights); }
@@ -607,11 +611,11 @@ class AutomaticZoneLayoutPlanner {
 
 	constructor(spec, cfg = {}) {
 		this.spec = spec instanceof ZoneGraphSpec ? spec : new ZoneGraphSpec(spec || {});
-		this.width = this.spec.map.width ?? cfg.width ?? 40;
-		this.height = this.spec.map.height ?? cfg.height ?? 40;
-		this.margin = this.spec.map.margin ?? 1;
-		this.seed = this.spec.layout?.auto?.seed ?? cfg.seed ?? 1;
-		this.maxBacktracks = this.spec.layout?.auto?.maxBacktracks ?? 50000;
+		this.width = this.spec.map.width ?? cfg.width ?? ZONE_LAYOUT_CONFIG.defaultWidth;
+		this.height = this.spec.map.height ?? cfg.height ?? ZONE_LAYOUT_CONFIG.defaultHeight;
+		this.margin = this.spec.map.margin ?? ZONE_LAYOUT_CONFIG.margin;
+		this.seed = this.spec.layout?.auto?.seed ?? cfg.seed ?? ZONE_GEOMETRY_CONFIG.seed;
+		this.maxBacktracks = this.spec.layout?.auto?.maxBacktracks ?? ZONE_LAYOUT_CONFIG.autoMaxBacktracks;
 		this.rng = new RNG((this.seed ^ 0x41C64E6D) >>> 0);
 	}
 
@@ -635,7 +639,7 @@ class AutomaticZoneLayoutPlanner {
 	_pickRoot(adj) {
 		const centered = this.spec.zones.filter(z => z.layoutHints?.prefer === 'center');
 		const pool = centered.length ? centered : this.spec.zones;
-		return pool.slice().sort((a, b) => (adj.get(b.id).length - adj.get(a.id).length) || ((b.size?.weight || 1) - (a.size?.weight || 1)) || a.id.localeCompare(b.id))[0];
+		return pool.slice().sort((a, b) => (adj.get(b.id).length - adj.get(a.id).length) || ((b.size?.weight || ZONE_LAYOUT_CONFIG.defaultZone.weight) - (a.size?.weight || ZONE_LAYOUT_CONFIG.defaultZone.weight)) || a.id.localeCompare(b.id))[0];
 	}
 
 	// Scores how well a logical position satisfies a zone layout preference such as north/south/center.
@@ -742,13 +746,15 @@ class AutomaticZoneLayoutPlanner {
 	_weightsAndMinimums(embedding) {
 		const byId = new Map(this.spec.zones.map(z => [z.id, z]));
 		const colWeights = Array(embedding.cols).fill(1), rowWeights = Array(embedding.rows).fill(1);
-		const colMins = Array(embedding.cols).fill(5), rowMins = Array(embedding.rows).fill(5);
+		const colMins = Array(embedding.cols).fill(ZONE_LAYOUT_CONFIG.defaultZone.minWidth), rowMins = Array(embedding.rows).fill(ZONE_LAYOUT_CONFIG.defaultZone.minHeight);
 		for (const [id, pos] of embedding.positions) {
-			const z = byId.get(id), w = Math.sqrt(z.size?.weight || 1);
+			const z = byId.get(id);
+			const defaults = z.generator === 'arena' || z.role === 'arena' ? ZONE_LAYOUT_CONFIG.arenaZone : ZONE_LAYOUT_CONFIG.defaultZone;
+			const w = Math.sqrt(z.size?.weight || defaults.weight);
 			colWeights[pos.col] = Math.max(colWeights[pos.col], w);
 			rowWeights[pos.row] = Math.max(rowWeights[pos.row], w);
-			colMins[pos.col] = Math.max(colMins[pos.col], z.size?.minWidth || 5);
-			rowMins[pos.row] = Math.max(rowMins[pos.row], z.size?.minHeight || 5);
+			colMins[pos.col] = Math.max(colMins[pos.col], z.size?.minWidth || defaults.minWidth);
+			rowMins[pos.row] = Math.max(rowMins[pos.row], z.size?.minHeight || defaults.minHeight);
 		}
 		return { colWeights, rowWeights, colMins, rowMins };
 	}

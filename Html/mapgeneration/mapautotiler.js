@@ -1,10 +1,11 @@
 // Converts semantic dungeon floor/rock geometry into Chaos ground/wall tile arrays and applies wall/door autotiling rules.
+const MAP_AUTOTILE_CONFIG = MAP_GENERATION_CONFIG.autotile;
 class MapAutotiler {
 
 	constructor(cfg = {}) {
 		this.TILE = { FLOOR: 0, WALL: 1, ROCK: 2 };
-		this.groundTile = cfg.groundTileIndex || 2;
-		this.wallTile = cfg.wallTileIndex || 1;
+		this.groundTile = cfg.groundTileIndex || MAP_AUTOTILE_CONFIG.groundTileIndex;
+		this.wallTile = cfg.wallTileIndex || MAP_AUTOTILE_CONFIG.wallTileIndex;
 		this.wallAutotileRules = WALL_AUTOTILE_RULES.slice();
 	}
 

@@ -1,10 +1,12 @@
 // Production façade for the universal v5.7 dungeon generator.
 // Keeps the historical GameScene contract: {width,height,ground,walls,objects}.
+const MAP_GENERATOR_CONFIG = MAP_GENERATION_CONFIG;
+
 class MapGenerator {
 	constructor(cfg = {}) {
 		this.cfg = { ...cfg };
-		this.width = Math.max(20, Number.isInteger(cfg.width) ? cfg.width : 20);
-		this.height = Math.max(20, Number.isInteger(cfg.height) ? cfg.height : 20);
+		this.width = Math.max(MAP_GENERATOR_CONFIG.map.minWidth, Number.isInteger(cfg.width) ? cfg.width : MAP_GENERATOR_CONFIG.map.defaultWidth);
+		this.height = Math.max(MAP_GENERATOR_CONFIG.map.minHeight, Number.isInteger(cfg.height) ? cfg.height : MAP_GENERATOR_CONFIG.map.defaultHeight);
 		this.seed = Number.isInteger(cfg.seed)
 			? (cfg.seed >>> 0)
 			: ((Math.random() * 0x100000000) >>> 0);
@@ -58,27 +60,26 @@ class MapGenerator {
 			height: this.height,
 			seed: this.seed,
 
-			// v5.7 defaults. All may be overridden from randomMapConfig later.
-			// Keep the current game's four-special-room skirmish density by default.
-			specialCount: this.cfg.specialCount ?? 4,
-			arenaWeight: this.cfg.arenaWeight ?? 4,
-			loopRatio: this.cfg.loopRatio ?? .15,
-			zoneAttempts: this.cfg.zoneAttempts ?? 40,
-			roomAreaTarget: this.cfg.roomAreaTarget ?? 68,
-			minRoomSize: this.cfg.minRoomSize ?? 4,
-			maxRoomSize: this.cfg.maxRoomSize ?? 14,
-			maxRoomsPerZone: this.cfg.maxRoomsPerZone ?? 12,
-			specialMinRoomSize: this.cfg.specialMinRoomSize ?? 4,
-			specialMaxRoomSize: this.cfg.specialMaxRoomSize ?? 7,
+			// Runtime overrides stay supported; generic defaults live in mapgenerationconfig.js.
+			specialCount: this.cfg.specialCount ?? MAP_GENERATOR_CONFIG.skirmish.defaultSpecialCount,
+			arenaWeight: this.cfg.arenaWeight ?? MAP_GENERATOR_CONFIG.layout.arenaZone.weight,
+			loopRatio: this.cfg.loopRatio ?? MAP_GENERATOR_CONFIG.geometry.loopRatio,
+			zoneAttempts: this.cfg.zoneAttempts ?? MAP_GENERATOR_CONFIG.geometry.zoneAttempts,
+			roomAreaTarget: this.cfg.roomAreaTarget ?? MAP_GENERATOR_CONFIG.geometry.roomAreaTarget,
+			minRoomSize: this.cfg.minRoomSize ?? MAP_GENERATOR_CONFIG.geometry.minRoomSize,
+			maxRoomSize: this.cfg.maxRoomSize ?? MAP_GENERATOR_CONFIG.geometry.maxRoomSize,
+			maxRoomsPerZone: this.cfg.maxRoomsPerZone ?? MAP_GENERATOR_CONFIG.geometry.maxRoomsPerZone,
+			specialMinRoomSize: this.cfg.specialMinRoomSize ?? MAP_GENERATOR_CONFIG.geometry.specialMinRoomSize,
+			specialMaxRoomSize: this.cfg.specialMaxRoomSize ?? MAP_GENERATOR_CONFIG.geometry.specialMaxRoomSize,
 
-			alcoveRoomCount: this.cfg.alcoveRoomCount ?? 2,
-			alcoveRoomMin: this.cfg.alcoveRoomMin ?? 2,
-			alcoveRoomMax: this.cfg.alcoveRoomMax ?? 3,
-			alcoveRoomTunnel: this.cfg.alcoveRoomTunnel ?? 4,
-			alcoveNicheCount: this.cfg.alcoveNicheCount ?? 3,
-			alcoveNicheMin: this.cfg.alcoveNicheMin ?? 1,
-			alcoveNicheMax: this.cfg.alcoveNicheMax ?? 2,
-			alcoveNicheTunnel: this.cfg.alcoveNicheTunnel ?? 1
+			alcoveRoomCount: this.cfg.alcoveRoomCount ?? MAP_GENERATOR_CONFIG.geometry.alcoveRoomCount,
+			alcoveRoomMin: this.cfg.alcoveRoomMin ?? MAP_GENERATOR_CONFIG.geometry.alcoveRoomMin,
+			alcoveRoomMax: this.cfg.alcoveRoomMax ?? MAP_GENERATOR_CONFIG.geometry.alcoveRoomMax,
+			alcoveRoomTunnel: this.cfg.alcoveRoomTunnel ?? MAP_GENERATOR_CONFIG.geometry.alcoveRoomTunnel,
+			alcoveNicheCount: this.cfg.alcoveNicheCount ?? MAP_GENERATOR_CONFIG.geometry.alcoveNicheCount,
+			alcoveNicheMin: this.cfg.alcoveNicheMin ?? MAP_GENERATOR_CONFIG.geometry.alcoveNicheMin,
+			alcoveNicheMax: this.cfg.alcoveNicheMax ?? MAP_GENERATOR_CONFIG.geometry.alcoveNicheMax,
+			alcoveNicheTunnel: this.cfg.alcoveNicheTunnel ?? MAP_GENERATOR_CONFIG.geometry.alcoveNicheTunnel
 		};
 	}
 }
