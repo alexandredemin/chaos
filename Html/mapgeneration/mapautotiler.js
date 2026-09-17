@@ -1,4 +1,4 @@
-// Converts semantic dungeon floor/rock geometry into the existing Chaos tile arrays.
+// Converts semantic dungeon floor/rock geometry into Chaos ground/wall tile arrays and applies wall/door autotiling rules.
 class MapAutotiler {
 
 	constructor(cfg = {}) {
@@ -8,6 +8,9 @@ class MapAutotiler {
 		this.wallAutotileRules = WALL_AUTOTILE_RULES.slice();
 	}
 
+	// ----- Main tiling pipeline -----
+
+	// Builds ground/wall tile arrays from GeneratedDungeon, autotiles walls, then applies door-specific wall corrections. Returns tiled map data.
 	build(dungeon, portals = []) {
 		const width = dungeon.layout?.width || dungeon.map.kind[0].length;
 		const height = dungeon.layout?.height || dungeon.map.kind.length;
@@ -32,6 +35,9 @@ class MapAutotiler {
 		return { ground: map.ground, walls: map.walls, tileTypeMap };
 	}
 
+	// ----- Wall autotiling helpers -----
+
+	// Creates ground/wall arrays initialized to the configured base tile indices.
 	_createEmptyMap() {
 		const ground = [], walls = [];
 		for (let y = 0; y < this.height; y++) {
@@ -47,10 +53,11 @@ class MapAutotiler {
 
 	_inMapRect(x, y) { return x >= 0 && y >= 0 && x < this.width && y < this.height; }
 
+	// Promotes rock cells touching floor into visible wall cells before autotile rule matching.
 	_markWallsFromRock(tileTypeMap) {
 		const dirs = [
-			{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1},
-			{x:1,y:1},{x:-1,y:-1},{x:1,y:-1},{x:-1,y:1}
+			{x: 1, y: 0}, {x: -1, y: 0}, {x: 0, y: 1}, {x: 0, y: -1},
+			{x: 1, y: 1}, {x: -1, y: -1}, {x: 1, y: -1}, {x: -1, y: 1}
 		];
 		for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {
 			if (tileTypeMap[y][x] !== this.TILE.ROCK) continue;
@@ -65,6 +72,7 @@ class MapAutotiler {
 		}
 	}
 
+	// Matches every wall cell against WALL_AUTOTILE_RULES and writes the best tile index.
 	_autoTileWalls(tileTypeMap, map) {
 		for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {
 			if (tileTypeMap[y][x] !== this.TILE.WALL) continue;
@@ -73,13 +81,14 @@ class MapAutotiler {
 		}
 	}
 
+	// Builds the 3x3 F/W/R neighborhood signature used by wall autotile rules.
 	_buildPattern(cx, cy, tileTypeMap) {
 		let result = '';
-		for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
-			result += this._tileToSymbol(tileTypeMap, cx + dx, cy + dy);
+		for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) result += this._tileToSymbol(tileTypeMap, cx + dx, cy + dy);
 		return result;
 	}
 
+	// Converts a tile type into the F/W/R symbol consumed by autotile pattern matching.
 	_tileToSymbol(tileTypeMap, x, y) {
 		if (!this._inMapRect(x, y)) return 'R';
 		if (tileTypeMap[y][x] === this.TILE.FLOOR) return 'F';
@@ -87,16 +96,21 @@ class MapAutotiler {
 		return 'R';
 	}
 
+	// Returns the highest-scoring wall rule matching a 3x3 neighborhood pattern.
 	_findMatchingRule(pattern) {
 		let bestRule = null, bestScore = -Infinity;
 		for (const rule of this.wallAutotileRules) {
 			if (!this._matchPattern(pattern, rule.pattern)) continue;
 			const score = rule.score ?? 0;
-			if (score > bestScore) { bestScore = score; bestRule = rule; }
+			if (score > bestScore) {
+				bestScore = score;
+				bestRule = rule;
+			}
 		}
 		return bestRule;
 	}
 
+	// Tests a neighborhood signature against one wildcard-capable autotile rule.
 	_matchPattern(actual, rule) {
 		for (let i = 0; i < 9; i++) {
 			if (rule[i] === '*') continue;
@@ -105,6 +119,9 @@ class MapAutotiler {
 		return true;
 	}
 
+	// ----- Door-specific tile corrections -----
+
+	// Applies local wall-tile replacements around one semantic door portal.
 	_applyDoorAutotileRules(x, y, dir, map) {
 		for (const rule of DOOR_AUTOTILE_RULES) {
 			if (!rule.directions.includes(dir)) continue;
@@ -113,8 +130,7 @@ class MapAutotiler {
 				if (!this._inMapRect(tx, ty)) continue;
 				let currentTile = map.walls[ty][tx];
 				if (currentTile === null) currentTile = 0;
-				if (Object.prototype.hasOwnProperty.call(offset.replacements, currentTile))
-					map.walls[ty][tx] = offset.replacements[currentTile];
+				if (Object.prototype.hasOwnProperty.call(offset.replacements, currentTile)) map.walls[ty][tx] = offset.replacements[currentTile];
 			}
 		}
 	}
