@@ -203,8 +203,8 @@ const itemConfigs = {
     'key': {
         id: 'key',
         name: 'Key',
-        sprite: 'scroll',
-        scale: 0.02,
+        sprite: 'key',
+        scale: 0.15,
         stackOffset: {x:0,y:0},
         actions: {
             drop: {title:'Drop',abilityPointCost:0,movePointCost:1,consumeItem:true}
