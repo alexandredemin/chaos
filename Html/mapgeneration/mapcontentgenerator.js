@@ -30,7 +30,7 @@ class MapContentGenerator {
 	generate() {
 		const doors = this._createDoors();
 		const specialRooms = this._getSpecialRoomDescriptors(doors);
-		const startPositions = this._generateStartPositions(this.cfg.startCount || this.settings.startCount);
+		const startPositions = this._generateStartPositions(this.cfg.startCount || this.settings.startCount, doors);
 		const items = this._placeItems(startPositions.concat(doors));
 		const chests = this._placeChests(startPositions.concat(doors, items));
 		const wardrobes = this._placeWardrobes(startPositions.concat(doors, items, chests));
@@ -250,42 +250,68 @@ class MapContentGenerator {
 
 	// ----- Player start placement -----
 
-	// Chooses widely separated player starts, preferring ordinary rooms and falling back to any reachable non-special chamber.
-	_generateStartPositions(count = 4) {
-		const objects = [];
-		const ordinary = this._ordinaryRooms();
-		const supplemental = this.rooms.filter(r => this._isKeySafeRoom(r) && !ordinary.includes(r));
-		const candidateRooms = ordinary.concat(supplemental);
-		if (!candidateRooms.length) return objects;
-		const maxCount = Math.min(count, candidateRooms.length);
-		const candidates = candidateRooms.map(room => ({room, center: this._roomCenter(room)}));
-		const selected = [];
+	// Returns true for a room that may be used as a secondary player-start location.
+	// Arena and locked special chambers are deliberately excluded; auxiliary rooms inside special zones are allowed.
+	_isStartFallbackRoom(room) {
+		const zone = this._zoneForRoom(room);
+		return !!room && !room.special && !!zone && zone.type !== 'arena';
+	}
+
+	// Adds rooms from one priority group using farthest-point selection. Existing selections remain fixed.
+	_selectFarthestStartRooms(pool, count, selected) {
+		const candidates = pool.filter(room => !selected.some(s => s.room === room)).map(room => ({room, center: this._roomCenter(room)}));
 		const mapCenter = {x: Math.floor(this.width / 2), y: Math.floor(this.height / 2)};
-		let first = candidates[0], bestD = -Infinity;
-		for (const c of candidates) {
-			const d = this._dist2(c.center, mapCenter);
-			if (d > bestD) {
-				bestD = d;
-				first = c;
+
+		while (selected.length < count && candidates.length) {
+			let best = null, bestScore = -Infinity;
+			for (const candidate of candidates) {
+				const score = selected.length
+					? Math.min(...selected.map(s => this._dist2(candidate.center, s.center)))
+					: this._dist2(candidate.center, mapCenter);
+				if (score > bestScore) { bestScore = score; best = candidate; }
 			}
+			if (!best) break;
+			selected.push(best);
+			candidates.splice(candidates.indexOf(best), 1);
 		}
-		selected.push(first);
-		candidates.splice(candidates.indexOf(first), 1);
-		while (selected.length < maxCount) {
-			let bestCandidate = null, bestMinDist = -Infinity;
-			for (const c of candidates) {
-				let minDist = Infinity;
-				for (const s of selected) minDist = Math.min(minDist, this._dist2(c.center, s.center));
-				if (minDist > bestMinDist) {
-					bestMinDist = minDist;
-					bestCandidate = c;
-				}
-			}
-			if (!bestCandidate) break;
-			selected.push(bestCandidate);
-			candidates.splice(candidates.indexOf(bestCandidate), 1);
+	}
+
+	// Finds an additional start cell after every eligible room already contains a player.
+	// The selected cell maximizes distance from existing starts; door clearance is preferred but may be relaxed as a last resort.
+	_findExtraStartCell(rooms, objects, doorCells, requireDoorClearance = true) {
+		const occupied = new Set(objects.map(o => Math.floor(o.x / this.tileSize) + ':' + Math.floor(o.y / this.tileSize)));
+		const starts = objects.map(o => ({x: Math.floor(o.x / this.tileSize), y: Math.floor(o.y / this.tileSize)}));
+		let best = null, bestScore = -Infinity;
+
+		for (const room of rooms) for (let y = room.y; y < room.y + room.h; y++) for (let x = room.x; x < room.x + room.w; x++) {
+			if (!this._isFloor(x, y) || occupied.has(x + ':' + y)) continue;
+			if (requireDoorClearance && this._isNearAny({x, y}, doorCells, this.settings.placement.doorClearance)) continue;
+			const score = starts.length ? Math.min(...starts.map(s => this._dist2({x, y}, s))) : 0;
+			if (score > bestScore) { bestScore = score; best = {x, y}; }
 		}
+		return best;
+	}
+
+	// Chooses player starts in strict priority order: normal-zone rooms, then accessible auxiliary rooms.
+	// Arena is never used. If there are fewer eligible rooms than players, extra players share those rooms on maximally separated cells.
+	_generateStartPositions(count = 4, doors = []) {
+		const objects = [], selected = [];
+		const ordinary = this._ordinaryRooms();
+		const auxiliary = this.rooms.filter(r => this._isStartFallbackRoom(r) && !ordinary.includes(r));
+		const eligible = ordinary.concat(auxiliary);
+		if (!eligible.length) return objects;
+
+		this._selectFarthestStartRooms(ordinary, count, selected);
+		if (selected.length < count) this._selectFarthestStartRooms(auxiliary, count, selected);
 		for (const s of selected) objects.push({type: 'start', name: 'start', x: s.center.x * this.tileSize, y: s.center.y * this.tileSize});
+
+		const doorCells = this._doorCells(doors);
+		while (objects.length < count) {
+			let cell = this._findExtraStartCell(eligible, objects, doorCells, true);
+			if (!cell) cell = this._findExtraStartCell(eligible, objects, doorCells, false);
+			if (!cell) break;
+			objects.push({type: 'start', name: 'start', x: cell.x * this.tileSize, y: cell.y * this.tileSize});
+		}
 		return objects;
 	}
 
