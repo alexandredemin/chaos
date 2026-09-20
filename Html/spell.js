@@ -69,6 +69,12 @@ class SummonSpell extends Spell
         this.next();
     }
 
+    canSummonAt(mapX,mapY)
+    {
+        const cellEntities = Entity.getEntitiesAtMap(mapX,mapY);
+        return !cellEntities.some(entity => entity instanceof DoorEntity && entity.features.open !== true);
+    }
+
     animateAppearance(unit)
     {
         /**/
@@ -146,6 +152,7 @@ class SummonSpell extends Spell
         switch (this.step) {
             case 0:
                 let places = selectFreeAdjacentPlaces(this.wizard.mapX, this.wizard.mapY);
+                places = places.filter(place => this.canSummonAt(place[0],place[1]));
                 if(this.wizard.player.control === PlayerControl.human)
                 {
                     setInteractionScenario(userInteractionScenario.placeSelection);
@@ -183,6 +190,12 @@ class SummonSpell extends Spell
                 break;
             case 2:
                 this.step++;
+                // Re-check after selection/animation in case the cell state changed.
+                if(!this.canSummonAt(this.placeX,this.placeY))
+                {
+                    this.stop(false);
+                    return true;
+                }
                 let unit = new Unit(unitConfigs[this.spellConfig.name], this.wizard.scene, 0, 0, false);
                 //unit.scale = 0;
                 unit.setPositionFromMap(this.placeX, this.placeY);
