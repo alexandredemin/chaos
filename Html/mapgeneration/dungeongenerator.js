@@ -2170,6 +2170,21 @@ class DungeonPortalBuilder {
 		};
 
 		const adjacent = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1;
+
+		// A physical door should occupy a one-cell-wide passage. If a lateral
+		// neighbor is floor, the passage has been widened by loops/parallel routes
+		// and a single door would look incomplete and would not block the passage.
+		const hasSideWalls = portal => {
+			if (!PORTAL_CONFIG.requireSideWalls) return true;
+			const kind = dungeon.map?.kind;
+			if (!kind || !kind.length) return true;
+
+			const isRock = (x, y) => y >= 0 && y < kind.length && x >= 0 && x < kind[y].length && kind[y][x] === '#';
+			if (portal.direction === 'W' || portal.direction === 'E') return isRock(portal.x, portal.y - 1) && isRock(portal.x, portal.y + 1);
+			if (portal.direction === 'N' || portal.direction === 'S') return isRock(portal.x - 1, portal.y) && isRock(portal.x + 1, portal.y);
+			return false;
+		};
+
 		const oppositeDirections = (a, b) => 
 			(a === 'E' && b === 'W') ||
 		(a === 'W' && b === 'E') ||
@@ -2358,7 +2373,16 @@ class DungeonPortalBuilder {
 			if (hasAdjacentDoor) gate.doorSuitable = false;
 		}
 
-		// 2) Multiple routes may enter the same room through adjacent cells.
+		// 2) Suppress ordinary doors in passages wider than one cell. Special-room
+		// entrances are intentionally exempt: their one-cell entrance is a geometry
+		// invariant and must always keep its lock even if a parallel corridor runs
+		// next to the outside doorway cell.
+		for (const portal of portals) {
+			if (!portal.doorSuitable || portal.type === 'special_entrance') continue;
+			if (!hasSideWalls(portal)) portal.doorSuitable = false;
+		}
+
+		// 3) Multiple routes may enter the same room through adjacent cells.
 		// Likewise, a two-cell corridor between two rooms produces two facing
 		// entrance candidates (DD). One physical door is enough in both cases.
 		const roomPortals = portals.filter(p => p.type === 'room_entrance' && p.doorSuitable);
