@@ -130,6 +130,61 @@ class LockSystem
 	}
 }
 
+// Manages generic hidden/revealed state without knowing how a concrete entity is rendered.
+// Any entity may use features.hidden = {hidden:true,difficulty:N}; SearchAbility calls reveal().
+class HiddenSystem
+{
+	static getHidden(entity)
+	{
+		return entity && entity.features ? entity.features.hidden || null : null;
+	}
+
+	static isHidden(entity)
+	{
+		const hidden = this.getHidden(entity);
+		return hidden != null && hidden.hidden === true;
+	}
+
+	static getDifficulty(entity)
+	{
+		const hidden = this.getHidden(entity);
+		const value = Number(hidden && hidden.difficulty);
+		return Number.isFinite(value) ? Math.max(0,value) : 0;
+	}
+
+	static getSearchPower(unit)
+	{
+		const value = Number(unit && unit.features ? unit.features.searchPower : 0);
+		return Number.isFinite(value) ? Math.max(0,value) : 0;
+	}
+
+	// Returns true when the unit/search power is sufficient to discover this hidden entity.
+	static canReveal(unit,entity,searchPower=null)
+	{
+		if(!this.isHidden(entity)) return false;
+		const power = searchPower == null ? this.getSearchPower(unit) : Number(searchPower);
+		return Number.isFinite(power) && power >= this.getDifficulty(entity);
+	}
+
+	// Synchronizes visual visibility with hidden state.
+	static syncVisibility(entity)
+	{
+		if(entity == null || typeof entity.setVisability !== 'function') return;
+		if(this.getHidden(entity) == null) return;
+		entity.setVisability(!this.isHidden(entity));
+	}
+
+	// Reveals an entity once. Returns true only when a hidden entity was successfully discovered.
+	static reveal(entity,unit=null,searchPower=null)
+	{
+		if(!this.canReveal(unit,entity,searchPower)) return false;
+		this.getHidden(entity).hidden = false;
+		if(typeof entity.onHiddenRevealed === 'function') entity.onHiddenRevealed(unit);
+		else if(typeof entity.setVisability === 'function') entity.setVisability(true);
+		return true;
+	}
+}
+
 function playEntityVisualTransition(entity,targetState,commitState,onComplete=null,duration=170)
 {
 	const finish = () =>

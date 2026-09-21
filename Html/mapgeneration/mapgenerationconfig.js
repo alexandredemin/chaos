@@ -180,6 +180,26 @@ const MAP_GENERATION_CONFIG = {
 			}
 		},
 
+		// Hidden caches generated in ordinary areas. Search power >= difficulty reveals a cache.
+		hiddenContainers: {
+			baseArea: 20 * 20, // Counts scale with sqrt(mapArea/baseArea), growing slowly on larger maps.
+			floor: {
+				entityName: 'chest', // Low/passable container placed on normal floor.
+				count: [1, 2], // Hidden floor caches on a 20x20 map before area scaling.
+				difficulty: [1, 2], // Default wizard searchPower=3 can reveal every generated floor cache.
+				lootCount: [1, 2], // Items stored in each hidden floor cache.
+				premiumChance: .25 // Chance per item to use the premium loot tier.
+			},
+			wall: {
+				entityName: 'wardrobe', // Tall container placed only on a wall cell adjacent to reachable floor.
+				count: [1, 2], // Hidden wall caches on a 20x20 map before area scaling.
+				difficulty: [2, 3], // Wall caches are somewhat harder to discover.
+				lootCount: [1, 3], // Items stored in each hidden wall cache.
+				premiumChance: .50, // Wall caches favor premium loot.
+				doorClearance: 1 // Do not place wall caches immediately beside doors.
+			}
+		},
+
 		// Locks on ordinary containers and weighted placement of their/special-room keys.
 		locks: {
 			common: {

@@ -55,23 +55,26 @@ class MapContentGenerator {
 		items.push(...keyPlacement.extraItems);
 		chests.push(...keyPlacement.extraChests);
 
+		const hiddenContent = this._placeHiddenContainers(startPositions.concat(doors, items, chests, wardrobes));
+		const hiddenObjects = hiddenContent.floor.concat(hiddenContent.wall);
+
 		const treasureGuards = this._placeTreasureGuards(
 			chests,
 			wardrobes,
 			startPositions,
-			startPositions.concat(doors, items, chests, wardrobes)
+			startPositions.concat(doors, items, chests, wardrobes, hiddenObjects)
 		);
 		const monsterGenerators = this._placeMonsterGenerators(
 			startPositions,
 			treasureGuards,
-			startPositions.concat(doors, items, chests, wardrobes, treasureGuards)
+			startPositions.concat(doors, items, chests, wardrobes, hiddenObjects, treasureGuards)
 		);
 		const roamingCreatures = this._placeRoamingCreatures(
 			startPositions,
-			startPositions.concat(doors, items, chests, wardrobes, treasureGuards, monsterGenerators)
+			startPositions.concat(doors, items, chests, wardrobes, hiddenObjects, treasureGuards, monsterGenerators)
 		);
 
-		const objects = startPositions.concat(doors, items, chests, wardrobes, treasureGuards, monsterGenerators, roamingCreatures);
+		const objects = startPositions.concat(doors, items, chests, wardrobes, hiddenObjects, treasureGuards, monsterGenerators, roamingCreatures);
 		this._validate(objects, doors, specialRooms, startPositions);
 
 		return {
@@ -89,6 +92,8 @@ class MapContentGenerator {
 				keysInNiches: keyPlacement.stats.niche,
 				chests: chests.length,
 				wardrobes: wardrobes.length,
+				hiddenFloorContainers: hiddenContent.floor.length,
+				hiddenWallContainers: hiddenContent.wall.length,
 				guards: treasureGuards.length,
 				monsterGenerators: monsterGenerators.length,
 				roamingCreatures: roamingCreatures.length
@@ -151,6 +156,12 @@ class MapContentGenerator {
 	_specialRooms() { return this.rooms.filter(r => r.special === true); }
 
 	_isFloor(x, y) { return y >= 0 && y < this.map.walls.length && x >= 0 && x < this.map.walls[y].length && this.map.walls[y][x] === null; }
+
+	// Returns true for a generated rock/wall cell. Candidates are further restricted to cells beside reachable room floor.
+	_isBlockingWall(x, y) {
+		if (x < 0 || y < 0 || x >= this.width || y >= this.height) return false;
+		return this.dungeon.map?.kind?.[y]?.[x] === '#' && !this._isFloor(x, y);
+	}
 
 	// Returns a set of map cells already occupied by supplied game objects.
 	_collectOccupied(objects = []) {
@@ -409,6 +420,95 @@ class MapContentGenerator {
 		];
 		if (lock) properties.push({name: 'lock', value: this._clone(lock)});
 		return {type: 'entity', name, x: x*this.tileSize, y: y*this.tileSize, properties, items};
+	}
+
+	// Creates loot for one hidden cache using the configured normal/premium mixture.
+	_createHiddenContainerLoot(cfg) {
+		const result = [];
+		for (let i = 0, count = this._rand(...cfg.lootCount); i < count; i++) {
+			const tier = this._random() < cfg.premiumChance ? 'premium' : 'normal';
+			const item = this._createLootItem(tier) || this._createLootItem('normal');
+			if (item) result.push(item);
+		}
+		return result;
+	}
+
+	// Builds a hidden cache. Monster spawning is disabled so the first hidden-content version stays deterministic/simple.
+	_createHiddenContainerObject(cfg, x, y) {
+		const object = this._createContainerObject(cfg.entityName, x, y, this._createHiddenContainerLoot(cfg));
+		const difficulty = this._rand(...cfg.difficulty);
+		const spawnResolved = object.properties.find(p => p.name === 'monsterSpawnResolved');
+		const monsterSpawn = object.properties.find(p => p.name === 'monsterSpawn');
+		if (spawnResolved) spawnResolved.value = true;
+		if (monsterSpawn) monsterSpawn.value = null;
+		object.properties.push({name: 'hidden', value: {hidden: true, difficulty}});
+		return object;
+	}
+
+	// Returns the number of caches for the current map size while preserving configured 20x20 density.
+	_getHiddenContainerCount(cfg) {
+		const baseArea = Math.max(1, this.settings.hiddenContainers.baseArea);
+		const scale = Math.sqrt((this.width*this.height)/baseArea);
+		const min = Math.max(0, Math.round(cfg.count[0]*scale));
+		const max = Math.max(min, Math.round(cfg.count[1]*scale));
+		return this._rand(min, max);
+	}
+
+	// Places passable hidden chests on ordinary floor cells, spread across ordinary rooms when possible.
+	_placeHiddenFloorContainers(occupiedObjects = []) {
+		const cfg = this.settings.hiddenContainers.floor;
+		const result = [], occupied = this._collectOccupied(occupiedObjects), rooms = this._ordinaryRooms().slice();
+		if (!rooms.length) return result;
+		this._shuffle(rooms);
+		const count = this._getHiddenContainerCount(cfg);
+		for (let i = 0, attempts = 0; result.length < count && attempts < Math.max(count*4, rooms.length*2); attempts++, i++) {
+			const room = rooms[i % rooms.length];
+			const cell = this._findFreeRoomCell(room, occupied);
+			if (!cell) continue;
+			result.push(this._createHiddenContainerObject(cfg, cell.x, cell.y));
+			occupied.add(cell.x+':'+cell.y);
+		}
+		return result;
+	}
+
+	// Collects wall cells around ordinary rooms that remain usable from at least one adjacent floor cell.
+	_collectHiddenWallCells(occupied, doorCells, clearance) {
+		const result = [], used = new Set();
+		const add = (x, y) => {
+			const key = x+':'+y;
+			if (used.has(key) || occupied.has(key) || !this._isBlockingWall(x, y)) return;
+			if (this._isNearAny({x, y}, doorCells, clearance)) return;
+			const adjacentFloor = [[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy]) => this._isFloor(x+dx, y+dy));
+			if (!adjacentFloor) return;
+			used.add(key);
+			result.push({x, y});
+		};
+		for (const room of this._ordinaryRooms()) {
+			for (let x = room.x; x < room.x+room.w; x++) { add(x, room.y-1); add(x, room.y+room.h); }
+			for (let y = room.y; y < room.y+room.h; y++) { add(room.x-1, y); add(room.x+room.w, y); }
+		}
+		return result;
+	}
+
+	// Places tall hidden wardrobes on wall cells so an invisible cache never creates a phantom floor obstacle.
+	_placeHiddenWallContainers(occupiedObjects = []) {
+		const cfg = this.settings.hiddenContainers.wall;
+		const occupied = this._collectOccupied(occupiedObjects), doors = this._doorCells(occupiedObjects);
+		const candidates = this._collectHiddenWallCells(occupied, doors, cfg.doorClearance), result = [];
+		this._shuffle(candidates);
+		for (let i = 0, count = Math.min(this._getHiddenContainerCount(cfg), candidates.length); i < count; i++) {
+			const cell = candidates[i];
+			result.push(this._createHiddenContainerObject(cfg, cell.x, cell.y));
+			occupied.add(cell.x+':'+cell.y);
+		}
+		return result;
+	}
+
+	// Generates both hidden-container families. They are intentionally added after key placement in this first version.
+	_placeHiddenContainers(occupiedObjects = []) {
+		const floor = this._placeHiddenFloorContainers(occupiedObjects);
+		const wall = this._placeHiddenWallContainers(occupiedObjects.concat(floor));
+		return {floor, wall};
 	}
 
 	// Finds an unoccupied floor cell in a room, using random attempts followed by deterministic scan fallback.

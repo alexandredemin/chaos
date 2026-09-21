@@ -158,6 +158,7 @@ const entityConfigs = {
             items: [],
             open: false,
             closeMode: 'manual',
+			hidden: null,
             lock: null,
             destroyWhenEmpty: false,
             containerType: 'low',
@@ -185,6 +186,7 @@ const entityConfigs = {
             items: [],
             open: false,
             closeMode: 'manual',
+			hidden: null,
             lock: null,
             destroyWhenEmpty: false,
             containerType: 'tall',
@@ -314,6 +316,7 @@ const unitConfigs = {
             attackCost: 2,
             mana: 4,
             manaIncome: 1,
+			searchPower: 3,
             itemCapacity: 4,
         },
         abilities: {
@@ -339,6 +342,10 @@ const unitConfigs = {
                              'pentagram':0}, 
                 }
             },
+			search: {
+				type: 'search',
+				config: {radius: 1, abilityPointCost: 1}
+			},
             use: {
                 type: 'use',
                 config: {}
@@ -857,6 +864,12 @@ const abilities = {
         order: 50,
         ability: null,
     },
+	'search': {
+		title: 'Search',
+		icon: null,
+		order: 80,
+		ability: null,
+	},
     'use': {
         title: 'Use',
         icon: null,

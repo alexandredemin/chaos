@@ -912,6 +912,7 @@ class ItemEntity extends Entity
 
 	canAccessItems(unit)
 	{
+		if(HiddenSystem.isHidden(this)) return false;
 		if(unit == null) return false;
 		return unit.mapX === this.mapX && unit.mapY === this.mapY;
 	}
@@ -977,9 +978,10 @@ class ItemEntity extends Entity
     setVisability(visible)
     {
         super.setVisability(visible);
+		const actualVisible = this.getVisability();
         for(let i = 0; i < this.stackSprites.length; i++)
         {
-            this.stackSprites[i].visible = visible;
+            this.stackSprites[i].visible = actualVisible;
         }
     }
 
@@ -1188,6 +1190,7 @@ class ContainerEntity extends ItemEntity
 		this.normalizeMonsterSpawnFeatures();
 		super.start(showStart);
 		this.updateSprite();
+		HiddenSystem.syncVisibility(this);
 	}
 
 	syncVisuals()
@@ -1249,6 +1252,7 @@ class ContainerEntity extends ItemEntity
 
 	canAccessItems(unit)
 	{
+		if(HiddenSystem.isHidden(this)) return false;
 		if(unit == null) return false;
 		if(this.features.open !== true || LockSystem.isLocked(this)) return false;
 		if(this.features.containerType === 'low') return unit.mapX === this.mapX && unit.mapY === this.mapY;
@@ -1331,6 +1335,7 @@ class ContainerEntity extends ItemEntity
 
 	canUse(unit)
 	{
+		if(HiddenSystem.isHidden(this)) return false;
 		if(unit == null || this._unlocking === true) return false;
 		const dx = Math.abs(this.mapX-unit.mapX);
 		const dy = Math.abs(this.mapY-unit.mapY);

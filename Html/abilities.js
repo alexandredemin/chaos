@@ -767,6 +767,56 @@ class JumpAbility extends UnitAbility
     }
 }
 
+// Searches nearby cells and reveals every hidden entity whose difficulty does not exceed unit search power.
+// The action stays available even when no secret is nearby, so the UI does not reveal hidden-content locations.
+class SearchAbility extends UnitAbility
+{
+	unit = null;
+
+	start(unit)
+	{
+		this.unit = unit;
+	}
+
+	stop(unit)
+	{
+		this.unit = null;
+		super.stop(unit);
+	}
+
+	canActivate(unit)
+	{
+		if(unit == null || unit.abilities == null || unit.abilities.search == null) return false;
+		const cfg = unit.abilities.search.config || {};
+		const cost = Math.max(0,Math.floor(cfg.abilityPointCost ?? 1));
+		return HiddenSystem.getSearchPower(unit) > 0 && unit.features.abilityPoints >= cost;
+	}
+
+	next()
+	{
+		if(this.unit == null) return true;
+
+		const unit = this.unit;
+		const cfg = unit.abilities.search.config || {};
+		const radius = Math.max(0,Math.floor(cfg.radius ?? 1));
+		const cost = Math.max(0,Math.floor(cfg.abilityPointCost ?? 1));
+		const power = HiddenSystem.getSearchPower(unit);
+
+		unit.features.abilityPoints -= cost;
+		for(const entity of entities)
+		{
+			if(!HiddenSystem.isHidden(entity)) continue;
+			const dx = Math.abs(entity.mapX-unit.mapX);
+			const dy = Math.abs(entity.mapY-unit.mapY);
+			if(Math.max(dx,dy) > radius) continue;
+			HiddenSystem.reveal(entity,unit,power);
+		}
+
+		this.stop(unit);
+		return true;
+	}
+}
+
 class UseAbility extends UnitAbility
 {
 	step = 0;

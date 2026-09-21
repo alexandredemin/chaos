@@ -104,6 +104,7 @@ class Entity extends BaseUnit
 
     setVisability(visible)
     {
+		if(typeof HiddenSystem !== 'undefined' && HiddenSystem.isHidden(this)) visible = false;
         this.visible = visible;
     }
 

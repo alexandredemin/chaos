@@ -63,6 +63,7 @@ var GameScene = new Phaser.Class({
         abilities['gas'].ability = new GasAbility();
         abilities['web'].ability = new WebAbility();
         abilities['jump'].ability = new JumpAbility();
+		abilities['search'].ability = new SearchAbility();
         abilities['use'].ability = new UseAbility();
         abilities['pickup'].ability = new PickUpAbility();
         abilities['inventory'].ability = new InventoryAbility();
