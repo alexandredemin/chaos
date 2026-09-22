@@ -98,6 +98,7 @@ class Entity extends BaseUnit
     die()
     {
         this.stop();
+        if(typeof HiddenSystem !== 'undefined') HiddenSystem.clearDebugMarker(this);
         entities.splice(entities.indexOf(this),1);
         this.destroy();
     }

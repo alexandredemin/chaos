@@ -792,6 +792,31 @@ class SearchAbility extends UnitAbility
 		return HiddenSystem.getSearchPower(unit) > 0 && unit.features.abilityPoints >= cost;
 	}
 
+	// Flashes all searched cells for about 250 ms, with a small delay from center to edge.
+	playSearchFlash(unit,radius)
+	{
+		if(unit == null || unit.scene == null || typeof map === 'undefined' || map == null) return;
+		if(typeof shouldShowActionAnimation === 'function' && !shouldShowActionAnimation(unit)) return;
+
+		const scene = unit.scene;
+		const maxWaveDelay = 70;
+		const pulseDuration = 180;
+		for(let y=unit.mapY-radius;y<=unit.mapY+radius;y++)
+		{
+			for(let x=unit.mapX-radius;x<=unit.mapX+radius;x++)
+			{
+				if(x<0 || y<0 || x>=map.width || y>=map.height) continue;
+				const distance = Math.max(Math.abs(x-unit.mapX),Math.abs(y-unit.mapY));
+				const delay = radius>0 ? Math.round(maxWaveDelay*distance/radius) : 0;
+				const pos = map.tileToWorldXY(x,y);
+				const overlay = scene.add.rectangle(pos.x+8,pos.y+8,15,15,0xfff2a8,1);
+				overlay.setAlpha(0);
+				overlay.setDepth(10000);
+				scene.tweens.add({targets:overlay,alpha:0.34,duration:pulseDuration/2,delay,yoyo:true,ease:'Sine.easeOut',onComplete:() => overlay.destroy()});
+			}
+		}
+	}
+
 	next()
 	{
 		if(this.unit == null) return true;
@@ -803,6 +828,7 @@ class SearchAbility extends UnitAbility
 		const power = HiddenSystem.getSearchPower(unit);
 
 		unit.features.abilityPoints -= cost;
+		this.playSearchFlash(unit,radius);
 		for(const entity of entities)
 		{
 			if(!HiddenSystem.isHidden(entity)) continue;

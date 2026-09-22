@@ -115,6 +115,7 @@
             <button id="debugRun">Run JS</button>
             <button id="openSaveEditor">Edit Save</button>
             <button id="toggleConsoleLogs">Console Log: OFF</button>
+            <button id="toggleHiddenOverlay">Hidden Overlay: OFF</button>
             <button id="debugClear">Clear Log</button>
         `;
 
@@ -145,6 +146,16 @@
 
         document.getElementById("debugClear").onclick = function() {
             box.textContent = "";
+        };
+
+        document.getElementById("toggleHiddenOverlay").onclick = function() {
+            if(typeof setHiddenDebugOverlay !== "function") {
+                logToBox("Hidden overlay is unavailable");
+                return;
+            }
+            const enabled = setHiddenDebugOverlay(globalThis.debugShowHiddenObjects !== true);
+            this.textContent = "Hidden Overlay: " + (enabled ? "ON" : "OFF");
+            logToBox("Hidden object overlay: " + (enabled ? "ENABLED" : "DISABLED"));
         };
 
         // ---------- SAVE EDITOR POPUP ----------

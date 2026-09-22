@@ -166,12 +166,85 @@ class HiddenSystem
 		return Number.isFinite(power) && power >= this.getDifficulty(entity);
 	}
 
-	// Synchronizes visual visibility with hidden state.
+	// Synchronizes visual visibility with hidden state and keeps the optional debug marker in sync.
 	static syncVisibility(entity)
 	{
 		if(entity == null || typeof entity.setVisability !== 'function') return;
 		if(this.getHidden(entity) == null) return;
 		entity.setVisability(!this.isHidden(entity));
+		this.syncDebugMarker(entity);
+	}
+
+	// Plays a short fade/pulse when a hidden entity becomes visible.
+	static playRevealEffect(entity)
+	{
+		if(entity == null || entity.scene == null || entity.scene.tweens == null || entity.visible === false) return;
+
+		const scene = entity.scene;
+		const baseAlpha = Number.isFinite(entity.alpha) ? entity.alpha : 1;
+		const baseScaleX = Number.isFinite(entity.scaleX) ? entity.scaleX : 1;
+		const baseScaleY = Number.isFinite(entity.scaleY) ? entity.scaleY : 1;
+
+		entity.setAlpha(0);
+		entity.setScale(baseScaleX*0.90,baseScaleY*0.90);
+		scene.tweens.add({
+			targets:entity,
+			alpha:baseAlpha,
+			scaleX:baseScaleX*1.05,
+			scaleY:baseScaleY*1.05,
+			duration:170,
+			ease:'Quad.easeOut',
+			onComplete:() => {
+				if(entity.active === false) return;
+				scene.tweens.add({targets:entity,scaleX:baseScaleX,scaleY:baseScaleY,duration:80,ease:'Quad.easeIn'});
+			}
+		});
+	}
+
+	// Removes the separate developer-only marker attached to one hidden entity.
+	static clearDebugMarker(entity)
+	{
+		const marker = entity != null ? entity._hiddenDebugMarker : null;
+		if(marker == null) return;
+		if(marker.box != null && marker.box.active !== false) marker.box.destroy();
+		if(marker.text != null && marker.text.active !== false) marker.text.destroy();
+		entity._hiddenDebugMarker = null;
+	}
+
+	// Creates/removes a developer overlay without changing the real visibility of the hidden object.
+	static syncDebugMarker(entity)
+	{
+		this.clearDebugMarker(entity);
+		if(globalThis.debugShowHiddenObjects !== true || !this.isHidden(entity) || entity.scene == null) return;
+
+		const color = entity.features && entity.features.containerType === 'tall' ? 0xffb347 : 0x55ffaa;
+		const box = entity.scene.add.rectangle(entity.x,entity.y,14,14,color,0.12);
+		box.setStrokeStyle(1,color,0.95);
+		box.setDepth(20000);
+
+		const text = entity.scene.add.text(entity.x,entity.y,'H'+this.getDifficulty(entity),{font:'8px monospace',color:'#ffffff',backgroundColor:'#000000'});
+		text.setOrigin(0.5,0.5);
+		text.setDepth(20001);
+		entity._hiddenDebugMarker = {box,text};
+	}
+
+	// Enables/disables developer markers for every currently hidden entity. Returns the new state.
+	static setDebugOverlayEnabled(enabled)
+	{
+		globalThis.debugShowHiddenObjects = enabled === true;
+		if(typeof entities !== 'undefined' && Array.isArray(entities))
+			for(const entity of entities) this.syncDebugMarker(entity);
+		return globalThis.debugShowHiddenObjects;
+	}
+
+	// Reveals every hidden entity in the current game. Intended for developer-console testing.
+	static revealAll()
+	{
+		if(typeof entities === 'undefined' || !Array.isArray(entities)) return 0;
+		let count = 0;
+		for(const entity of entities) if(this.reveal(entity,null,Number.MAX_SAFE_INTEGER)) count++;
+		console.log('[Hidden] revealAllHidden(): revealed '+count+' object(s)');
+		return count;
 	}
 
 	// Reveals an entity once. Returns true only when a hidden entity was successfully discovered.
@@ -179,11 +252,17 @@ class HiddenSystem
 	{
 		if(!this.canReveal(unit,entity,searchPower)) return false;
 		this.getHidden(entity).hidden = false;
+		this.clearDebugMarker(entity);
 		if(typeof entity.onHiddenRevealed === 'function') entity.onHiddenRevealed(unit);
 		else if(typeof entity.setVisability === 'function') entity.setVisability(true);
+		this.playRevealEffect(entity);
 		return true;
 	}
 }
+
+if(globalThis.debugShowHiddenObjects == null) globalThis.debugShowHiddenObjects = false;
+globalThis.setHiddenDebugOverlay = enabled => HiddenSystem.setDebugOverlayEnabled(enabled);
+globalThis.revealAllHidden = () => HiddenSystem.revealAll();
 
 function playEntityVisualTransition(entity,targetState,commitState,onComplete=null,duration=170)
 {
