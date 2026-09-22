@@ -208,6 +208,8 @@ var GameScene = new Phaser.Class({
                     if(WALL_OVERLAY_TILES.has(tileIndex) || this._checkDiagonalPassability(x, y))
                     {
                         const sprite = this.add.sprite(x * 16, y * 16,'tiles',tileIndex).setOrigin(0, 0).setDepth((y + 1) * 16);
+                        sprite._mapX = x;
+                        sprite._mapY = y;
                         wallOverlays.push(sprite);
                     }
                 }

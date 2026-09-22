@@ -60,7 +60,15 @@ const MAP_GENERATION_CONFIG = {
 		factoryFallbackSpecialCount: 2, // Fallback requested by the factory when a larger request cannot fit.
 		cornerSpecialMinSpan: 5, // Minimum resolved corner-slot width/height required for a special zone.
 		middleSpecialMinSpan: 7, // Minimum resolved edge-middle slot width/height required for a special zone.
-		specialTypes: ['treasury', 'library'] // Assigned cyclically; with count=2 this gives one Treasury and one Library.
+		specialTypes: ['treasury', 'library'], // Assigned cyclically; with count=2 this gives one Treasury and one Library.
+
+		// Secret side passages. Percentages are target fractions per generated area type, rounded to the nearest area.
+		secretPassages: {
+			alcovePercent: 50, // Target percentage of full alcove rooms hidden behind a secret door.
+			nichePercent: 50, // Target percentage of niches hidden behind a secret door.
+			alcoveDifficulty: [2, 3], // Search difficulty assigned to hidden full-alcove entrances.
+			nicheDifficulty: [1, 2] // Search difficulty assigned to hidden niche entrances.
+		}
 	},
 
 	// Semantic portal and physical-door materialization rules.

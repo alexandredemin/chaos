@@ -817,13 +817,40 @@ class DoorEntity extends Entity
 		this.scale = this.config.scale;
 		this.setDepthFromBottom(-4.1);
 		this.updateSprite();
+		this.syncHiddenTilePatch();
+		if(typeof HiddenSystem !== 'undefined') HiddenSystem.syncVisibility(this);
 	}
 
+	// Keeps the runtime tilemap consistent with serialized hidden state on new games and save/load.
+	syncHiddenTilePatch()
+	{
+		if(typeof MapVisualSystem === 'undefined' || this.features.tilePatch == null) return;
+		const patch = HiddenSystem.isHidden(this) ? this.features.tilePatch.hidden : this.features.tilePatch.revealed;
+		MapVisualSystem.applyPatch(patch);
+	}
+
+	// Secret doors are truly invisible while hidden; ordinary door visibility keeps the historical fog behavior.
 	setVisability(visible)
 	{
+		if(typeof HiddenSystem !== 'undefined' && HiddenSystem.isHidden(this))
+		{
+			this.features.visible = false;
+			this.updateSprite();
+			this.visible = false;
+			return;
+		}
+
 		this.features.visible = visible;
 		this.updateSprite();
 		this.visible = true;
+	}
+
+	// Revealing a secret door first restores its normal doorway tiles, then lets HiddenSystem animate the entity.
+	onHiddenRevealed(unit)
+	{
+		if(typeof MapVisualSystem !== 'undefined' && this.features.tilePatch != null)
+			MapVisualSystem.applyPatch(this.features.tilePatch.revealed);
+		this.setVisability(true);
 	}
 
 	getVisability()

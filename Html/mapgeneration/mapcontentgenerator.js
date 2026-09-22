@@ -81,6 +81,7 @@ class MapContentGenerator {
 			objects,
 			stats: {
 				doors: doors.length,
+				hiddenDoors: doors.filter(d => this._getObjectProperty(d, 'hidden')?.hidden === true).length,
 				lockedSpecialDoors: doors.filter(d => this._isObjectLocked(d)).length,
 				starts: startPositions.length,
 				items: items.length,
@@ -236,6 +237,10 @@ class MapContentGenerator {
 			];
 			const lock = this._doorLockForPortal(portal);
 			if (lock) properties.push({name: 'lock', value: lock});
+			if (portal.hiddenByDefault === true && portal.tilePatch != null) {
+				properties.push({name: 'hidden', value: {hidden: true, difficulty: portal.hiddenDifficulty ?? 1}});
+				properties.push({name: 'tilePatch', value: this._clone(portal.tilePatch)});
+			}
 			doors.push({type: 'entity', name: 'door', x: portal.x * this.tileSize, y: portal.y * this.tileSize, properties, _portal: portal});
 		}
 		return doors;

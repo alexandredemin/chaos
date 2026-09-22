@@ -11,29 +11,70 @@ class MapAutotiler {
 
 	// ----- Main tiling pipeline -----
 
-	// Builds ground/wall tile arrays from GeneratedDungeon, autotiles walls, then applies door-specific wall corrections. Returns tiled map data.
+	// Builds the initial tiled map. Hidden secret portals are rendered as solid wall and receive reversible runtime tile patches.
 	build(dungeon, portals = []) {
 		const width = dungeon.layout?.width || dungeon.map.kind[0].length;
 		const height = dungeon.layout?.height || dungeon.map.kind.length;
 		this.width = width;
 		this.height = height;
+
+		const hiddenPortals = portals.filter(p => p.hiddenByDefault === true && p.doorSuitable && p.direction);
+		const hiddenIds = new Set(hiddenPortals.map(p => p.id));
+		const initial = this._buildState(dungeon, portals, hiddenIds);
+
+		// Each portal stores a generic absolute tile patch. Runtime does not need to know anything about doors/autotiling.
+		for (const portal of hiddenPortals) {
+			const revealedIds = new Set(hiddenIds);
+			revealedIds.delete(portal.id);
+			const revealedState = this._buildState(dungeon, portals, revealedIds);
+			portal.tilePatch = {
+				hidden: this._diffStates(revealedState, initial),
+				revealed: this._diffStates(initial, revealedState)
+			};
+		}
+
+		return { ground: initial.ground, walls: initial.walls, tileTypeMap: initial.tileTypeMap };
+	}
+
+	// Builds one complete visual state, optionally replacing selected portal floor cells with rock/wall.
+	_buildState(dungeon, portals, hiddenPortalIds = new Set()) {
 		const map = this._createEmptyMap();
 		const tileTypeMap = [];
-		for (let y = 0; y < height; y++) {
+		const hiddenCells = new Set();
+		for (const portal of portals) if (hiddenPortalIds.has(portal.id)) hiddenCells.add(portal.x + ':' + portal.y);
+
+		for (let y = 0; y < this.height; y++) {
 			tileTypeMap[y] = [];
-			for (let x = 0; x < width; x++) {
-				const floor = dungeon.map.kind[y][x] !== '#';
+			for (let x = 0; x < this.width; x++) {
+				const hidden = hiddenCells.has(x + ':' + y);
+				const floor = !hidden && dungeon.map.kind[y][x] !== '#';
 				tileTypeMap[y][x] = floor ? this.TILE.FLOOR : this.TILE.ROCK;
 				map.walls[y][x] = floor ? null : this.wallTile;
 			}
 		}
+
 		this._markWallsFromRock(tileTypeMap);
 		this._autoTileWalls(tileTypeMap, map);
 		for (const portal of portals) {
-			if (!portal.doorSuitable || !portal.direction) continue;
+			if (!portal.doorSuitable || !portal.direction || hiddenPortalIds.has(portal.id)) continue;
 			this._applyDoorAutotileRules(portal.x, portal.y, portal.direction, map);
 		}
 		return { ground: map.ground, walls: map.walls, tileTypeMap };
+	}
+
+	// Produces a runtime MapVisualSystem patch containing only cells whose rendered tile changes.
+	_diffStates(fromState, toState) {
+		const cells = [];
+		for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {
+			const groundChanged = fromState.ground[y][x] !== toState.ground[y][x];
+			const wallChanged = fromState.walls[y][x] !== toState.walls[y][x];
+			if (!groundChanged && !wallChanged) continue;
+			const cell = {x, y};
+			if (groundChanged) cell.ground = toState.ground[y][x];
+			if (wallChanged) cell.wall = toState.walls[y][x];
+			cells.push(cell);
+		}
+		return {cells};
 	}
 
 	// ----- Wall autotiling helpers -----

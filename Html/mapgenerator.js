@@ -1,6 +1,7 @@
 // Production façade for the universal v5.7 dungeon generator.
 // Keeps the historical GameScene contract: {width,height,ground,walls,objects}.
 const MAP_GENERATOR_CONFIG = MAP_GENERATION_CONFIG;
+const SECRET_PORTAL_RNG_SALT = 0x5E4C3A21;
 
 class MapGenerator {
 	constructor(cfg = {}) {
@@ -18,6 +19,7 @@ class MapGenerator {
 		const dungeon = geometryGenerator.generate();
 
 		DungeonPortalBuilder.build(dungeon);
+		this._assignSkirmishHiddenPortals(dungeon);
 
 		const autotiler = new MapAutotiler(this.cfg);
 		const tiledMap = autotiler.build(dungeon, dungeon.portals);
@@ -51,6 +53,47 @@ class MapGenerator {
 				contentStats: content.stats
 			}
 		};
+	}
+
+
+	// Marks a deterministic target fraction of alcove/niche access portals as secret.
+	// Long tunnels hide the outer tunnel entrance so the whole side branch stays inaccessible until Search reveals it.
+	_assignSkirmishHiddenPortals(dungeon) {
+		const cfg = MAP_GENERATOR_CONFIG.skirmish.secretPassages || {};
+		const rng = new RNG((this.seed ^ SECRET_PORTAL_RNG_SALT) >>> 0);
+		const byAlcove = new Map();
+
+		for (const portal of dungeon.portals || []) {
+			if (!portal.doorSuitable || !portal.hiddenSuitable || !portal.alcoveId) continue;
+			if (!byAlcove.has(portal.alcoveId)) byAlcove.set(portal.alcoveId, []);
+			byAlcove.get(portal.alcoveId).push(portal);
+		}
+
+		const candidates = [];
+		for (const portals of byAlcove.values()) {
+			const outer = portals.find(p => p.type === 'alcove_tunnel_entrance');
+			const near = portals.find(p => p.type === 'alcove_entrance');
+			const portal = outer || near;
+			if (portal) candidates.push(portal);
+		}
+
+		const markType = (alcoveType, percent, difficulty) => {
+			const list = candidates.filter(p => p.alcoveType === alcoveType);
+			rng.shuffle(list);
+			const target = Math.max(0, Math.min(list.length, Math.round(list.length * Math.max(0, Math.min(100, percent || 0)) / 100)));
+			const min = Array.isArray(difficulty) ? Math.max(0, Math.floor(difficulty[0] ?? 0)) : 0;
+			const max = Array.isArray(difficulty) ? Math.max(min, Math.floor(difficulty[1] ?? min)) : min;
+			for (let i = 0; i < target; i++) {
+				list[i].hiddenByDefault = true;
+				list[i].hiddenDifficulty = rng.int(min, max);
+			}
+			return target;
+		};
+
+		const hiddenAlcoves = markType('room', this.cfg.hiddenAlcovePercent ?? cfg.alcovePercent ?? 0, cfg.alcoveDifficulty);
+		const hiddenNiches = markType('niche', this.cfg.hiddenNichePercent ?? cfg.nichePercent ?? 0, cfg.nicheDifficulty);
+		dungeon.stats.hiddenAlcoves = hiddenAlcoves;
+		dungeon.stats.hiddenNiches = hiddenNiches;
 	}
 
 	_buildGeometryConfig() {

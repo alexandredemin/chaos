@@ -89,6 +89,8 @@ const entityConfigs = {
             open: false,
             closeMode: 'auto',
             lock: null,
+            hidden: null,
+            tilePatch: null,
             visible: true,
             blocksLOS: true,
             health: 3
