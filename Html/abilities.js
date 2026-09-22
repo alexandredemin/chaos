@@ -772,14 +772,27 @@ class JumpAbility extends UnitAbility
 class SearchAbility extends UnitAbility
 {
 	unit = null;
+	searchGuard = null;
+	searchOverlays = [];
+	revealEntities = [];
+	revealTimer = null;
 
 	start(unit)
 	{
 		this.unit = unit;
+		this.searchGuard = null;
+		this.searchOverlays = [];
+		this.revealEntities = [];
+		this.revealTimer = null;
 	}
 
 	stop(unit)
 	{
+		if(this.searchGuard != null && typeof this.searchGuard.cancel === 'function') this.searchGuard.cancel();
+		this.searchGuard = null;
+		this.searchOverlays = [];
+		this.revealEntities = [];
+		this.revealTimer = null;
 		this.unit = null;
 		super.stop(unit);
 	}
@@ -792,15 +805,49 @@ class SearchAbility extends UnitAbility
 		return HiddenSystem.getSearchPower(unit) > 0 && unit.features.abilityPoints >= cost;
 	}
 
-	// Flashes all searched cells for about 250 ms, with a small delay from center to edge.
-	playSearchFlash(unit,radius)
+	beginAsyncActionLock()
 	{
-		if(unit == null || unit.scene == null || typeof map === 'undefined' || map == null) return;
-		if(typeof shouldShowActionAnimation === 'function' && !shouldShowActionAnimation(unit)) return;
+		if(typeof shouldShowActionAnimation === 'function' && !shouldShowActionAnimation(this.unit)) return;
+		pointerBlocked = true;
+		hideArrows();
+	}
+
+	endAsyncActionLock()
+	{
+		if(typeof shouldShowActionAnimation === 'function' && !shouldShowActionAnimation(this.unit)) return;
+		pointerBlocked = false;
+		if(this.unit != null && this.unit.player != null && this.unit.player.control === PlayerControl.human && selectedUnit === this.unit)
+			showArrows(selectedUnit);
+	}
+
+	// Returns all hidden entities that this Search action can actually reveal.
+	getRevealCandidates(unit,radius,power)
+	{
+		const result = [];
+		for(const entity of entities)
+		{
+			if(!HiddenSystem.canReveal(unit,entity,power)) continue;
+			const dx = Math.abs(entity.mapX-unit.mapX);
+			const dy = Math.abs(entity.mapY-unit.mapY);
+			if(Math.max(dx,dy) <= radius) result.push(entity);
+		}
+		return result;
+	}
+
+	// Flashes all searched cells for about 250 ms, with a small delay from center to edge.
+	playSearchFlash(unit,radius,onComplete=null)
+	{
+		if(unit == null || unit.scene == null || typeof map === 'undefined' || map == null)
+		{
+			if(onComplete != null) onComplete();
+			return;
+		}
 
 		const scene = unit.scene;
 		const maxWaveDelay = 70;
 		const pulseDuration = 180;
+		let remaining = 0;
+
 		for(let y=unit.mapY-radius;y<=unit.mapY+radius;y++)
 		{
 			for(let x=unit.mapX-radius;x<=unit.mapX+radius;x++)
@@ -812,9 +859,59 @@ class SearchAbility extends UnitAbility
 				const overlay = scene.add.rectangle(pos.x+8,pos.y+8,15,15,0xfff2a8,1);
 				overlay.setAlpha(0);
 				overlay.setDepth(10000);
-				scene.tweens.add({targets:overlay,alpha:0.34,duration:pulseDuration/2,delay,yoyo:true,ease:'Sine.easeOut',onComplete:() => overlay.destroy()});
+				this.searchOverlays.push(overlay);
+				remaining++;
+				scene.tweens.add({
+					targets:overlay,
+					alpha:0.34,
+					duration:pulseDuration/2,
+					delay,
+					yoyo:true,
+					ease:'Sine.easeOut',
+					onComplete:() => {
+						if(overlay.active !== false) overlay.destroy();
+						remaining--;
+						if(remaining === 0 && onComplete != null) onComplete();
+					}
+				});
 			}
 		}
+
+		if(remaining === 0 && onComplete != null) onComplete();
+	}
+
+	// Forces the visual part into its final state if an async callback is lost.
+	forceFinishVisuals(unit,power)
+	{
+		if(this.revealTimer != null)
+		{
+			this.revealTimer.remove(false);
+			this.revealTimer = null;
+		}
+
+		for(const overlay of this.searchOverlays)
+		{
+			if(overlay == null || overlay.active === false) continue;
+			if(overlay.scene != null && overlay.scene.tweens != null) overlay.scene.tweens.killTweensOf(overlay);
+			overlay.destroy();
+		}
+		this.searchOverlays = [];
+
+		for(const entity of this.revealEntities)
+		{
+			if(HiddenSystem.isHidden(entity)) HiddenSystem.reveal(entity,unit,power,{animate:false});
+			else HiddenSystem.finishRevealEffect(entity);
+		}
+	}
+
+	completeAsyncSearch(unit)
+	{
+		this.searchGuard = null;
+		this.revealTimer = null;
+		this.searchOverlays = [];
+		this.revealEntities = [];
+		this.endAsyncActionLock();
+		this.stop(unit);
 	}
 
 	next()
@@ -826,20 +923,59 @@ class SearchAbility extends UnitAbility
 		const radius = Math.max(0,Math.floor(cfg.radius ?? 1));
 		const cost = Math.max(0,Math.floor(cfg.abilityPointCost ?? 1));
 		const power = HiddenSystem.getSearchPower(unit);
+		const revealCandidates = this.getRevealCandidates(unit,radius,power);
+		const animate = typeof shouldShowActionAnimation !== 'function' || shouldShowActionAnimation(unit);
 
 		unit.features.abilityPoints -= cost;
-		this.playSearchFlash(unit,radius);
-		for(const entity of entities)
+
+		// Hidden AI turns skip all visual delays and continue immediately.
+		if(!animate)
 		{
-			if(!HiddenSystem.isHidden(entity)) continue;
-			const dx = Math.abs(entity.mapX-unit.mapX);
-			const dy = Math.abs(entity.mapY-unit.mapY);
-			if(Math.max(dx,dy) > radius) continue;
-			HiddenSystem.reveal(entity,unit,power);
+			for(const entity of revealCandidates) HiddenSystem.reveal(entity,unit,power,{animate:false});
+			this.stop(unit);
+			return true;
 		}
 
-		this.stop(unit);
-		return true;
+		this.beginAsyncActionLock();
+		this.revealEntities = revealCandidates.slice();
+
+		let pending = 1+revealCandidates.length;
+		const visualComplete = () =>
+		{
+			pending--;
+			if(pending <= 0 && this.searchGuard != null) this.searchGuard();
+		};
+
+		const complete = () => this.completeAsyncSearch(unit);
+		this.searchGuard = typeof AsyncGuard !== 'undefined' ? AsyncGuard.wrap(
+			'search_animation',
+			complete,
+			{
+				timeoutMs:1500,
+				data:{unitId:unit.id,unitName:unit.config ? unit.config.name : null,radius,found:revealCandidates.length},
+				onTimeout:() => this.forceFinishVisuals(unit,power)
+			}
+		) : (() => {
+			let finished = false;
+			return () => {if(finished) return; finished = true; complete();};
+		})();
+
+		this.playSearchFlash(unit,radius,visualComplete);
+
+		// All discovered objects start revealing together shortly after the wave begins.
+		if(revealCandidates.length > 0)
+		{
+			const revealAll = () =>
+			{
+				this.revealTimer = null;
+				for(const entity of revealCandidates)
+					HiddenSystem.reveal(entity,unit,power,{animate:true,onComplete:visualComplete});
+			};
+			this.revealTimer = unit.scene != null && unit.scene.time != null ? unit.scene.time.delayedCall(70,revealAll) : null;
+			if(this.revealTimer == null) revealAll();
+		}
+
+		return false;
 	}
 }
 
