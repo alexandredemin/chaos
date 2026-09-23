@@ -76,6 +76,20 @@ class IndependentAIControl extends AIControl
 		return 40;
 	}
 
+	// Independent creatures have no shared strategic planner: force fresh tactical matrices/goals only.
+	replanAfterInvisibleDetection()
+	{
+		this.computeEnemyAttackMaps();
+		for(const unit of this.player.units)
+		{
+			if(!this.canStillAct(unit)) continue;
+			const unitAI = this.ensureUnitAIControl(unit);
+			unitAI.target = null;
+			unitAI.plan = null;
+			unitAI.action = null;
+		}
+	}
+
 	planning()
 	{
 		/*

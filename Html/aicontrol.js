@@ -11,12 +11,94 @@ class AIControl
 	traffic = null;
 	threats = null;
 	distantThreats = null;
+	detectedInvisibleUnits = null;
+	invisibleMemoryTurns = 2;
 
     constructor(player)
     {
         this.player = player;
         this.traffic = new AITrafficController(this);
+        this.detectedInvisibleUnits = new Map();
     }
+
+	// Invisible units are known only after adjacent detection and remain remembered for a few future turns.
+	isInvisibleUnit(unit)
+	{
+		if(typeof isUnitInvisible === 'function') return isUnitInvisible(unit);
+		return unit != null && unit.features != null && unit.features.invisible === true;
+	}
+
+	isUnitKnown(unit)
+	{
+		if(unit == null || unit.died) return false;
+		if(unit.player === this.player) return true;
+		if(!this.isInvisibleUnit(unit))
+		{
+			this.detectedInvisibleUnits.delete(unit);
+			return true;
+		}
+		return this.detectedInvisibleUnits.has(unit);
+	}
+
+	canStillAct(unit)
+	{
+		return unit != null && !unit.died && unit.features != null &&
+			(unit.features.move > 0 || unit.features.abilityPoints > 0);
+	}
+
+	rememberInvisibleUnit(unit)
+	{
+		if(unit == null || unit.died || unit.player === this.player || !this.isInvisibleUnit(unit)) return false;
+		const isNew = !this.detectedInvisibleUnits.has(unit);
+		this.detectedInvisibleUnits.set(unit,this.invisibleMemoryTurns);
+		if(isNew) console.log('AI detected invisible unit: ' + (unit.config ? unit.config.name : unit.id));
+		return isNew;
+	}
+
+	updateInvisibleMemory()
+	{
+		for(const [unit,turns] of this.detectedInvisibleUnits)
+		{
+			if(unit == null || unit.died || !this.isInvisibleUnit(unit))
+			{
+				this.detectedInvisibleUnits.delete(unit);
+				continue;
+			}
+			const nextTurns = turns - 1;
+			if(nextTurns < 0) this.detectedInvisibleUnits.delete(unit);
+			else this.detectedInvisibleUnits.set(unit,nextTurns);
+		}
+	}
+
+	detectAdjacentInvisibleUnits(observer)
+	{
+		if(observer == null || observer.died) return false;
+		let discovered = false;
+		for(const target of units)
+		{
+			if(target == null || target.died || target.player === this.player || !this.isInvisibleUnit(target)) continue;
+			const adjacent = typeof canSeeInvisibleUnit === 'function'
+				? canSeeInvisibleUnit(observer,target)
+				: Math.abs(observer.mapX-target.mapX) <= 1 && Math.abs(observer.mapY-target.mapY) <= 1;
+			if(adjacent && this.rememberInvisibleUnit(target)) discovered = true;
+		}
+		return discovered;
+	}
+
+	detectAdjacentInvisibleUnitsForPlayer()
+	{
+		let discovered = false;
+		for(const unit of this.player.units)
+			if(this.detectAdjacentInvisibleUnits(unit)) discovered = true;
+		return discovered;
+	}
+
+	// A new contact invalidates tactical choices. Strategic replanning preserves valid attack orders.
+	replanAfterInvisibleDetection()
+	{
+		this.computeEnemyAttackMaps();
+		this.planning(true);
+	}
 
 	startTurn()
 	{
@@ -31,10 +113,12 @@ class AIControl
 			return;
 		}
 		this.traffic.startTurn();
+		this.updateInvisibleMemory();
+		this.detectAdjacentInvisibleUnitsForPlayer();
 		this.availableUnits = [];
 		for(let i=this.player.units.length-1;i>=0;i--) this.availableUnits.push(this.player.units[i]);
 		this.computeEnemyAttackMaps();
-		this.planning();
+		this.planning(false);
 		this.passStage = 1;
 		this.currentUnit = null;
 		this.pass(true);
@@ -98,6 +182,8 @@ class AIControl
 			this.pass(true);
 			return;
 		}
+		if(this.passStage <= this.normalPassStages && this.detectAdjacentInvisibleUnits(unit))
+			this.replanAfterInvisibleDetection();
 		if(this.passStage > this.normalPassStages)
 		{
 			const handled = this.traffic.stepOnly(unit);
@@ -306,7 +392,7 @@ class AIControl
 		this.ensureUnitAIControl(unit);
 		if(unit.aiControl.mainTarget)
 		{
-			if(unit.aiControl.mainTarget.died)
+			if(unit.aiControl.mainTarget.died || !this.isUnitKnown(unit.aiControl.mainTarget))
 			{
 				this.setMainTarget(unit, null, null, null, null);
 				return null;
@@ -585,6 +671,7 @@ class AIControl
                 let infectVal = 0;
                 for (let j = 0; j < targets.length; j++) {
                     let trgt = targets[j];
+                    if(trgt.player !== unit.player && !this.isUnitKnown(trgt)) continue;
                     if(place.dist < unit.features.move && Math.abs(trgt.mapX - place.cell[0]) <= 1 && Math.abs(trgt.mapY - place.cell[1]) <= 1) {
                         if(trgt.player !== unit.player){
                             let atackVal = unit.features.strength;
@@ -646,6 +733,7 @@ class AIControl
             for(let j=0;j<targets.length;j++)
             {
                 let trgt = targets[j];
+                if(trgt.player !== unit.player && !this.isUnitKnown(trgt)) continue;
                 if(gasAbility.canAtack(unit,trgt))
                 {
                     if(trgt.player !== unit.player) 
@@ -680,6 +768,7 @@ class AIControl
             for(let j=0;j<targets.length;j++)
             {
                 let trgt = targets[j];
+                if(trgt.player !== unit.player && !this.isUnitKnown(trgt)) continue;
                 if(trgt.player !== unit.player)
                 {
                     if(fireAbility.canAtack(unit,trgt))
@@ -754,6 +843,11 @@ class AIControl
             for(let unt of pl.units)
             {
                 if(!unt.cache) unt.cache = {attackMap: null};
+                if(!this.isUnitKnown(unt))
+                {
+                    unt.cache.attackMap = null;
+                    continue;
+                }
                 unt.cache.attackMap = this.getAttackMap(unt);
             }
         }
@@ -909,10 +1003,11 @@ class AIControl
     {
         let res = null;
         if(unit.aiControl && unit.aiControl.action && unit.aiControl.action.type === "fire" && unit.aiControl.action.targetId){
-            for(let trg of targets) if(trg.id === unit.aiControl.action.targetId) return trg;
+            for(let trg of targets) if(trg.id === unit.aiControl.action.targetId && this.isUnitKnown(trg)) return trg;
         }
         else{
             targets.forEach(trg => {
+                if(!this.isUnitKnown(trg)) return;
                 if(trg === trg.player.wizard) return trg;
                 if(!res || (trg.features.strength > res.features.strength || (trg.features.strength === res.features.strength && randomInt(0,1) === 1))) res = trg;
             });
@@ -933,7 +1028,7 @@ class AIControl
         let wiz = null;
         let dist = 999999999;
         players.forEach(pl => {
-            if(pl !== unit.player && pl.wizard)
+            if(pl !== unit.player && pl.wizard && this.isUnitKnown(pl.wizard))
             {
                 if(dMap[pl.wizard.mapY][pl.wizard.mapX] > 0 && dMap[pl.wizard.mapY][pl.wizard.mapX] <= dist)
                 {
@@ -956,6 +1051,7 @@ class AIControl
         players.forEach(pl => {
             if (pl !== unit.player) {
                 pl.units.forEach(unt => {
+                    if(!this.isUnitKnown(unt)) return;
                     if(dMap[unt.mapY][unt.mapX] > 0 && dMap[unt.mapY][unt.mapX] <= startCost + dist) enemies.push(unt);
                 });
             }
@@ -970,6 +1066,7 @@ class AIControl
             if (pl !== unit.player) {
                 for(let enemy of pl.units)
                 {
+                    if(!this.isUnitKnown(enemy)) continue;
                     for(let place of stepPlaces)
                     {
                         let dX = Math.abs(place.cell[0] - enemy.mapX);
@@ -996,7 +1093,7 @@ class AIControl
                 let x = 0;
                 for(let unt of units)
                 {
-                    if(unt.died || unt.player == this.player)continue;
+                    if(unt.died || unt.player == this.player || !this.isUnitKnown(unt))continue;
                     if(unt.cache && unt.cache.attackMap) x = x + unt.cache.attackMap[i][j];
                 }
                 //unit.features.health
@@ -1242,6 +1339,7 @@ class AIControl
                 let closeUnits = [];
                 let distantUnits = [];
                 for(let unt of pl.units){
+                    if(!this.isUnitKnown(unt)) continue;
                     if(Math.abs(unt.mapX - pl.wizard.mapX) <= maxDist && Math.abs(unt.mapY - pl.wizard.mapY) <= maxDist){                 
                         let dMap = this.getDistanceMap(unt,unt.mapX,unt.mapY);
                         let startCost = dMap[unt.mapY][unt.mapX];
@@ -1267,15 +1365,23 @@ class AIControl
         }
     }
   
-    planning()
+    planning(midTurn=false)
     {
-        console.log("planning");  
+        console.log(midTurn ? "replanning" : "planning");
         let wizard = this.player.wizard;
         this.computeEnemiesInfo();
         console.log("Players stats:");
         for(let pl of players)if(pl.Info)console.log(pl.name + ": " + pl.Info.closeStr + "(" + pl.Info.sumStr + ")");
         for(const unit of this.player.units){
-            if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "attack" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died)continue;
+            if(midTurn && !this.canStillAct(unit)) continue;
+            const unitAI = this.ensureUnitAIControl(unit);
+            if(midTurn)
+            {
+                unitAI.target = null;
+                unitAI.plan = null;
+                unitAI.action = null;
+            }
+            if(unitAI.order == "attack" && unitAI.mainTarget != null && !unitAI.mainTarget.died && this.isUnitKnown(unitAI.mainTarget)) continue;
             this.setMainTarget(unit,null,null,null,null);
         }
         if(wizard && !wizard.died){
@@ -1305,6 +1411,7 @@ class AIControl
             for(let pl of players){
                 if (pl == wizard.player)continue;
                 for(let unt of pl.units){
+                    if(!this.isUnitKnown(unt)) continue;
                     if(Math.abs(unt.mapX - wizard.mapX) > maxDist || Math.abs(unt.mapY - wizard.mapY) > maxDist) continue;
                     let dMap = this.getDistanceMap(unt,unt.mapX,unt.mapY);
                     let startCost = dMap[unt.mapY][unt.mapX];
@@ -1318,7 +1425,7 @@ class AIControl
             let threats = [];
             let distantThreats = [];
             if(!this.distantThreats) this.distantThreats = [];
-            this.distantThreats = this.distantThreats.filter(unt => !unt.died);
+            this.distantThreats = this.distantThreats.filter(unt => !unt.died && this.isUnitKnown(unt));
             //Threats estimation for defense
             for (let turns = 0; turns < enemies.length; turns++) {
                 enemies[turns].forEach(enemy => {
@@ -1339,16 +1446,16 @@ class AIControl
             distantThreats.sort((a, b) => b.threatLevel - a.threatLevel);
             this.threats = threats;
             //assign targets
-            this.assignTargets(threats); 
-            this.assignTargets(distantThreats); 
+            this.assignTargets(threats,midTurn);
+            this.assignTargets(distantThreats,midTurn);
             //choose targets for units which doesn't have main target
-            let freeunits = this.player.units.filter(unt => unt.aiControl.mainTarget == null && unt!=this.player.wizard);
+            let freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.ensureUnitAIControl(unt).mainTarget == null && (!midTurn || this.canStillAct(unt)));
             let sumStrength = 0;
             for(const unit of freeunits) sumStrength += 0.5*(unit.features.strength + unit.features.defense) * unit.features.health;
             console.log("Attack strength: " + sumStrength);
             //Check for attack opportunity
             if(sumStrength >= 10){
-                let victims = players.filter(pl => pl != this.player && pl.wizard && !pl.wizard.died && pl.Info && pl.Info.closeStr < sumStrength);
+                let victims = players.filter(pl => pl != this.player && pl.wizard && !pl.wizard.died && this.isUnitKnown(pl.wizard) && pl.Info && pl.Info.closeStr < sumStrength);
                 if(victims.length > 0){
                     let distToVictim = [];
                     let capableUnits = [];
@@ -1384,11 +1491,11 @@ class AIControl
                         for(const unit of freeunits) this.setMainTarget(unit,targetVictim.wizard,[targetVictim.wizard.mapX,targetVictim.wizard.mapY],"attack",10);
                     }
                     //update list of units which don't have main target
-                    freeunits = this.player.units.filter(unt => unt.aiControl.mainTarget == null && unt!=this.player.wizard);
+                    freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.ensureUnitAIControl(unt).mainTarget == null && (!midTurn || this.canStillAct(unt)));
                 }
             }
             //If there are units left that do not have a main goal, then we assign them patrol or defense
-            if(freeunits.lenght > 0){
+            if(freeunits.length > 0){
                 for(const unit of freeunits){
                     if(this.threats.length > 0) this.chooseTargetThreat(unit,this.threats);
                     if(unit.aiControl.mainTarget == null) this.choosePatrolTarget(unit);
@@ -1398,6 +1505,7 @@ class AIControl
         else{
         //If no wizard or wizard died
             for(const unit of this.player.units){
+                if(midTurn && !this.canStillAct(unit)) continue;
                 let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
                 let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
                 if(trgtWiz)this.setMainTarget(unit,trgtWiz,[trgtWiz.mapX,trgtWiz.mapY],"attack",10);
@@ -1464,12 +1572,12 @@ class AIControl
     }
     */
   
-    assignTargets(threats)
+    assignTargets(threats,midTurn=false)
     {
         //Prepare list of available units
         let activeUnits = [];
         for(const unit of this.player.units){
-            if(unit != this.player.wizard){
+            if(unit != this.player.wizard && (!midTurn || this.canStillAct(unit))){
                 activeUnits.push({
                     unit,
                     assigned: false,
@@ -1488,7 +1596,7 @@ class AIControl
             .filter(unt => !unt.assigned)
             .map(unt => {
                 let target = null;
-                if(unt.unit.aiControl && unt.unit.aiControl.order && unt.unit.aiControl.order == "attack" && unt.unit.aiControl.mainTarget != null && !unt.unit.aiControl.mainTarget.died) target = unt.unit.mainTarget;
+                if(unt.unit.aiControl && unt.unit.aiControl.order && unt.unit.aiControl.order == "attack" && unt.unit.aiControl.mainTarget != null && !unt.unit.aiControl.mainTarget.died && this.isUnitKnown(unt.unit.aiControl.mainTarget)) target = unt.unit.aiControl.mainTarget;
                 let x = {
                 attacker: unt,  
                 distanceToEnemy: this.getBaseCost(unt.dmap,threat.enemy.mapX,threat.enemy.mapY) - unt.dmap[unt.unit.mapY][unt.unit.mapX],
@@ -1527,7 +1635,7 @@ class AIControl
             let bestThreat = null;
             let bestScore = 999999999;
             for(const threat of threats){
-                if(threat.enemy.died)continue;
+                if(threat.enemy.died || !this.isUnitKnown(threat.enemy))continue;
                 //Choose nearest threat
                 let score = dmap[threat.enemy.mapY][threat.enemy.mapX];
                 if(score < bestScore){

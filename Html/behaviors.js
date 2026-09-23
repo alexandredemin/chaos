@@ -321,6 +321,7 @@ class GuardIndependentBehavior extends IndependentBehavior
 		if(target == null) return false;
 		if(target.died) return false;
 		if(target.player == null) return false;
+		if(target.player !== unit.player && this.controller != null && !this.controller.isUnitKnown(target)) return false;
 
 		return target.player !== unit.player;
 	}
@@ -694,6 +695,7 @@ class RoamIndependentBehavior extends IndependentBehavior
 		if(target == null) return false;
 		if(target.died) return false;
 		if(target.player == null) return false;
+		if(target.player !== unit.player && this.controller != null && !this.controller.isUnitKnown(target)) return false;
 
 		return target.player !== unit.player;
 	}
