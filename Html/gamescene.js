@@ -162,6 +162,7 @@ var GameScene = new Phaser.Class({
     },
 
     initMap: function(data) {
+        if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.setMapMetadata(data.metadata || null);
         map = this.make.tilemap({
             width: data.width,
             height: data.height,

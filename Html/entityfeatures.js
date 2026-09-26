@@ -126,6 +126,7 @@ class LockSystem
 
 		lock.locked = false;
 		if(typeof entity.updateSprite === 'function') entity.updateSprite();
+		if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitEntityAction('unlocked',entity,{unit:null,source:'scenario'});
 		return true;
 	}
 }
@@ -273,7 +274,7 @@ class HiddenSystem
 	{
 		if(typeof entities === 'undefined' || !Array.isArray(entities)) return 0;
 		let count = 0;
-		for(const entity of entities) if(this.reveal(entity,null,Number.MAX_SAFE_INTEGER,{animate:false})) count++;
+		for(const entity of entities) if(this.reveal(entity,null,Number.MAX_SAFE_INTEGER,{animate:false,emitEvent:false,source:'debug'})) count++;
 		console.log('[Hidden] revealAllHidden(): revealed '+count+' object(s)');
 		return count;
 	}
@@ -287,10 +288,13 @@ class HiddenSystem
 			return false;
 		}
 
+		const difficulty = this.getDifficulty(entity);
 		this.getHidden(entity).hidden = false;
 		this.clearDebugMarker(entity);
 		if(typeof entity.onHiddenRevealed === 'function') entity.onHiddenRevealed(unit);
 		else if(typeof entity.setVisability === 'function') entity.setVisability(true);
+		if(options.emitEvent !== false && typeof ScenarioEvents !== 'undefined')
+			ScenarioEvents.emit('hidden_revealed',{entity,unit,searchPower:searchPower == null ? this.getSearchPower(unit) : Number(searchPower),difficulty,mapX:entity.mapX,mapY:entity.mapY,source:options.source || 'search'});
 
 		if(options.animate === false)
 		{

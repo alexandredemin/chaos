@@ -767,7 +767,7 @@ function finishUseAction(callbackObject, result)
 	}
 }
 
-function playDoorToggleEffect(door,nextOpen,onComplete=null)
+function playDoorToggleEffect(door,nextOpen,onComplete=null,unit=null,source='use')
 {
 	playEntityVisualTransition(
 		door,
@@ -775,6 +775,7 @@ function playDoorToggleEffect(door,nextOpen,onComplete=null)
 		() =>
 		{
 			door.features.open = nextOpen;
+			if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitEntityAction(nextOpen ? 'opened' : 'closed',door,{unit,source});
 			return true;
 		},
 		onComplete,
@@ -792,6 +793,7 @@ function playDoorUnlockEffect(door,unit,plan,onComplete=null)
 		{
 			const result = LockSystem.commitUnlock(unit,door,plan);
 			door._unlocking = false;
+			if(result && typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitEntityAction('unlocked',door,{unit,source:'key'});
 			return result;
 		},
 		onComplete,
@@ -938,6 +940,7 @@ class DoorEntity extends Entity
 		if(this.features.open) return false;
 		this.features.open = true;
 		this.updateSprite();
+		if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitEntityAction('opened',this,{unit:null,source:'direct'});
 		return true;
 	}
 
@@ -947,6 +950,7 @@ class DoorEntity extends Entity
 		if(!force && !OpenableSystem.canClose(this)) return false;
 		this.features.open = false;
 		this.updateSprite();
+		if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitEntityAction('closed',this,{unit:null,source:force ? 'forced' : 'auto'});
 		return true;
 	}
 
@@ -974,7 +978,7 @@ class DoorEntity extends Entity
 			playDoorToggleEffect(this,true,() =>
 			{
 				if(onComplete != null) onComplete(true,null);
-			});
+			},unit);
 		};
 
 		if(!LockSystem.isLocked(this))
@@ -1065,7 +1069,7 @@ class DoorEntity extends Entity
 			playDoorToggleEffect(this,false,() =>
 			{
 				finishUseAction(callbackObject,{success:true,abilityPointCost:0,movePointCost:1});
-			});
+			},unit);
 			return false;
 		}
 		this.openForUnit(unit,(success,reason) =>

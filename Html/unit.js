@@ -138,6 +138,11 @@ class Unit extends BaseUnit
     die()
     {
         this.died = true;
+        if(this._scenarioDeathEmitted !== true && typeof ScenarioEvents !== 'undefined')
+        {
+            this._scenarioDeathEmitted = true;
+            ScenarioEvents.emit('unit_died',{unit:this,player:this.player || null,playerName:this.player ? this.player.name : null,mapX:this.mapX,mapY:this.mapY});
+        }
         const statesCopy = this.states.slice();
         for(let i = 0; i < statesCopy.length; i++)
         {
@@ -383,6 +388,7 @@ class Unit extends BaseUnit
             return;
         }
         this.features.move--;
+        this._scenarioStep = {fromX:this.mapX,fromY:this.mapY,toX:mapX,toY:mapY};
         let targetXY = map.tileToWorldXY(mapX, mapY);
         this.endAsyncStepLock();
         this.moveTo(targetXY.x + 8, targetXY.y + 8);
@@ -460,6 +466,12 @@ class Unit extends BaseUnit
         this.body.reset(this.target.x, this.target.y);
         this.isMoving = false;
         this.anims.play(this.config.sprite+'stop', true);
+        if(this._scenarioStep != null)
+        {
+            const step = this._scenarioStep;
+            this._scenarioStep = null;
+            if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitUnitPositionChange(this,step.fromX,step.fromY,step.toX,step.toY,'move');
+        }
         this.updateVisability();
         this.states.forEach(item => item.onStep());
         this.entityStepIn(this.onCallback.bind(this)); // async call

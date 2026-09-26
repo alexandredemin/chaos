@@ -15,6 +15,7 @@
     <script type="text/javascript" src="Html/player.js"></script>
     <script type="text/javascript" src="Html/baseunit.js"></script>
     <script type="text/javascript" src="Html/flowwatchdog.js"></script>
+    <script type="text/javascript" src="Html/scenarioevents.js"></script>
     <script type="text/javascript" src="Html/mapvisualsystem.js"></script>
     <script type="text/javascript" src="Html/entityfeatures.js"></script>
     <script type="text/javascript" src="Html/entity.js"></script>
@@ -117,6 +118,7 @@
             <button id="openSaveEditor">Edit Save</button>
             <button id="toggleConsoleLogs">Console Log: OFF</button>
             <button id="toggleHiddenOverlay">Hidden Overlay: OFF</button>
+            <button id="toggleScenarioEvents">Scenario Events: OFF</button>
             <button id="debugClear">Clear Log</button>
         `;
 
@@ -157,6 +159,16 @@
             const enabled = setHiddenDebugOverlay(globalThis.debugShowHiddenObjects !== true);
             this.textContent = "Hidden Overlay: " + (enabled ? "ON" : "OFF");
             logToBox("Hidden object overlay: " + (enabled ? "ENABLED" : "DISABLED"));
+        };
+
+        document.getElementById("toggleScenarioEvents").onclick = function() {
+            if(typeof ScenarioEvents === "undefined") {
+                logToBox("Scenario events are unavailable");
+                return;
+            }
+            const enabled = ScenarioEvents.setDebug(ScenarioEvents.debug !== true);
+            this.textContent = "Scenario Events: " + (enabled ? "ON" : "OFF");
+            logToBox("Scenario event logging: " + (enabled ? "ENABLED" : "DISABLED"));
         };
 
         // ---------- SAVE EDITOR POPUP ----------
@@ -746,6 +758,7 @@
 
     function startTurn() {
         saveGame();
+        if(typeof ScenarioEvents !== 'undefined' && playerInd === 0) ScenarioEvents.beginRound();
         if (players[playerInd].units.length === 0) {
             setTimeout(endTurn, 1);
             return;
@@ -763,6 +776,7 @@
             scrollMsg.show();
             return;
         }
+        if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.beginTurn(players[playerInd],playerInd);
         //+
         /*
         let wiz = players[playerInd].wizard;
@@ -860,9 +874,11 @@
         }
         console.log('end turn');
         console.log('prev player ' + playerInd);
+        if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.endTurn(players[playerInd],playerInd);
         playerInd++;
         if(playerInd >= players.length)
         {
+            if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.endRound();
             GameFlowWatchdog.beginPhase('entity_phase');
             moveEntites();
         }
@@ -900,7 +916,8 @@
                 height: map.height,
                 ground: groundLayer.layer.data.map(row => row.map(t => t.index)),
                 walls: wallsLayer.layer.data.map(row => row.map(t => t ? t.index : null)),
-                objects: objectLayer.objects
+                objects: objectLayer.objects,
+                metadata: typeof ScenarioEvents !== 'undefined' ? ScenarioEvents.getSerializableMapMetadata() : null
             };
         }
 

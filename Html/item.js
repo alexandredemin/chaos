@@ -1003,7 +1003,7 @@ class ItemEntity extends Entity
 }
 
 //---------------------------- Help functions ----------------------------
-function playContainerToggleEffect(container,nextOpen,onComplete=null)
+function playContainerToggleEffect(container,nextOpen,onComplete=null,unit=null,source='use')
 {
 	playEntityVisualTransition(
 		container,
@@ -1011,6 +1011,7 @@ function playContainerToggleEffect(container,nextOpen,onComplete=null)
 		() =>
 		{
 			container.features.open = nextOpen;
+			if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitEntityAction(nextOpen ? 'opened' : 'closed',container,{unit,source});
 			return true;
 		},
 		onComplete,
@@ -1028,6 +1029,7 @@ function playContainerUnlockEffect(container,unit,plan,onComplete=null)
 		{
 			const result = LockSystem.commitUnlock(unit,container,plan);
 			container._unlocking = false;
+			if(result && typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitEntityAction('unlocked',container,{unit,source:'key'});
 			return result;
 		},
 		onComplete,
@@ -1269,6 +1271,7 @@ class ContainerEntity extends ItemEntity
 		if(this.features.open) return false;
 		this.features.open = true;
 		this.updateSprite();
+		if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitEntityAction('opened',this,{unit:null,source:'direct'});
 		return true;
 	}
 
@@ -1278,6 +1281,7 @@ class ContainerEntity extends ItemEntity
 		if(!force && !OpenableSystem.canClose(this)) return false;
 		this.features.open = false;
 		this.updateSprite();
+		if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitEntityAction('closed',this,{unit:null,source:force ? 'forced' : 'auto'});
 		return true;
 	}
 
@@ -1299,7 +1303,7 @@ class ContainerEntity extends ItemEntity
 			playContainerToggleEffect(this,true,() =>
 			{
 				if(onComplete != null) onComplete(true,null);
-			});
+			},unit);
 		};
 
 		if(!LockSystem.isLocked(this))
@@ -1395,7 +1399,7 @@ class ContainerEntity extends ItemEntity
 		};
 		if(this.features.open)
 		{
-			playContainerToggleEffect(this,false,finishContainerUse);
+			playContainerToggleEffect(this,false,finishContainerUse,unit);
 			return false;
 		}
 		this.openForUnit(unit,(success,reason) =>

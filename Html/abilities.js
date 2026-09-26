@@ -133,6 +133,18 @@ function getItemEntityAtUnit(unit)
 			return count;
 		},
 
+		getSourceForIndex(index=0)
+		{
+			let localIndex = index;
+			for(let i = 0; i < this.sources.length; i++)
+			{
+				const source = this.sources[i];
+				if(localIndex < source.getItemCount()) return source;
+				localIndex -= source.getItemCount();
+			}
+			return null;
+		},
+
 		removeItem(index=0)
 		{
 			let localIndex = index;
@@ -668,7 +680,9 @@ class JumpAbility extends UnitAbility
         if(this.placeX < 0 || this.placeY < 0) return;
         this.unit.features.abilityPoints--;
         this.target = getUnitAtMap(this.placeX, this.placeY);
+        const fromX = this.unit.mapX, fromY = this.unit.mapY;
         this.unit.setPositionFromMap(this.placeX,this.placeY);
+        if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.emitUnitPositionChange(this.unit,fromX,fromY,this.placeX,this.placeY,'jump');
         this.unit.updateVisability();
         this.unit.beforeEntityStepIn(this.placeX, this.placeY);
         this.unit.entityStepIn(this.jumpFinal.bind(this)); // async call
@@ -1282,6 +1296,9 @@ class PickUpAbility extends UnitAbility
 			return;
 		}
 
+		const sourceEntity = typeof this.itemEntity.getSourceForIndex === 'function'
+			? this.itemEntity.getSourceForIndex(this.selectedItemIndex)
+			: this.itemEntity;
 		const item = this.itemEntity.removeItem(this.selectedItemIndex);
 
 		if(item != null)
@@ -1290,6 +1307,12 @@ class PickUpAbility extends UnitAbility
 
 			if(added)
 			{
+				if(typeof ScenarioEvents !== 'undefined')
+				{
+					ScenarioEvents.emit('item_picked',{unit:this.unit,player:this.unit.player || null,playerName:this.unit.player ? this.unit.player.name : null,item,sourceEntity,mapX:this.unit.mapX,mapY:this.unit.mapY});
+					if(sourceEntity != null && sourceEntity.features && sourceEntity.features.containerType != null && sourceEntity.getItemCount() === 0)
+						ScenarioEvents.emit('container_looted',{container:sourceEntity,entity:sourceEntity,unit:this.unit,mapX:sourceEntity.mapX,mapY:sourceEntity.mapY});
+				}
 				//this.unit.features.abilityPoints--;
 				//if(this.unit.features.abilityPoints < 0) this.unit.features.abilityPoints = 0;
                 this.unit.features.move --;
