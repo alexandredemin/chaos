@@ -485,7 +485,7 @@ class GasAbility  extends UnitAbility
             }
             else
             {
-                if(killed) target.die();
+                if(killed) this.target.die();
                 this.next();
             }
         }
@@ -665,7 +665,7 @@ class JumpAbility extends UnitAbility
             }
             else
             {
-                if(killed) target.die();
+                if(killed) this.target.die();
                 this.next();
             }
         }

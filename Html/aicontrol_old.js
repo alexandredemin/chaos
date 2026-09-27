@@ -13,15 +13,12 @@ class AIControl
 	distantThreats = null;
 	detectedInvisibleUnits = null;
 	invisibleMemoryTurns = 2;
-	threatSystem = null;
-	tacticalPlannerOptions = {maxDepth:5,beamWidth:16,maxMoveCandidates:10,maxJumpCandidates:10};
 
     constructor(player)
     {
         this.player = player;
         this.traffic = new AITrafficController(this);
         this.detectedInvisibleUnits = new Map();
-        this.threatSystem = new AIThreatSystem(this);
     }
 
 	// Invisible units are known only after adjacent detection and remain remembered for a few future turns.
@@ -99,7 +96,6 @@ class AIControl
 	// A new contact invalidates tactical choices. Strategic replanning preserves valid attack orders.
 	replanAfterInvisibleDetection()
 	{
-		this.threatSystem.invalidateAll();
 		this.computeEnemyAttackMaps();
 		this.planning(true);
 	}
@@ -117,7 +113,6 @@ class AIControl
 			return;
 		}
 		this.traffic.startTurn();
-		this.threatSystem.startTurn();
 		this.updateInvisibleMemory();
 		this.detectAdjacentInvisibleUnitsForPlayer();
 		this.availableUnits = [];
@@ -461,93 +456,199 @@ class AIControl
 		return mainGoal;
 	}
 
-    getTacticalProfile(unit)
-    {
-        const ai = this.ensureUnitAIControl(unit);
-        if(ai.tacticalProfile && AI_TACTICAL_PROFILES[ai.tacticalProfile]) return ai.tacticalProfile;
-        if(ai.order === 'intercept')
-        {
-            const turns = ai.threatTurns;
-            if(turns != null && turns <= 1) return 'critical';
-            if(turns != null && turns <= 2) return 'aggressive';
-            if(turns != null && turns <= 3) return 'balanced';
-            return 'cautious';
-        }
-        if(ai.order === 'patrol') return 'cautious';
-        return 'balanced';
-    }
-
     stepUnit(unit)
     {
-        const ai = this.ensureUnitAIControl(unit);
-        ai.target = null;
-        const mainGoal = this.getMainGoal(unit);
-        const profile = this.getTacticalProfile(unit);
-        const planner = new AITurnPlanner(this,unit,mainGoal,{...this.tacticalPlannerOptions,profile});
-        const result = planner.plan();
-        const action = result.actions && result.actions.length ? result.actions[0] : null;
-
-        if(action == null)
+		const unitAI = this.ensureUnitAIControl(unit);
+		if(unitAI.target == null)
+		{
+			const mainGoal = this.getMainGoal(unit);
+            let aggressionFactor = 2;
+            if(unit.aiControl.agression != null) aggressionFactor = unit.aiControl.agression;
+            let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+            let stepPlaces = this.getAvailableCells(dmap,unit,null,true);
+            if(unit.features.attackPoints > 0) this.computeAtackMatrix(unit,stepPlaces,dmap);
+            if(unit.features.abilityPoints > 0)
+            {
+                this.computeGasMatrix(unit,stepPlaces);
+                this.computeFireMatrix(unit,stepPlaces);
+                this.computeWebMatrix(unit,stepPlaces);
+            }
+            this.computeDangerMatrix(unit,stepPlaces);
+            let gDMap = this.getDistanceMap(unit,mainGoal[0],mainGoal[1],null,null,null,0,this.getPenaltyMap(unit,aggressionFactor));
+            this.computeDistMatrix(unit,stepPlaces,mainGoal,gDMap);
+            //+log
+            if(unit.aiControl.mainTarget) console.log(unit.config.name + " " + unit.aiControl.order + ":" + aggressionFactor + " " + unit.aiControl.mainTarget.config.name + "[" + unit.aiControl.mainTarget.mapX + "," + unit.aiControl.mainTarget.mapY +"]");
+            else if(unit.aiControl.mainTargetPos) console.log(unit.config.name + " " + unit.aiControl.order + ":" + aggressionFactor + " [" + unit.aiControl.mainTargetPos[0] + "," + unit.aiControl.mainTargetPos[1] +"]");
+            //-
+            //+debug
+            if(this.player.control === PlayerControl.human)
+            {
+                //let penaltyMap = this.getPenaltyMap();
+                this.player.icons = [];
+                for(let i=0;i<map.height;i++)
+                    for(let j=0;j<map.width;j++)
+                    {
+                        let pos = map.tileToWorldXY(j, i);
+                        let txt = unit.scene.add.text(pos.x + 1, pos.y + 1, gDMap[i][j], {font: "6px Arial",color: "#ffffff", resolution: 10});
+                        this.player.icons.push(txt);
+                        //txt.setDepth(10000);
+                        //let txt2 = unit.scene.add.text(pos.x + 7, pos.y + 7, scoreMap[i][j], {font: "6px Arial",color: "#aaaaaa", resolution: 10});
+                        //this.player.icons.push(txt2);
+                        //txt2.setDepth(10000);
+                    }
+            }
+            //-
+            for(let i=0;i<stepPlaces.length;i++)
+            {
+                let place = stepPlaces[i];
+                place.bestWeight = 0;
+                if(place.atackWeight != null && place.atackWeight > 0) place.bestWeight = place.bestWeight + place.atackWeight;
+                if(place.gasWeight != null && place.gasWeight > 0) place.bestWeight = place.bestWeight + place.gasWeight;
+                if(place.fireWeight != null) place.bestWeight = place.bestWeight + place.fireWeight;
+                if(place.webWeight != null && place.webWeight > 0) place.bestWeight = place.bestWeight + place.webWeight;
+                place.score = place.bestWeight;
+                if(place.dangerWeight != null && place.dangerWeight > 0) place.score = aggressionFactor * place.bestWeight - Math.floor(place.dangerWeight / unit.features.health);
+                place.score = place.score + place.distWeight;
+                //+debug
+                /*
+                if(this.player.control === PlayerControl.human)
+                {
+                    let pos = map.tileToWorldXY(place.cell[0], place.cell[1]);
+                    let txt = unit.scene.add.text(pos.x + 1, pos.y + 8, place.score, {font: "6px Arial",color: "blue", resolution: 10});
+                    this.player.icons.push(txt);
+                    txt.setDepth(10000);
+                }
+                */
+                //-
+            }    
+            let bestPlaces = [];
+            let bestScore = -999999999;
+            for(let place of stepPlaces)
+            {
+                //+debug
+                if(this.player.control === PlayerControl.human)
+                {
+                    let pos = map.tileToWorldXY(place.cell[0], place.cell[1]);
+                    let txt = unit.scene.add.text(pos.x + 1, pos.y + 8, place.score, {font: "6px Arial",color: "blue", resolution: 10});
+                    this.player.icons.push(txt);
+                    txt.setDepth(10000);
+                    let txt2 = unit.scene.add.text(pos.x + 8, pos.y + 8, place.bestWeight, {font: "6px Arial",color: "green", resolution: 10});
+                    this.player.icons.push(txt2);
+                    txt2.setDepth(10000);
+                }
+                //-
+                if(place.score == bestScore) bestPlaces.push(place);
+                else if(place.score > bestScore)
+                {
+                    bestPlaces = [place];
+                    bestScore = place.score;
+                }
+            }
+            let bestPlace = bestPlaces[randomInt(0, bestPlaces.length - 1)];
+            if(bestPlace != null)
+            {
+                //+debug
+                if(this.player.control === PlayerControl.human)
+                {
+                    let pos = map.tileToWorldXY(bestPlace.cell[0], bestPlace.cell[1]);
+                    let txt = unit.scene.add.text(pos.x + 1, pos.y + 8, bestPlace.score, {font: "6px Arial",color: "red", resolution: 10});
+                    this.player.icons.push(txt);
+                    txt.setDepth(10000);
+                }
+                //-
+                unit.aiControl.target = bestPlace.cell;
+                if(bestPlace.gasWeight != null && bestPlace.gasWeight <= 0) unit.features.abilityPoints = 0;
+                if(bestPlace.fireWeight != null && bestPlace.fireWeight <= 0) unit.features.abilityPoints = 0;
+                if(bestPlace.webWeight != null && bestPlace.webWeight <= 0) unit.features.abilityPoints = 0;
+            }
+            else
+            {
+                if(unit.config.abilities != null && unit.config.abilities.web != null && unit.player.wizard != null)
+                {
+                    let bestWebCell = null;
+                    for(let w of unit.player.wizard.webPlan)
+                    {
+                        if(Entity.getEntityAtMap(w.cell[0], w.cell[1]) != null) continue;
+                        if(this.checkWebCell(unit.player.wizard,w.cell)) if(bestWebCell == null || bestWebCell.dist > w.dist) bestWebCell = w;
+                    }
+                    if(bestWebCell) unit.aiControl.target = [bestWebCell.cell[0],bestWebCell.cell[1]];
+                }
+                else
+                {
+                    if(mainGoal) unit.aiControl.target = [mainGoal[0],mainGoal[1]];
+                }
+            }
+        }
+        if(unit.aiControl.target == null)
         {
             this.pass();
             return;
         }
-
-        console.log(unit.config.name + ' ' + (ai.order || 'none') + ' [' + profile + '] plan: ' + result.actions.map(a => a.label || a.type).join(' -> ') + ' score=' + result.score.toFixed(2));
-        this.executeTacticalAction(unit,action);
-    }
-
-    executeTacticalAction(unit,action)
-    {
-        if(action == null)
+        else
         {
-            this.pass();
-            return;
-        }
-
-        switch(action.type)
-        {
-            case 'move':
-                if(!this.stepToTarget(unit,action.to)) this.pass();
-                return;
-
-            case 'attack':
-                if(action.target && !action.target.died && unit.canAtackTo(action.target.mapX-unit.mapX,action.target.mapY-unit.mapY))
+            if(unit.mapX === unit.aiControl.target[0] && unit.mapY === unit.aiControl.target[1])
+            {
+                const aiAbilityTypes = ["fire", "gas", "web"];
+                let aiAbilityType = null;
+                if (unit.config.abilities)
                 {
-                    unit.atackTo(action.target.mapX,action.target.mapY);
+                    const availableAbilities = unit.getAvailableAbilities();
+                    const aiAbility = availableAbilities.find(a => aiAbilityTypes.includes(a.type));
+                    if (aiAbility) aiAbilityType = aiAbility.type;
+                }
+                
+                //if (unit.config.abilities && unit.features.abilityPoints > 0 && Object.values(unit.config.abilities).some(a =>
+                //        a && (a.type === "fire" || a.type === "gas" || a.type === "web")
+                //    )
+                //)
+                if (aiAbilityType != null && unit.features.abilityPoints > 0)
+                {
+                    unit.startAbility(aiAbilityType);
+                }
+                else if(unit.features.move > 0)
+                {
+                    let trg = null;
+                    for(let dy=-1;dy<=1;dy++)
+                        for(let dx=-1;dx<=1;dx++)
+                            if(unit.canAtackTo(dx,dy)===true)
+                                if(trg == null || randomInt(0,1) === 1) trg = [unit.mapX+dx,unit.mapY+dy];
+                    if(trg && unit.features.attackPoints > 0) unit.atackTo(trg[0], trg[1]);
+                    else
+                    {
+                        unit.aiControl.target = null;
+                        //this.stepUnit(unit);
+                        //this.pass();
+                        //+debug
+                        if(this.player.control === PlayerControl.computer)this.pass();
+                        else return;
+                        //-
+                    }
+                }
+                else
+                {
+                    unit.aiControl.target = null;
+                    //this.pass();
+                    //+debug
+                    if(this.player.control === PlayerControl.computer)this.pass();
+                    //-
                     return;
                 }
-                this.step(unit);
-                return;
-
-            case 'fire':
-                if(action.target == null || action.target.died)
+            }
+            else
+            {
+                if(!this.stepToTarget(unit,unit.aiControl.target))
                 {
-                    this.step(unit);
-                    return;
+                    unit.aiControl.target = null;
+                    //this.pass();
+                    //+debug
+                    if(this.player.control === PlayerControl.computer)this.pass();
+                    else return;
+                    //-
                 }
-                unit.aiControl.action = {type:'fire',targetId:action.target.id};
-                if(!unit.startAbility('fire')){unit.aiControl.action=null;this.pass();}
-                return;
-
-            case 'gas':
-                if(!unit.startAbility('gas')) this.pass();
-                return;
-
-            case 'web':
-                if(!unit.startAbility('web')) this.pass();
-                else this.threatSystem.invalidateAll();
-                return;
-
-            case 'jump':
-                unit.aiControl.action = {typeName:'jump',params:{position:{x:action.to[0],y:action.to[1]}}};
-                if(!unit.startAbility('jump')){unit.aiControl.action=null;this.pass();}
-                return;
+            }
         }
-
-        this.pass();
     }
-
+  
     computeDistMatrix(unit,stepPlaces,goal,gDMap)
     {
         for(let place of stepPlaces) place.distWeight = 0;
@@ -562,67 +663,121 @@ class AIControl
 
     computeAtackMatrix(unit,stepPlaces,dmap)
     {
-        for(const place of stepPlaces) place.atackWeight = 0;
-        if(unit.features.attackPoints <= 0) return;
-        const infected = unit.hasState('infected');
-        for(const place of stepPlaces)
-        {
-            if(place.dist >= unit.features.move) continue;
-            let bestAttack = 0, infectionValue = 0;
-            for(const target of units)
-            {
-                if(target == null || target.died || target === unit) continue;
-                if(Math.abs(target.mapX-place.cell[0])>1 || Math.abs(target.mapY-place.cell[1])>1) continue;
-                if(target.player !== unit.player && !this.isUnitKnown(target)) continue;
-                if(target.player !== unit.player)
-                    bestAttack = Math.max(bestAttack,AICombatValue.expectedDamageValue(target,unit.features.strength||1));
-                if(infected && InfectedState.canInfect(target))
-                {
-                    const value = AICombatValue.unitValue(target);
-                    infectionValue += target.player === unit.player ? -value : value;
+        if(unit.hasState("infected")){
+            let targets = selectUnits(unit.mapX, unit.mapY, null, [unit], unit.features.move);
+            for (let i = 0; i < stepPlaces.length; i++) {
+                let place = stepPlaces[i];
+                place.atackWeight = 0;
+                let infectVal = 0;
+                for (let j = 0; j < targets.length; j++) {
+                    let trgt = targets[j];
+                    if(trgt.player !== unit.player && !this.isUnitKnown(trgt)) continue;
+                    if(place.dist < unit.features.move && Math.abs(trgt.mapX - place.cell[0]) <= 1 && Math.abs(trgt.mapY - place.cell[1]) <= 1) {
+                        if(trgt.player !== unit.player){
+                            let atackVal = unit.features.strength;
+                            if(trgt === trgt.player.wizard) atackVal = atackVal + 10;
+                            if(atackVal > place.atackWeight) place.atackWeight = atackVal;
+                            if(InfectedState.canInfect(trgt)){
+                                infectVal = infectVal + Math.floor(0.5*(trgt.features.strength + trgt.features.defense)*trgt.features.health);
+                                if(trgt === trgt.player.wizard) infectVal = infectVal + 10;
+                            }
+                        }
+                        else{
+                            if(InfectedState.canInfect(trgt)){
+                                if(trgt === unit.player.wizard){
+                                    infectVal = infectVal - 100;
+                                }
+                                else{
+                                    infectVal = infectVal - Math.floor(0.5*(trgt.features.strength + trgt.features.defense)*trgt.features.health);
+                            
+                                }
+                            }
+                        }
+                    }  
+                }
+                place.atackWeight = place.atackWeight + infectVal;
+            }
+        }
+        else{
+            if(dmap == null) dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
+            let enemies = this.getAvailableEnemies(dmap, unit, unit.features.move);
+            let startCost = dmap[unit.mapY][unit.mapX];
+            for (let i = 0; i < stepPlaces.length; i++) {
+                let place = stepPlaces[i];
+                place.atackWeight = 0;
+                for (let j = 0; j < enemies.length; j++) {
+                    let enemy = enemies[j];
+                    if (enemy.player !== unit.player) {
+                        if (place.dist < unit.features.move && Math.abs(enemy.mapX - place.cell[0]) <= 1 && Math.abs(enemy.mapY - place.cell[1]) <= 1) {
+                            let atackVal = unit.features.strength;
+                            if(enemy === enemy.player.wizard) atackVal = atackVal + 10;
+                            if(atackVal > place.atackWeight) place.atackWeight = atackVal;                          
+                        }
+                    }
                 }
             }
-            place.atackWeight = bestAttack + infectionValue;
         }
     }
 
     computeGasMatrix(unit,stepPlaces)
     {
-        if(!unit.config.abilities || unit.features.abilityPoints <= 0) return;
-        const gas = Object.values(unit.config.abilities).find(a => a && a.type === 'gas');
-        if(gas == null) return;
-        const range = gas.config.range || 0, damage = gas.config.damage || 1;
-        for(const place of stepPlaces)
+        if(!unit.config.abilities || !unit.config.abilities.gas)return;
+        let range = unit.config.abilities.gas.config.range;
+        let gasAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type].ability;
+        for(let i=0;i<stepPlaces.length;i++)
         {
+            let place = stepPlaces[i];
             place.gasWeight = 0;
-            for(const target of units)
+            if(unit.features.abilityPoints === 0) continue;
+            let targets = selectUnits(place.cell[0], place.cell[1], null, [unit], range);
+            for(let j=0;j<targets.length;j++)
             {
-                if(target == null || target.died || target === unit || target.features.gasImmunity) continue;
-                if(target.player !== unit.player && !this.isUnitKnown(target)) continue;
-                const dx=target.mapX-place.cell[0],dy=target.mapY-place.cell[1];
-                if(dx*dx+dy*dy > range*range) continue;
-                const value = AICombatValue.expectedDamageValue(target,damage);
-                place.gasWeight += target.player === unit.player ? -value : value;
+                let trgt = targets[j];
+                if(trgt.player !== unit.player && !this.isUnitKnown(trgt)) continue;
+                if(gasAbility.canAtack(unit,trgt))
+                {
+                    if(trgt.player !== unit.player) 
+                    {
+                        place.gasWeight = place.gasWeight + unit.config.abilities.gas.config.damage;
+                        if(trgt === trgt.player.wizard) place.gasWeight = place.gasWeight + 10;
+                    }
+                    else if(trgt === unit.player.wizard)
+                    {
+                        place.gasWeight = -100;
+                    }
+                    else
+                    {
+                        place.gasWeight = place.gasWeight - unit.config.abilities.gas.config.damage;
+                    }
+                }
             }
         }
     }
 
     computeFireMatrix(unit,stepPlaces)
     {
-        if(!unit.config.abilities || unit.features.abilityPoints <= 0) return;
-        const fire = Object.values(unit.config.abilities).find(a => a && a.type === 'fire');
-        if(fire == null) return;
-        const range = fire.config.range || 0, damage = fire.config.damage || 1;
-        for(const place of stepPlaces)
+        if(!unit.config.abilities || !unit.config.abilities.fire)return;
+        let range = unit.config.abilities.fire.config.range;
+        let fireAbility = abilities[unit.config.abilities[Object.keys(unit.config.abilities)[0]].type].ability;
+        for(let i=0;i<stepPlaces.length;i++)
         {
+            let place = stepPlaces[i];
             place.fireWeight = 0;
-            for(const target of units)
+            if(unit.features.abilityPoints === 0) continue;
+            let targets = selectUnits(place.cell[0], place.cell[1], null, [unit], range);
+            for(let j=0;j<targets.length;j++)
             {
-                if(target == null || target.died || target.player === unit.player || !this.isUnitKnown(target)) continue;
-                const dx=target.mapX-place.cell[0],dy=target.mapY-place.cell[1];
-                if(dx*dx+dy*dy > range*range) continue;
-                if(!checkLineOfSight(place.cell[0],place.cell[1],target.mapX,target.mapY,null,null,u => u===unit ? true : false)) continue;
-                place.fireWeight = Math.max(place.fireWeight,AICombatValue.expectedDamageValue(target,damage));
+                let trgt = targets[j];
+                if(trgt.player !== unit.player && !this.isUnitKnown(trgt)) continue;
+                if(trgt.player !== unit.player)
+                {
+                    if(fireAbility.canAtack(unit,trgt))
+                    {
+                        place.fireWeight = place.fireWeight + unit.config.abilities.fire.config.damage;
+                        if(trgt === trgt.player.wizard) place.fireWeight = place.fireWeight + 10;
+                        break;
+                    }
+                }
             }
         }
     }
@@ -654,9 +809,17 @@ class AIControl
   
     computeDangerMatrix(unit,stepPlaces)
     {
-        this.threatSystem.syncDynamicBlockers();
-        for(const place of stepPlaces)
-            place.dangerWeight = this.threatSystem.getDangerAt(unit,place.cell[0],place.cell[1]);
+        let enemies = this.gePossibleEnemies(unit,stepPlaces);
+        for(let place of stepPlaces) place.dangerWeight = 0;
+        for(let enemy of enemies)
+        {
+            let dmap = this.getDistanceMap(enemy,enemy.mapX,enemy.mapY,null,null,null,enemy.config.features.move);
+            let startCost = dmap[enemy.mapY][enemy.mapX];
+            for(let place of stepPlaces)
+            {
+                if(dmap[place.cell[1]][place.cell[0]] > -1 && dmap[place.cell[1]][place.cell[0]] - startCost <= enemy.config.features.move) place.dangerWeight = place.dangerWeight + enemy.config.features.strength;
+            }
+        }
     }
   
     getAttackMap(unit, dmap=null)
@@ -674,8 +837,20 @@ class AIControl
   
     computeEnemyAttackMaps()
     {
-        // Threat maps are built lazily per relevant enemy and cached in AIThreatSystem.
-        this.threatSystem.syncDynamicBlockers();
+        for(let pl of players)
+        {
+            if (pl == this.player)continue;
+            for(let unt of pl.units)
+            {
+                if(!unt.cache) unt.cache = {attackMap: null};
+                if(!this.isUnitKnown(unt))
+                {
+                    unt.cache.attackMap = null;
+                    continue;
+                }
+                unt.cache.attackMap = this.getAttackMap(unt);
+            }
+        }
     }
 
     stepWizard(unit)
@@ -828,13 +1003,13 @@ class AIControl
     {
         let res = null;
         if(unit.aiControl && unit.aiControl.action && unit.aiControl.action.type === "fire" && unit.aiControl.action.targetId){
-            for(let trg of targets) if(trg.id === unit.aiControl.action.targetId && this.isUnitKnown(trg)){unit.aiControl.action=null;return trg;}
+            for(let trg of targets) if(trg.id === unit.aiControl.action.targetId && this.isUnitKnown(trg)) return trg;
         }
         else{
             targets.forEach(trg => {
                 if(!this.isUnitKnown(trg)) return;
                 if(trg === trg.player.wizard) return trg;
-                if(!res || AICombatValue.expectedDamageValue(trg,unit.config.abilities.fire.config.damage) > AICombatValue.expectedDamageValue(res,unit.config.abilities.fire.config.damage)) res = trg;
+                if(!res || (trg.features.strength > res.features.strength || (trg.features.strength === res.features.strength && randomInt(0,1) === 1))) res = trg;
             });
         }
         return res;
@@ -843,9 +1018,7 @@ class AIControl
     selectRocketJumpTarget(unit)
     {
         if(unit.aiControl && unit.aiControl.action && unit.aiControl.action.typeName === "jump"){
-            const pos = unit.aiControl.action.params.position;
-            unit.aiControl.action = null;
-            return pos;
+            return unit.aiControl.action.params.position;
         }
         return null;
     }
@@ -912,13 +1085,23 @@ class AIControl
   
     getPenaltyMap(unit,aggressionFactor)
     {
-        this.threatSystem.syncDynamicBlockers();
-        const penaltyMap = [];
-        for(let y=0;y<map.height;y++)
-        {
-            penaltyMap[y]=[];
-            for(let x=0;x<map.width;x++) penaltyMap[y][x]=this.threatSystem.getDangerAt(unit,x,y);
-        }
+        let penaltyMap = [];
+        for(let i=0;i<map.height;i++) penaltyMap[i]=[];
+        for(let i=0;i<map.height;i++)
+            for(let j=0;j<map.width;j++) 
+            {
+                let x = 0;
+                for(let unt of units)
+                {
+                    if(unt.died || unt.player == this.player || !this.isUnitKnown(unt))continue;
+                    if(unt.cache && unt.cache.attackMap) x = x + unt.cache.attackMap[i][j];
+                }
+                //unit.features.health
+                let unitStr = 0.5*(unit.features.strength + unit.features.defense);
+                x = x - aggressionFactor*unitStr;
+                if(x<0)x = 0;
+                penaltyMap[i][j]=x;
+            }
         return penaltyMap;
     }
 
@@ -1173,9 +1356,9 @@ class AIControl
                 }
                 if(!pl.Info) pl.Info = {sumStr: 0, closeStr: 0};
                 let sumCloseStrength = 0;
-                for(const unt of closeUnits) sumCloseStrength += AICombatValue.unitValue(unt);
+                for(const unt of closeUnits) sumCloseStrength += 0.5*(unt.features.strength + unt.features.defense) * unt.features.health;
                 let sumDistantStrength = 0;
-                for(const unt of distantUnits) sumDistantStrength += AICombatValue.unitValue(unt);
+                for(const unt of distantUnits) sumDistantStrength += 0.5*(unt.features.strength + unt.features.defense) * unt.features.health;
                 pl.Info.sumStr = sumCloseStrength + sumDistantStrength;
                 pl.Info.closeStr = sumCloseStrength;
             }
@@ -1250,12 +1433,12 @@ class AIControl
                     threats.push({
                         enemy,
                         turns: turns+1,
-                        threatLevel: AICombatValue.unitValue(enemy) * (enemies.length - turns)
+                        threatLevel: 0.5*(enemy.features.strength + enemy.features.defense) * enemy.features.health * (enemies.length - turns)
                     });
                 });
             }
             distantThreats = this.distantThreats.map(u => {
-                let x = {enemy:u, turns: 2, threatLevel: AICombatValue.unitValue(u)};
+                let x = {enemy:u, turns: 2, threatLevel: 1};
                 return x;
             });
             //Sort enemies by threat level (from highest)
@@ -1268,7 +1451,7 @@ class AIControl
             //choose targets for units which doesn't have main target
             let freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.ensureUnitAIControl(unt).mainTarget == null && (!midTurn || this.canStillAct(unt)));
             let sumStrength = 0;
-            for(const unit of freeunits) sumStrength += AICombatValue.unitValue(unit);
+            for(const unit of freeunits) sumStrength += 0.5*(unit.features.strength + unit.features.defense) * unit.features.health;
             console.log("Attack strength: " + sumStrength);
             //Check for attack opportunity
             if(sumStrength >= 10){
@@ -1377,12 +1560,11 @@ class AIControl
             console.log(" - nearestUnits: " + logStr);
             //Assign units to the enemy
             let totalStrength = 0;
-            let enemyStr = AICombatValue.unitValue(threat.enemy);
+            let enemyStr = 0.5*(threat.enemy.features.strength + threat.enemy.features.defense) * threat.enemy.features.health; 
             for(const { attacker } of nearestUnits) {
-                totalStrength += AICombatValue.unitValue(attacker.unit);
+                totalStrength += 0.5*(attacker.unit.features.strength + attacker.unit.features.defense) * attacker.unit.features.health;
                 attacker.assigned = true;
                 this.setMainTarget(attacker.unit,threat.enemy,[threat.enemy.mapX,threat.enemy.mapY],"intercept",10);
-                attacker.unit.aiControl.threatTurns = threat.turns;
                 console.log("    - " + attacker.unit.config.name + " target: " + threat.enemy.config.name);
                 if (totalStrength >= enemyStr) break;
             }          
@@ -1435,12 +1617,11 @@ class AIControl
             console.log(" - nearestUnits: " + logStr);
             //Assign units to the enemy
             let totalStrength = 0;
-            let enemyStr = AICombatValue.unitValue(threat.enemy);
+            let enemyStr = 0.5*(threat.enemy.features.strength + threat.enemy.features.defense) * threat.enemy.features.health; 
             for(const { attacker } of nearestUnits) {
-                totalStrength += AICombatValue.unitValue(attacker.unit);
+                totalStrength += 0.5*(attacker.unit.features.strength + attacker.unit.features.defense) * attacker.unit.features.health;
                 attacker.assigned = true;
                 this.setMainTarget(attacker.unit,threat.enemy,[threat.enemy.mapX,threat.enemy.mapY],"intercept",10);
-                attacker.unit.aiControl.threatTurns = threat.turns;
                 console.log("    - " + attacker.unit.config.name + " target: " + threat.enemy.config.name);
                 if (totalStrength >= enemyStr) break;
             }          
@@ -1462,7 +1643,7 @@ class AIControl
                     bestThreat = threat;
                 }
             }
-            if(bestThreat != null){this.setMainTarget(unit,bestThreat.enemy,[bestThreat.enemy.mapX,bestThreat.enemy.mapY],"intercept",10);unit.aiControl.threatTurns=bestThreat.turns;}
+            if(bestThreat != null)this.setMainTarget(unit,bestThreat.enemy,[bestThreat.enemy.mapX,bestThreat.enemy.mapY],"intercept",10);
             else this.setMainTarget(unit,null,null,null,null);
         }
     }
@@ -1477,7 +1658,6 @@ class AIControl
         unit.aiControl.mainTargetPos = targetPos;
         unit.aiControl.order = order;
         unit.aiControl.agression = agression;
-        if(order !== "intercept") unit.aiControl.threatTurns = null;
     }
   
 }
