@@ -31,6 +31,7 @@ class AIPlannerMatrixAdapter
 		return this.withState(state,unit => {
 			const dmap=this.ai.getDistanceMap(unit,state.x,state.y);
 			let places=this.ai.getAvailableCells(dmap,unit,null,true).filter(p=>p.dist>=0&&p.dist<=state.move);
+			places.push(...this.frontierEntries(state,unit,dmap,places));
 			if(!places.some(p=>p.cell[0]===state.x&&p.cell[1]===state.y)) places.unshift({cell:[state.x,state.y],dist:0});
 			const gDMap=this.ai.getDistanceMap(unit,this.planner.goal[0],this.planner.goal[1]);
 			this.ai.computeDistMatrix(unit,places,this.planner.goal,gDMap);
@@ -52,6 +53,34 @@ class AIPlannerMatrixAdapter
 			}
 			return{dmap,gDMap,places};
 		});
+	}
+
+	// Add only the one-step weighted-cost frontier around cells reachable with one move left.
+	frontierEntries(state,unit,dmap,reachablePlaces)
+	{
+		if(state.move<=0)return[];
+		const startCost=dmap[state.y][state.x],maxInnerCost=state.move-1,frontier=new Map();
+		for(const p of reachablePlaces)
+		{
+			if(p.dist<0||p.dist>maxInnerCost)continue;
+			for(let y=p.cell[1]-1;y<=p.cell[1]+1;y++)for(let x=p.cell[0]-1;x<=p.cell[0]+1;x++)
+			{
+				if((x===p.cell[0]&&y===p.cell[1])||x<0||x>=map.width||y<0||y>=map.height)continue;
+				const weightedDist=dmap[y][x]>=0?dmap[y][x]-startCost:-1,k=x+':'+y;
+				if(weightedDist<0||weightedDist<=state.move||frontier.has(k))continue;
+				const wall=wallsLayer.getTileAt(x,y);
+				if(wall!=null&&wall.properties['collides']===true)continue;
+				const occupant=getUnitAtMap(x,y);
+				if(occupant!=null&&occupant!==unit&&!occupant.died)continue;
+				const entity=Entity.getEntityAtMap(x,y);
+				if(entity!=null&&entity.evaluateStep(unit)===false)continue;
+
+				// Weighted path cost is heuristic. Physically this cell is one legal step from p.
+				// Consume all simulated movement conservatively; runtime executes one real step and replans.
+				frontier.set(k,{cell:[x,y],dist:state.move,weightedDist,frontierEntry:true,frontierFrom:[p.cell[0],p.cell[1]]});
+			}
+		}
+		return[...frontier.values()];
 	}
 
 	hasAbility(type)
