@@ -236,9 +236,11 @@ class WebEntity extends Entity
 
     evaluateStep(unit)
     {
+        // evaluateStep is an extra pathfinding penalty measured in movement-turn units.
+        // Web-immune units cross web like an empty cell, so there is no extra cost.
         if(unit.features.webImmunity === true)
         {
-            return 1;
+            return 0;
         }
         else
         {

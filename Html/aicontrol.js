@@ -489,6 +489,7 @@ class AIControl
 
         if(action == null)
         {
+            console.log(unit.config.name + ' ' + (ai.order || 'none') + ' [' + profile + '] hold: no progressing tactical action');
             this.pass();
             return;
         }

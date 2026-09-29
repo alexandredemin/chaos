@@ -396,20 +396,44 @@ class AITurnPlanner
 		return out;
 	}
 
+	isCommittedOrder()
+	{
+		const order=this.unit.aiControl ? this.unit.aiControl.order : null;
+		return order==='attack'||order==='intercept'||order==='cleanup';
+	}
+
+	isProgressState(state)
+	{
+		if(state==null||!state.actions||state.actions.length===0)return false;
+		if(state.actionScore>AI_MATRIX_EPS)return true;
+		return this.goalProgressAt(state.x,state.y)>AI_MATRIX_EPS;
+	}
+
 	plan()
 	{
 		this.matrixCache.clear();this._terminalPositionScore=null;
-		const root=this.rootState();let best=root,beam=[root];
+		const root=this.rootState();let best=root,bestProgress=null,beam=[root];
+		const consider=s=>
+		{
+			if(this.finalScore(s)>this.finalScore(best))best=s;
+			if(this.isProgressState(s)&&(bestProgress==null||this.finalScore(s)>this.finalScore(bestProgress)))bestProgress=s;
+		};
+
 		for(let depth=0;depth<this.maxDepth;depth++)
 		{
 			let children=[];
-			for(const s of beam){if(this.finalScore(s)>this.finalScore(best))best=s;children=children.concat(this.expand(s));}
+			for(const s of beam){consider(s);children=children.concat(this.expand(s));}
 			if(!children.length)break;
-			for(const s of children)if(this.finalScore(s)>this.finalScore(best))best=s;
+			for(const s of children)consider(s);
 			const unique=this.pruneDominated(children);unique.sort((a,b)=>this.finalScore(b)-this.finalScore(a)||b.actionScore-a.actionScore);
 			beam=this.beamWidth>0?unique.slice(0,this.beamWidth):unique;
 		}
-		for(const s of beam)if(this.finalScore(s)>this.finalScore(best))best=s;
+		for(const s of beam)consider(s);
+
+		// ROOT means "hold position". That is valid for patrol/cautious play, but a committed
+		// attack/intercept must not deadlock forever merely because every advancing option is risky.
+		// If search found any damaging or goal-progressing plan, execute the least-bad one.
+		if(best.actions.length===0&&this.isCommittedOrder()&&bestProgress!=null)best=bestProgress;
 		return{best,score:this.finalScore(best),actions:best.actions};
 	}
 }
