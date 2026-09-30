@@ -6,6 +6,12 @@ const AITest = {
 	draft: null,
 	menu: null,
 	status: null,
+	statusText: null,
+	statusClose: null,
+	statusVisible: true,
+	statusNote: null,
+	statusNoteUntil: 0,
+	lastStatusTick: 0,
 	lastPlan: null,
 	consumePointer: false,
 
@@ -49,9 +55,17 @@ const AITest = {
 			this.status = document.createElement('div');
 			Object.assign(this.status.style, {
 				position:'fixed', left:'8px', top:'8px', zIndex:'3000000', display:'none',
-				background:'rgba(0,0,0,.78)', color:'#fff', padding:'6px 8px', border:'1px solid #777',
-				font:'13px monospace', whiteSpace:'pre', pointerEvents:'none'
+				background:'rgba(0,0,0,.78)', color:'#fff', padding:'6px 28px 6px 8px', border:'1px solid #777',
+				font:'13px monospace', whiteSpace:'pre', pointerEvents:'auto', minWidth:'280px'
 			});
+			this.statusText = document.createElement('div');
+			this.status.appendChild(this.statusText);
+			this.statusClose = document.createElement('button');
+			this.statusClose.textContent = '×';
+			this.statusClose.title = 'Close AI Test status';
+			Object.assign(this.statusClose.style,{position:'absolute',right:'4px',top:'3px',border:'0',background:'transparent',color:'#ddd',font:'18px sans-serif',cursor:'pointer',padding:'0 3px'});
+			this.statusClose.onclick = e => { e.stopPropagation(); this.statusVisible=false; this.status.style.display='none'; };
+			this.status.appendChild(this.statusClose);
 			document.body.appendChild(this.status);
 		}
 		if(this.menu != null) return;
@@ -121,29 +135,65 @@ const AITest = {
 		this.debugUnit = unit;
 		this.draft = this.makeDraft(unit);
 		this.lastPlan = null;
-		this.updateStatus();
+		this.statusVisible = true;
+		this.updateStatus(null,true);
 		return true;
 	},
 
-	updateStatus(note=null)
+	updateStatus(note=null,forceShow=false)
 	{
 		this.ensureUI();
+		if(forceShow)this.statusVisible=true;
+		if(note!=null)
+		{
+			this.statusNote=note;
+			this.statusNoteUntil=(typeof performance!=='undefined'?performance.now():Date.now())+1800;
+		}
+		if(!this.statusVisible)
+		{
+			this.status.style.display='none';
+			return;
+		}
 		if(this.debugUnit == null || this.debugUnit.died)
 		{
 			this.status.style.display = this.pickMode ? 'block' : 'none';
-			this.status.textContent = this.pickMode ? 'AI TEST\n' + this.pickPrompt() : '';
+			this.statusText.textContent = this.pickMode ? 'AI TEST\n' + this.pickPrompt() : '';
 			return;
 		}
-		const state = this.getEffectiveState(this.debugUnit);
-		const profile = this.resolveProfile(this.debugUnit,state);
-		let text = 'AI TEST | F6 PLAN | F7 STEP | F8 MENU\n';
-		text += this.unitName(this.debugUnit) + '\n';
-		text += 'order=' + (state.order || 'none') + ' profile=' + profile + ' target=' + this.targetName(state.target,state.targetPos);
-		if(this.getOverride(this.debugUnit)) text += ' [TEST OVERRIDE]';
-		if(this.pickMode) text += '\n' + this.pickPrompt();
-		if(note) text += '\n' + note;
-		this.status.textContent = text;
-		this.status.style.display = 'block';
+
+		const game=this.getCurrentState(this.debugUnit),effective=this.getEffectiveState(this.debugUnit);
+		const gameProfile=this.resolveProfile(this.debugUnit,game),effectiveProfile=this.resolveProfile(this.debugUnit,effective);
+		let text='AI TEST | F6 PLAN | F7 STEP | F8 MENU\n';
+		text+=this.unitName(this.debugUnit)+'\n';
+		text+='GAME: '+(game.order||'none')+' ['+gameProfile+'] -> '+this.targetName(game.target,game.targetPos);
+		if(this.getOverride(this.debugUnit))
+			text+='\nTEST: '+(effective.order||'none')+' ['+effectiveProfile+'] -> '+this.targetName(effective.target,effective.targetPos)+' [ACTIVE]';
+		else text+='\nTEST: override off';
+		if(this.pickMode)text+='\n'+this.pickPrompt();
+		const now=typeof performance!=='undefined'?performance.now():Date.now();
+		if(this.statusNote&&now<this.statusNoteUntil)text+='\n'+this.statusNote;
+		else if(now>=this.statusNoteUntil)this.statusNote=null;
+		this.statusText.textContent=text;
+		this.status.style.display='block';
+		this.updateCurrentGamePanel();
+	},
+
+	tick()
+	{
+		const now=typeof performance!=='undefined'?performance.now():Date.now();
+		if(now-this.lastStatusTick<250)return;
+		this.lastStatusTick=now;
+		this.updateCurrentGamePanel();
+		if(this.statusVisible&&this.status!=null&&this.status.style.display!=='none')this.updateStatus();
+	},
+
+	updateCurrentGamePanel()
+	{
+		if(this.menu==null||this.menu.style.display==='none'||this.debugUnit==null)return;
+		const el=this.menu.querySelector('#aiTestCurrentGame');
+		if(el==null)return;
+		const current=this.getCurrentState(this.debugUnit),profile=this.resolveProfile(this.debugUnit,current);
+		el.innerHTML='<b>Current game AI</b><br>Order: '+(current.order||'none')+'<br>Profile: '+profile+'<br>Target: '+this.targetName(current.target,current.targetPos);
 	},
 
 	pickPrompt()
@@ -213,7 +263,7 @@ const AITest = {
 		const unitLine=document.createElement('div');unitLine.textContent='Unit: '+this.unitName(unit);unitLine.style.marginBottom='6px';this.menu.appendChild(unitLine);
 		this.menu.appendChild(this.button('Select another unit',()=>{this.closeMenu();this.beginPick('debugUnit');}));
 
-		const game=document.createElement('div');
+		const game=document.createElement('div');game.id='aiTestCurrentGame';
 		game.style.cssText='margin:10px 0;padding:8px;border:1px solid #444;background:#171717;line-height:1.45';
 		const currentProfile=this.resolveProfile(unit,current);
 		game.innerHTML='<b>Current game AI</b><br>Order: '+(current.order||'none')+'<br>Profile: '+currentProfile+'<br>Target: '+this.targetName(current.target,current.targetPos);
@@ -291,6 +341,26 @@ const AITest = {
 		this.updateStatus();
 	},
 
+	acceptUnitPick(unit)
+	{
+		if(unit==null||unit.died)return false;
+		const mode=this.pickMode;
+		if(mode!=='debugUnit'&&mode!=='targetUnit'&&mode!=='targetPosition')return false;
+		this.pickMode=null;this.consumePointer=true;pointerPressed=true;
+		if(mode==='debugUnit')this.setDebugUnit(unit);
+		else if(mode==='targetUnit'){this.draft.target=unit;this.draft.targetPos=[unit.mapX,unit.mapY];}
+		else {this.draft.target=null;this.draft.targetPos=[unit.mapX,unit.mapY];}
+		this.openMenu(mode!=='debugUnit');
+		return true;
+	},
+
+	handleUnitPointer(unit,mapX,mapY)
+	{
+		if(this.pickMode==null||this.consumePointer||unit==null)return false;
+		if(mapX!==unit.mapX||mapY!==unit.mapY)return false;
+		return this.acceptUnitPick(unit);
+	},
+
 	handlePointer(scene,pointer)
 	{
 		if(this.consumePointer)
@@ -305,17 +375,13 @@ const AITest = {
 		pointerPressed=true;this.consumePointer=true;
 		const mode=this.pickMode;this.pickMode=null;
 
-		if(mode==='debugUnit')
+		if(mode==='debugUnit'||mode==='targetUnit')
 		{
 			const unit=getUnitAtMap(tile.x,tile.y);
-			if(unit==null){this.beginPick('debugUnit');this.updateStatus('no unit at '+tile.x+','+tile.y);return true;}
-			this.setDebugUnit(unit);this.openMenu();return true;
-		}
-		if(mode==='targetUnit')
-		{
-			const unit=getUnitAtMap(tile.x,tile.y);
-			if(unit==null){this.beginPick('targetUnit');this.updateStatus('no unit at '+tile.x+','+tile.y);return true;}
-			this.draft.target=unit;this.draft.targetPos=[unit.mapX,unit.mapY];this.openMenu(true);return true;
+			if(unit==null){this.beginPick(mode);this.updateStatus('no unit at '+tile.x+','+tile.y,true);return true;}
+			this.pickMode=mode;
+			this.consumePointer=false;pointerPressed=false;
+			this.acceptUnitPick(unit);return true;
 		}
 		if(mode==='targetPosition')
 		{
@@ -362,7 +428,7 @@ const AITest = {
 	{
 		const plan=this.buildPlan();
 		this.lastPlan=plan.error?null:plan;
-		const text=this.formatPlan(plan);console.log(text);this.updateStatus(text.replace(/\n/g,' | '));
+		const text=this.formatPlan(plan);console.log(text);this.updateStatus(text.replace(/\n/g,' | '),true);
 		return plan;
 	},
 
@@ -370,9 +436,9 @@ const AITest = {
 	{
 		if(typeof pointerBlocked!=='undefined'&&pointerBlocked){this.updateStatus('cannot step: game action is in progress');return;}
 		const plan=this.buildPlan();
-		if(plan.error){console.log(this.formatPlan(plan));this.updateStatus(plan.error);return;}
+		if(plan.error){console.log(this.formatPlan(plan));this.updateStatus(plan.error,true);return;}
 		const action=plan.result.actions&&plan.result.actions.length?plan.result.actions[0]:null;
-		if(action==null){this.updateStatus('AI plan = HOLD');console.log(this.formatPlan(plan));return;}
+		if(action==null){this.updateStatus('AI plan = HOLD',true);console.log(this.formatPlan(plan));return;}
 
 		const unit=plan.unit,ai=unit.player.aiControl,unitAI=ai.ensureUnitAIControl(unit);
 		if(unit.player.control===PlayerControl.computer)unitAI.aiTestStopAfterAction=true;
@@ -381,7 +447,7 @@ const AITest = {
 		try{ai.executeTacticalAction(unit,action,{singleStep:true});}
 		finally{unitAI.aiTestAbilityControl=false;}
 		this.lastPlan=null;
-		this.updateStatus('executed: '+(action.label||action.type));
+		this.updateStatus('executed: '+(action.label||action.type),true);
 	},
 
 	onActionComplete(unit)

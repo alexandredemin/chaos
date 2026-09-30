@@ -383,6 +383,19 @@ class AIControl
 		return unit.aiControl;
 	}
 
+	getAITestOverride(unit)
+	{
+		const ai=this.ensureUnitAIControl(unit),o=ai.aiTestOverride;
+		return o&&o.enabled===true?o:null;
+	}
+
+	getTacticalGoalFromState(unit,state)
+	{
+		if(state&&state.target&&!state.target.died)return[state.target.mapX,state.target.mapY];
+		if(state&&state.targetPos)return[state.targetPos[0],state.targetPos[1]];
+		return[unit.mapX,unit.mapY];
+	}
+
 	getTrafficPriority(unit)
 	{
 		if(unit == null) return 0;
@@ -489,20 +502,25 @@ class AIControl
     {
         const ai = this.ensureUnitAIControl(unit);
         ai.target = null;
-        const mainGoal = this.getMainGoal(unit);
-        const profile = this.getTacticalProfile(unit);
-        const planner = new AITurnPlanner(this,unit,mainGoal,{...this.tacticalPlannerOptions,profile});
+
+        const testOverride=this.getAITestOverride(unit);
+        const tacticalState=testOverride||ai;
+        const mainGoal=testOverride?this.getTacticalGoalFromState(unit,testOverride):this.getMainGoal(unit);
+        const profile=this.getTacticalProfile(unit,tacticalState);
+        const order=tacticalState.order||null;
+        const planner=new AITurnPlanner(this,unit,mainGoal,{...this.tacticalPlannerOptions,profile,order});
         const result = planner.plan();
         const action = result.actions && result.actions.length ? result.actions[0] : null;
+        const testTag=testOverride?' [TEST]':'';
 
         if(action == null)
         {
-            console.log(unit.config.name + ' ' + (ai.order || 'none') + ' [' + profile + '] hold: no progressing tactical action');
+            console.log(unit.config.name + ' ' + (order || 'none') + ' [' + profile + ']' + testTag + ' hold: no progressing tactical action');
             this.pass();
             return;
         }
 
-        console.log(unit.config.name + ' ' + (ai.order || 'none') + ' [' + profile + '] plan: ' + result.actions.map(a => a.label || a.type).join(' -> ') + ' score=' + result.score.toFixed(2));
+        console.log(unit.config.name + ' ' + (order || 'none') + ' [' + profile + ']' + testTag + ' plan: ' + result.actions.map(a => a.label || a.type).join(' -> ') + ' score=' + result.score.toFixed(2));
         this.executeTacticalAction(unit,action);
     }
 

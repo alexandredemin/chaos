@@ -746,6 +746,10 @@ class Unit extends BaseUnit
                     let touchY = pointer.worldY;
                     let mapX = map.worldToTileXY(touchX,touchY).x;
                     let mapY = map.worldToTileXY(touchX,touchY).y;
+
+                    // AI Test picking must win over the normal own-unit selection handler.
+                    if(typeof AITest !== 'undefined' && AITest.handleUnitPointer(this,mapX,mapY)) return;
+
                     if(this === selectedUnit)
                     {
                         let ind = ((mapY-this.mapY)+1)*3 + ((mapX-this.mapX)+1);
