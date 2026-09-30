@@ -323,11 +323,17 @@ class AITurnPlanner
 	{
 		this.ai=ai;this.unit=unit;this.goal=goal;
 		this.ai.threatSystem.syncDynamicBlockers();
-		this.maxDepth=opts.maxDepth??5;this.beamWidth=opts.beamWidth??16;this.maxMoveCandidates=opts.maxMoveCandidates??10;this.maxJumpCandidates=opts.maxJumpCandidates??10;this.profile=opts.profile||'balanced';this.order=opts.order??(unit.aiControl?unit.aiControl.order:null);
+		this.maxDepth=opts.maxDepth??5;
+		this.beamWidth=opts.beamWidth??16;
+		this.maxMoveCandidates=opts.maxMoveCandidates??10;
+		this.maxJumpCandidates=opts.maxJumpCandidates??10;
+		this.profile=opts.profile||'balanced';
+		this.order=opts.order??(unit.aiControl?unit.aiControl.order:null);
 		this.adapter=new AIPlannerMatrixAdapter(this);
 		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
 		this.matrixCache=new Map();this._terminalPositionScore=null;
-		this.goalMap=this.ai.getDistanceMap(unit,goal[0],goal[1]);this.rootGoalDistance=this.goalMap[unit.mapY]&&this.goalMap[unit.mapY][unit.mapX]!=null?this.goalMap[unit.mapY][unit.mapX]:-1;
+		this.goalMap=this.ai.getDistanceMap(unit,goal[0],goal[1]);
+		this.rootGoalDistance=this.goalMap[unit.mapY]&&this.goalMap[unit.mapY][unit.mapX]!=null?this.goalMap[unit.mapY][unit.mapX]:-1;
 	}
 
 	rootState(){const u=this.unit;return{x:u.mapX,y:u.mapY,move:u.features.move,ap:u.features.abilityPoints,attackPoints:u.features.attackPoints,actionScore:0,actions:[],lastAction:null,used:new Set(),terminal:false};}
