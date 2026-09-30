@@ -14,6 +14,7 @@ class AIControl
 	detectedInvisibleUnits = null;
 	invisibleMemoryTurns = 2;
 	threatSystem = null;
+	aiTestSingleStepUnit = null;
 	tacticalPlannerOptions = {maxDepth:5,beamWidth:16,maxMoveCandidates:10,maxJumpCandidates:10};
 
     constructor(player)
@@ -129,8 +130,28 @@ class AIControl
 		this.pass(true);
 	}
 
+    finishAITestSingleStep(unit=null)
+	{
+		const testUnit=unit||this.aiTestSingleStepUnit;
+		if(testUnit==null)return false;
+		this.aiTestSingleStepUnit=null;
+		if(testUnit.aiControl)
+		{
+			testUnit.aiControl.aiTestStopAfterAction=false;
+			testUnit.aiControl.aiTestAbilityControl=false;
+		}
+		if(typeof AITest!=='undefined')AITest.onActionComplete(testUnit);
+		return true;
+	}
+
     pass(force=false)
 	{
+		if(this.aiTestSingleStepUnit!=null)
+		{
+			this.finishAITestSingleStep();
+			return;
+		}
+
         GameFlowWatchdog.touch('ai_pass',{
             player:this.player ? this.player.name : null,
             stage:this.passStage,
@@ -173,10 +194,9 @@ class AIControl
 
     step(unit)
 	{
-        if(unit && unit.aiControl && unit.aiControl.aiTestStopAfterAction === true)
+        if(this.aiTestSingleStepUnit===unit || (unit && unit.aiControl && unit.aiControl.aiTestStopAfterAction===true))
         {
-            unit.aiControl.aiTestStopAfterAction = false;
-            if(typeof AITest !== 'undefined') AITest.onActionComplete(unit);
+			this.finishAITestSingleStep(unit);
             return;
         }
 
@@ -530,8 +550,7 @@ class AIControl
         const fail = () => {
             if(singleStep)
             {
-                if(unit && unit.aiControl) unit.aiControl.aiTestStopAfterAction = false;
-                if(typeof AITest !== 'undefined') AITest.onActionComplete(unit);
+				this.finishAITestSingleStep(unit);
                 return;
             }
             this.pass();

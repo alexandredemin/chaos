@@ -14,6 +14,7 @@ const AITest = {
 	lastStatusTick: 0,
 	lastPlan: null,
 	consumePointer: false,
+	liveRefresh: false,
 
 	init()
 	{
@@ -64,7 +65,7 @@ const AITest = {
 			this.statusClose.textContent = '×';
 			this.statusClose.title = 'Close AI Test status';
 			Object.assign(this.statusClose.style,{position:'absolute',right:'4px',top:'3px',border:'0',background:'transparent',color:'#ddd',font:'18px sans-serif',cursor:'pointer',padding:'0 3px'});
-			this.statusClose.onclick = e => { e.stopPropagation(); this.statusVisible=false; this.status.style.display='none'; };
+			this.statusClose.onclick = e => { e.stopPropagation(); this.statusVisible=false; this.status.style.display='none'; this.refreshLiveRefresh(); };
 			this.status.appendChild(this.statusClose);
 			document.body.appendChild(this.status);
 		}
@@ -140,6 +141,13 @@ const AITest = {
 		return true;
 	},
 
+	refreshLiveRefresh()
+	{
+		const menuOpen=this.menu!=null&&this.menu.style.display!=='none';
+		const statusOpen=this.statusVisible&&this.status!=null&&this.status.style.display!=='none';
+		this.liveRefresh=menuOpen||statusOpen||this.pickMode!=null;
+	},
+
 	updateStatus(note=null,forceShow=false)
 	{
 		this.ensureUI();
@@ -152,6 +160,7 @@ const AITest = {
 		if(!this.statusVisible)
 		{
 			this.status.style.display='none';
+			this.refreshLiveRefresh();
 			return;
 		}
 		if(this.debugUnit == null || this.debugUnit.died)
@@ -176,10 +185,12 @@ const AITest = {
 		this.statusText.textContent=text;
 		this.status.style.display='block';
 		this.updateCurrentGamePanel();
+		this.refreshLiveRefresh();
 	},
 
 	tick()
 	{
+		if(!this.liveRefresh)return;
 		const now=typeof performance!=='undefined'?performance.now():Date.now();
 		if(now-this.lastStatusTick<250)return;
 		this.lastStatusTick=now;
@@ -223,12 +234,14 @@ const AITest = {
 		if(!preserveDraft || this.draft == null) this.draft = this.makeDraft(this.debugUnit);
 		this.renderMenu();
 		this.menu.style.display = 'block';
+		this.refreshLiveRefresh();
 		this.updateStatus();
 	},
 
 	closeMenu()
 	{
 		if(this.menu) this.menu.style.display = 'none';
+		this.refreshLiveRefresh();
 		this.updateStatus();
 	},
 
@@ -338,6 +351,7 @@ const AITest = {
 		this.pickMode=mode;
 		this.ensureUI();
 		if(this.menu)this.menu.style.display='none';
+		this.refreshLiveRefresh();
 		this.updateStatus();
 	},
 
@@ -441,10 +455,12 @@ const AITest = {
 		if(action==null){this.updateStatus('AI plan = HOLD',true);console.log(this.formatPlan(plan));return;}
 
 		const unit=plan.unit,ai=unit.player.aiControl,unitAI=ai.ensureUnitAIControl(unit);
-		if(unit.player.control===PlayerControl.computer)unitAI.aiTestStopAfterAction=true;
+		ai.aiTestSingleStepUnit=unit;
+		unitAI.aiTestStopAfterAction=true;
 		unitAI.aiTestAbilityControl=true;
 		console.log('AI TEST STEP: '+(action.label||action.type));
 		try{ai.executeTacticalAction(unit,action,{singleStep:true});}
+		catch(err){ai.finishAITestSingleStep(unit);throw err;}
 		finally{unitAI.aiTestAbilityControl=false;}
 		this.lastPlan=null;
 		this.updateStatus('executed: '+(action.label||action.type),true);

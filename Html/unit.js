@@ -748,7 +748,7 @@ class Unit extends BaseUnit
                     let mapY = map.worldToTileXY(touchX,touchY).y;
 
                     // AI Test picking must win over the normal own-unit selection handler.
-                    if(typeof AITest !== 'undefined' && AITest.handleUnitPointer(this,mapX,mapY)) return;
+                    if(typeof AITest !== 'undefined' && AITest.pickMode!=null && AITest.handleUnitPointer(this,mapX,mapY)) return;
 
                     if(this === selectedUnit)
                     {

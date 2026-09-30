@@ -111,8 +111,8 @@ var GameScene = new Phaser.Class({
 
         let pointer = this.input.activePointer;
 
-        if(typeof AITest !== 'undefined') AITest.tick();
-        if(pointerBlocked===false && typeof AITest !== 'undefined' && AITest.handlePointer(this,pointer)) return;
+        if(typeof AITest !== 'undefined' && AITest.liveRefresh) AITest.tick();
+        if(pointerBlocked===false && typeof AITest !== 'undefined' && (AITest.pickMode!=null||AITest.consumePointer) && AITest.handlePointer(this,pointer)) return;
 
         if(pointer.isDown && pointerBlocked===false)
         {
