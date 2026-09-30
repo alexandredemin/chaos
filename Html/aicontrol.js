@@ -173,6 +173,13 @@ class AIControl
 
     step(unit)
 	{
+        if(unit && unit.aiControl && unit.aiControl.aiTestStopAfterAction === true)
+        {
+            unit.aiControl.aiTestStopAfterAction = false;
+            if(typeof AITest !== 'undefined') AITest.onActionComplete(unit);
+            return;
+        }
+
         GameFlowWatchdog.touch('ai_step',{
             player:this.player ? this.player.name : null,
             unitId:unit ? unit.id : null,
@@ -461,9 +468,10 @@ class AIControl
 		return mainGoal;
 	}
 
-    getTacticalProfile(unit)
+    getTacticalProfile(unit, aiState = null)
     {
-        const ai = this.ensureUnitAIControl(unit);
+        const ai = aiState || this.ensureUnitAIControl(unit);
+        if(ai.profile && ai.profile !== 'auto' && AI_TACTICAL_PROFILES[ai.profile]) return ai.profile;
         if(ai.tacticalProfile && AI_TACTICAL_PROFILES[ai.tacticalProfile]) return ai.tacticalProfile;
         if(ai.order === 'intercept')
         {
@@ -498,18 +506,30 @@ class AIControl
         this.executeTacticalAction(unit,action);
     }
 
-    executeTacticalAction(unit,action)
+    executeTacticalAction(unit,action,options={})
     {
+        const singleStep = options.singleStep === true;
+        const fail = () => {
+            if(singleStep)
+            {
+                if(unit && unit.aiControl) unit.aiControl.aiTestStopAfterAction = false;
+                if(typeof AITest !== 'undefined') AITest.onActionComplete(unit);
+                return;
+            }
+            this.pass();
+        };
+        const retry = () => singleStep ? fail() : this.step(unit);
+
         if(action == null)
         {
-            this.pass();
+            fail();
             return;
         }
 
         switch(action.type)
         {
             case 'move':
-                if(!this.stepToTarget(unit,action.to)) this.pass();
+                if(!this.stepToTarget(unit,action.to)) fail();
                 return;
 
             case 'attack':
@@ -518,35 +538,35 @@ class AIControl
                     unit.atackTo(action.target.mapX,action.target.mapY);
                     return;
                 }
-                this.step(unit);
+                retry();
                 return;
 
             case 'fire':
                 if(action.target == null || action.target.died)
                 {
-                    this.step(unit);
+                    retry();
                     return;
                 }
                 unit.aiControl.action = {type:'fire',targetId:action.target.id};
-                if(!unit.startAbility('fire')){unit.aiControl.action=null;this.pass();}
+                if(!unit.startAbility('fire')){unit.aiControl.action=null;fail();}
                 return;
 
             case 'gas':
-                if(!unit.startAbility('gas')) this.pass();
+                if(!unit.startAbility('gas')) fail();
                 return;
 
             case 'web':
-                if(!unit.startAbility('web')) this.pass();
+                if(!unit.startAbility('web')) fail();
                 else this.threatSystem.invalidateAll();
                 return;
 
             case 'jump':
                 unit.aiControl.action = {typeName:'jump',params:{position:{x:action.to[0],y:action.to[1]}}};
-                if(!unit.startAbility('jump')){unit.aiControl.action=null;this.pass();}
+                if(!unit.startAbility('jump')){unit.aiControl.action=null;fail();}
                 return;
         }
 
-        this.pass();
+        fail();
     }
 
     computeDistMatrix(unit,stepPlaces,goal,gDMap)

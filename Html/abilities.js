@@ -359,7 +359,7 @@ class FireAbility extends UnitAbility
                 });
                 let targets = selectUnits(this.unit.mapX, this.unit.mapY, enemies, null, this.unit.config.abilities.fire.config.range);
                 targets = selectOnLineOfSight(this.unit.mapX, this.unit.mapY, targets);
-                if(this.unit.player.control === PlayerControl.human)
+                if(this.unit.player.control === PlayerControl.human && !(this.unit.aiControl && this.unit.aiControl.aiTestAbilityControl === true))
                 {
                     setInteractionScenario(userInteractionScenario.targetSelection);
                     rangeRenderer.showAtUnit(this.unit, this.unit.config.abilities.fire.config.range * 16 + 8);
@@ -734,7 +734,7 @@ class JumpAbility extends UnitAbility
         switch (this.step) {
             case 0:
                 let places = selectPlacesOnLineOfSight(this.unit.mapX, this.unit.mapY, this.unit.config.abilities.jump.config.range, true, true);
-                if(this.unit.player.control === PlayerControl.human)
+                if(this.unit.player.control === PlayerControl.human && !(this.unit.aiControl && this.unit.aiControl.aiTestAbilityControl === true))
                 {
                     setInteractionScenario(userInteractionScenario.placeSelection);
                     this.step++;

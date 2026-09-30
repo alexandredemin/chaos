@@ -323,7 +323,7 @@ class AITurnPlanner
 	{
 		this.ai=ai;this.unit=unit;this.goal=goal;
 		this.ai.threatSystem.syncDynamicBlockers();
-		this.maxDepth=opts.maxDepth??5;this.beamWidth=opts.beamWidth??16;this.maxMoveCandidates=opts.maxMoveCandidates??10;this.maxJumpCandidates=opts.maxJumpCandidates??10;this.profile=opts.profile||'balanced';
+		this.maxDepth=opts.maxDepth??5;this.beamWidth=opts.beamWidth??16;this.maxMoveCandidates=opts.maxMoveCandidates??10;this.maxJumpCandidates=opts.maxJumpCandidates??10;this.profile=opts.profile||'balanced';this.order=opts.order??(unit.aiControl?unit.aiControl.order:null);
 		this.adapter=new AIPlannerMatrixAdapter(this);
 		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
 		this.matrixCache=new Map();this._terminalPositionScore=null;
@@ -398,8 +398,7 @@ class AITurnPlanner
 
 	isCommittedOrder()
 	{
-		const order=this.unit.aiControl ? this.unit.aiControl.order : null;
-		return order==='attack'||order==='intercept'||order==='cleanup';
+		return this.order==='attack'||this.order==='intercept'||this.order==='cleanup';
 	}
 
 	isProgressState(state)

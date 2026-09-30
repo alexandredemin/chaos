@@ -111,6 +111,8 @@ var GameScene = new Phaser.Class({
 
         let pointer = this.input.activePointer;
 
+        if(pointerBlocked===false && typeof AITest !== 'undefined' && AITest.handlePointer(this,pointer)) return;
+
         if(pointer.isDown && pointerBlocked===false)
         {
             pointer.updateWorldPoint(this.cameras.main);
