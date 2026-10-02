@@ -285,7 +285,7 @@ const AITest = {
 		const test=document.createElement('div');test.style.cssText='margin:10px 0;padding:8px;border:1px solid #555;line-height:1.7';
 		const orderRow=document.createElement('div');orderRow.append('Order: ');
 		orderRow.appendChild(this.select([
-			['','none'],['attack','Attack'],['intercept','Intercept'],['patrol','Patrol'],['cleanup','Cleanup']
+			['','none'],['attack','Attack'],['intercept','Intercept'],['guard','Guard'],['cleanup','Cleanup']
 		],this.draft.order,v=>this.draft.order=v));test.appendChild(orderRow);
 		const profileRow=document.createElement('div');profileRow.append('Profile: ');
 		profileRow.appendChild(this.select([
@@ -426,7 +426,9 @@ const AITest = {
 		const state=this.getEffectiveState(unit),goal=this.resolveGoal(state);
 		if(goal==null)return{error:'No AI goal/target assigned. Use F8 to set one.'};
 		const ai=unit.player.aiControl,profile=this.resolveProfile(unit,state);
-		const planner=new AITurnPlanner(ai,unit,goal,{...ai.tacticalPlannerOptions,profile,order:state.order||null});
+		const order=state.order||null;
+		const guardTarget=order==='guard'?(state.target||(unit.player?unit.player.wizard:null)):null;
+		const planner=new AITurnPlanner(ai,unit,goal,{...ai.tacticalPlannerOptions,profile,order,guardTarget});
 		const result=planner.plan();
 		return{unit,state,goal,profile,result};
 	},

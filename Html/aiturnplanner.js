@@ -46,10 +46,11 @@ class AIPlannerMatrixAdapter
 				p.gasWeight=state.ap>0?this.gasSetupWeight(p.cell):0;
 				p.dangerPenalty=this.ai.threatSystem.getDangerAt(unit,p.cell[0],p.cell[1]);
 				p.offense=Math.max(0,p.attackScore)+Math.max(0,p.fireWeight)+Math.max(0,p.gasWeight)+Math.max(0,p.webWeight);
-				p.goalScore=p.distWeight||0;
+				p.guardScore=this.planner.isGuardOrder()?this.planner.guardPositionScoreAt(p.cell[0],p.cell[1]):null;
+				p.goalScore=this.planner.isGuardOrder()?p.guardScore-this.planner.rootGuardScore:(p.distWeight||0);
 				p.defenseScore=-p.dangerPenalty;
 				for(const [name,profile] of Object.entries(AI_TACTICAL_PROFILES))
-					p[name+'Score']=profile.goal*(p.distWeight||0)+profile.offense*p.offense-profile.danger*p.dangerPenalty;
+					p[name+'Score']=profile.goal*p.goalScore+profile.offense*p.offense-profile.danger*p.dangerPenalty;
 			}
 			return{dmap,gDMap,places};
 		});
@@ -329,6 +330,10 @@ class AITurnPlanner
 		this.maxJumpCandidates=opts.maxJumpCandidates??10;
 		this.profile=opts.profile||'balanced';
 		this.order=opts.order??(unit.aiControl?unit.aiControl.order:null);
+		this.guardTarget=opts.guardTarget||(this.order==='guard'&&unit.player?unit.player.wizard:null);
+		this.guardContext=this.order==='guard'?this.ai.buildGuardContext(unit,this.guardTarget):null;
+		this.guardScoreCache=new Map();
+		this.rootGuardScore=this.order==='guard'?this.guardPositionScoreAt(unit.mapX,unit.mapY):0;
 		this.adapter=new AIPlannerMatrixAdapter(this);
 		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
 		this.matrixCache=new Map();this._terminalPositionScore=null;
@@ -341,7 +346,9 @@ class AITurnPlanner
 	matricesFor(s){const k=this.cacheKey(s);if(!this.matrixCache.has(k))this.matrixCache.set(k,this.adapter.build(s));return this.matrixCache.get(k);}
 	knownEnemies(){return this.adapter.knownEnemies();}
 	positionDangerAt(x,y){return this.ai.threatSystem.getDangerAt(this.unit,x,y);}
-	goalProgressAt(x,y){const gd=this.goalMap[y]?this.goalMap[y][x]:-1;return this.rootGoalDistance>=0&&gd>=0?this.rootGoalDistance-gd:-1000;}
+	isGuardOrder(){return this.order==='guard'&&this.guardContext!=null;}
+	guardPositionScoreAt(x,y){const k=x+':'+y;if(this.guardScoreCache.has(k))return this.guardScoreCache.get(k);const v=this.ai.getGuardPositionScore(this.unit,x,y,this.guardContext);this.guardScoreCache.set(k,v);return v;}
+	goalProgressAt(x,y){if(this.isGuardOrder())return this.guardPositionScoreAt(x,y)-this.rootGuardScore;const gd=this.goalMap[y]?this.goalMap[y][x]:-1;return this.rootGoalDistance>=0&&gd>=0?this.rootGoalDistance-gd:-1000;}
 	positionScoreAt(x,y,profile=this.profile){const p=AI_TACTICAL_PROFILES[profile]||AI_TACTICAL_PROFILES.balanced;return p.goal*this.goalProgressAt(x,y)-p.danger*this.positionDangerAt(x,y);}
 	actionAndPositionScore(actionUtility,endUtility,profile=this.profile){const p=AI_TACTICAL_PROFILES[profile]||AI_TACTICAL_PROFILES.balanced;return p.offense*actionUtility+endUtility;}
 	terminalPositionScore(){if(this._terminalPositionScore!=null)return this._terminalPositionScore;const root=this.rootState(),m=this.matricesFor(root);let worst=Infinity;for(const p of m.places)if(p.dist>=0&&p.dist<=root.move)worst=Math.min(worst,this.positionScoreAt(p.cell[0],p.cell[1]));this._terminalPositionScore=Number.isFinite(worst)?worst:0;return this._terminalPositionScore;}
@@ -362,11 +369,31 @@ class AITurnPlanner
 		return eligible.slice().sort((a,b)=>(b[key]??-Infinity)-(a[key]??-Infinity)||a.dist-b.dist)[0]||null;
 	}
 
+	guardMoveCandidate(state,ctx)
+	{
+		if(!this.isGuardOrder())return null;
+		const eligible=ctx.matrices.places.filter(p=>p.dist>0&&p.dist<=state.move&&Number.isFinite(p.guardScore));
+		if(!eligible.length)return null;
+		eligible.sort((a,b)=>b.guardScore-a.guardScore||a.dist-b.dist);
+		const top=eligible.slice(0,Math.min(3,eligible.length));
+		const p=top[randomInt(0,top.length-1)];
+		return{x:p.cell[0],y:p.cell[1],dist:p.dist,score:p.guardScore,source:'GUARD'};
+	}
+
 	generateMoveCandidates(state,ctx)
 	{
 		if(state.move<=0)return[];
 		const raw=[],add=(p,score,source)=>{if(p&&p.dist>0&&p.dist<=state.move)raw.push({x:p.cell[0],y:p.cell[1],dist:p.dist,score,source});};
-		for(const [key,label] of [['goalScore','GOAL'],['attackScore','ATTACK'],['defenseScore','DEFENSE'],['balancedScore','BALANCED'],['aggressiveScore','AGGRESSIVE'],['cautiousScore','CAUTIOUS'],['criticalScore','CRITICAL']])
+		if(this.isGuardOrder())
+		{
+			const guard=this.guardMoveCandidate(state,ctx);
+			if(guard)raw.push(guard);
+		}
+		else
+		{
+			const best=this.informativeBest(ctx.matrices.places,'goalScore',state);if(best)add(best,best.goalScore,'GOAL');
+		}
+		for(const [key,label] of [['attackScore','ATTACK'],['defenseScore','DEFENSE'],['balancedScore','BALANCED'],['aggressiveScore','AGGRESSIVE'],['cautiousScore','CAUTIOUS'],['criticalScore','CRITICAL']])
 		{const best=this.informativeBest(ctx.matrices.places,key,state);if(best)add(best,best[key],label);}
 		for(const provider of this.providers)for(const c of provider.getMoveCandidates(state,ctx)||[]){const p=this.adapter.placeAt(ctx.matrices,c.x,c.y);if(p)add(p,c.score,c.source);}
 		const by=new Map();for(const c of raw){const k=c.x+':'+c.y;if(!by.has(k))by.set(k,{x:c.x,y:c.y,dist:c.dist,sources:[]});const v=by.get(k);if(!v.sources.includes(c.source))v.sources.push(c.source);}
@@ -435,7 +462,7 @@ class AITurnPlanner
 		}
 		for(const s of beam)consider(s);
 
-		// ROOT means "hold position". That is valid for patrol/cautious play, but a committed
+		// ROOT means "hold position". That is valid for guard/cautious play, but a committed
 		// attack/intercept must not deadlock forever merely because every advancing option is risky.
 		// If search found any damaging or goal-progressing plan, execute the least-bad one.
 		if(best.actions.length===0&&this.isCommittedOrder()&&bestProgress!=null)best=bestProgress;

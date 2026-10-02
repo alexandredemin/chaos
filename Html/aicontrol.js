@@ -256,7 +256,6 @@ class AIControl
     {
         if(unit.aiControl && unit.aiControl.order){
             if(unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && unit.aiControl.mainTarget.died) return true;
-            else if(unit.aiControl.order == "patrol" && unit.aiControl.mainTargetPos && unit.mapX === unit.aiControl.mainTargetPos[0] && unit.mapY === unit.aiControl.mainTargetPos[1]) return true;
         }
         return false;
     }
@@ -425,10 +424,11 @@ class AIControl
 			if(ents.some(ent => ent.config && ent.config.name === 'pentagram')) return 100;
 			return 70;
 		}
-		const order = unit.aiControl ? unit.aiControl.order : null;
+		const testOverride=this.getAITestOverride(unit);
+		const order=testOverride ? testOverride.order : (unit.aiControl ? unit.aiControl.order : null);
 		if(order === 'intercept') return 80;
 		if(order === 'attack') return 60;
-		if(order === 'patrol') return 10;
+		if(order === 'guard') return 10;
 		return 40;
 	}
 
@@ -466,10 +466,10 @@ class AIControl
 			}
 			else
 			{
-				this.choosePatrolTarget(unit);
-				if(unit.aiControl.mainTargetPos)
+				this.chooseGuardTarget(unit);
+				if(unit.aiControl.mainTarget)
 				{
-					mainGoal = [unit.aiControl.mainTargetPos[0], unit.aiControl.mainTargetPos[1]];
+					mainGoal = [unit.aiControl.mainTarget.mapX, unit.aiControl.mainTarget.mapY];
 				}
 			}
 		}
@@ -514,7 +514,7 @@ class AIControl
             if(turns != null && turns <= 3) return 'balanced';
             return 'cautious';
         }
-        if(ai.order === 'patrol') return 'cautious';
+        if(ai.order === 'guard') return 'cautious';
         return 'balanced';
     }
 
@@ -528,7 +528,8 @@ class AIControl
         const mainGoal=testOverride?this.getTacticalGoalFromState(unit,testOverride):this.getMainGoal(unit);
         const profile=this.getTacticalProfile(unit,tacticalState);
         const order=tacticalState.order||null;
-        const planner=new AITurnPlanner(this,unit,mainGoal,{...this.tacticalPlannerOptions,profile,order});
+        const guardTarget=order==='guard' ? (testOverride ? testOverride.target : ai.mainTarget) : null;
+        const planner=new AITurnPlanner(this,unit,mainGoal,{...this.tacticalPlannerOptions,profile,order,guardTarget});
         const result = planner.plan();
         const action = result.actions && result.actions.length ? result.actions[0] : null;
         const testTag=testOverride?' [TEST]':'';
@@ -1170,37 +1171,93 @@ class AIControl
         return true;
     }
   
-    getPatrolArea(wizard)
+    getGuardArea(target)
     {
-        let res = [];
-        const minR = 2;
-        const maxR = 5;
-        let r = maxR;
-        for (let y = wizard.mapY - r; y <= wizard.mapY + r; y++) {
-            for (let x = wizard.mapX - r; x <= wizard.mapX + r; x++) {
-                if((x < 0) || (x >= map.width) || (y < 0) || (y >= map.height) || ((x === wizard.mapX) && (y === wizard.mapY))) continue;
-                if(Entity.getEntityAtMap(x, y) != null) continue;
-                let wallTile = wallsLayer.getTileAt(x, y);
-                if (wallTile != null && wallTile.properties['collides'] === true) continue;
-                let dX = Math.abs(x - wizard.mapX);
-                let dY = Math.abs(y - wizard.mapY);
-                let dr = dX*dX + dY*dY;
-                if(dr > maxR * maxR) continue;
-                if(dr <= minR * minR) continue;
-                if (checkLineOfSight(wizard.mapX, wizard.mapY, x, y, null, null, function(){return true;}) === true) res.push({cell: [x, y], dist: dr});
+        const res = [], minR = 2, maxR = 5;
+        for(let y=target.mapY-maxR;y<=target.mapY+maxR;y++)
+            for(let x=target.mapX-maxR;x<=target.mapX+maxR;x++)
+            {
+                if(x<0||x>=map.width||y<0||y>=map.height||(x===target.mapX&&y===target.mapY))continue;
+                if(Entity.getEntityAtMap(x,y)!=null)continue;
+                const wallTile=wallsLayer.getTileAt(x,y);
+                if(wallTile!=null&&wallTile.properties['collides']===true)continue;
+                const dx=x-target.mapX,dy=y-target.mapY,dr=dx*dx+dy*dy;
+                if(dr>maxR*maxR||dr<=minR*minR)continue;
+                if(checkLineOfSight(target.mapX,target.mapY,x,y,null,null,function(){return true;})===true)
+                    res.push({cell:[x,y],dist:dr});
             }
-        }
         return res;
     }
-  
-    choosePatrolTarget(unit)
+
+    isCellOnLOSPath(x1,y1,x2,y2,cx,cy)
     {
-        if(unit.player && unit.player.wizard && !unit.player.wizard.died && unit.player.wizard.patrolArea){
-            let possibleCells = unit.player.wizard.patrolArea.filter(p => (Entity.getEntityAtMap(p.cell[0], p.cell[1]) == null) && (getUnitAtMap(p.cell[0], p.cell[1]) == null));
-            let trgt = null;
-            if(possibleCells.length > 0)trgt = possibleCells[randomInt(0, possibleCells.length - 1)];
-            if(trgt) this.setMainTarget(unit,null,[trgt.cell[0],trgt.cell[1]],"patrol",2);
+        if((cx===x1&&cy===y1)||(cx===x2&&cy===y2))return false;
+        let xx1=x1,xx2=x2,yy1=y1,yy2=y2,inv=false;
+        if(Math.abs(y2-y1)>Math.abs(x2-x1)){inv=true;xx1=y1;xx2=y2;yy1=x1;yy2=x2;}
+        const k=(yy2-yy1)/(xx2-xx1),b=yy1-k*xx1,dx=xx2<xx1?-1:1;
+        for(let x=xx1+dx;x!==xx2;x+=dx)
+        {
+            const y=Math.round(k*x+b),px=inv?y:x,py=inv?x:y;
+            if(px===cx&&py===cy)return true;
         }
+        return false;
+    }
+
+    buildGuardContext(unit,target)
+    {
+        if(target==null||target.died)return null;
+        const area=this.getGuardArea(target),areaSet=new Set(area.map(p=>p.cell[0]+':'+p.cell[1]));
+        const targetDMap=this.getDistanceMap(unit,target.mapX,target.mapY,null,function(){return true;},null);
+        const enemies=units.filter(e=>e.player!==unit.player&&!e.died&&this.isUnitKnown(e));
+        return{target,area,areaSet,targetDMap,enemies,minR:2,maxR:5};
+    }
+
+    getGuardPositionScore(unit,x,y,ctx)
+    {
+        if(ctx==null)return 0;
+        const target=ctx.target,key=x+':'+y,pathDist=ctx.targetDMap[y]?ctx.targetDMap[y][x]:-1;
+        if(pathDist<0)return -1000;
+
+        // Outside the guard ring, reward progress toward it. Inside, score the defensive position itself.
+        if(!ctx.areaSet.has(key))return -Math.max(1,pathDist-ctx.maxR+1);
+
+        const dx=x-target.mapX,dy=y-target.mapY,r=Math.sqrt(dx*dx+dy*dy);
+        let score=2-Math.abs(r-3.5)*.4;
+        let intercept=0,shield=0;
+
+        for(const enemy of ctx.enemies)
+        {
+            const ex=enemy.mapX,ey=enemy.mapY,vx=target.mapX-ex,vy=target.mapY-ey,len2=vx*vx+vy*vy;
+            if(len2<=1e-9)continue;
+            const wx=x-ex,wy=y-ey,t=(wx*vx+wy*vy)/len2;
+            if(t>0&&t<1)
+            {
+                const px=ex+t*vx,py=ey+t*vy,lineDist=Math.hypot(x-px,y-py);
+                const enemyDist=Math.sqrt(len2),urgency=Math.max(0,1-enemyDist/16);
+                if(urgency>0)intercept=Math.max(intercept,Math.max(0,1.5-lineDist)*urgency);
+            }
+
+            const fire=this.threatSystem.getAbility(enemy,'fire');
+            const fireRange=fire&&fire.config?fire.config.range||0:0;
+            if(fire&&len2<=fireRange*fireRange&&checkLineOfSight(ex,ey,target.mapX,target.mapY,null,null,function(){return true;})&&
+                this.isCellOnLOSPath(ex,ey,target.mapX,target.mapY,x,y))
+                shield=Math.max(shield,2);
+        }
+
+        let congestion=0;
+        for(let yy=y-1;yy<=y+1;yy++)for(let xx=x-1;xx<=x+1;xx++)
+        {
+            if(xx===x&&yy===y)continue;
+            const other=getUnitAtMap(xx,yy);
+            if(other!=null&&other!==unit&&!other.died&&other.player===unit.player)congestion+=.35;
+        }
+        return score+intercept+shield-congestion;
+    }
+
+    chooseGuardTarget(unit)
+    {
+        const wizard=unit.player?unit.player.wizard:null;
+        if(wizard!=null&&!wizard.died)this.setMainTarget(unit,wizard,[wizard.mapX,wizard.mapY],"guard",2);
     }
   
     computeEnemiesInfo()
@@ -1260,9 +1317,8 @@ class AIControl
             this.setMainTarget(unit,null,null,null,null);
         }
         if(wizard && !wizard.died){
-            //Note: можно проверить текущее и прошлое положение волшебника и если оно не имзменилось, то не пересчитывать webPlan и patrolArea
+            //Note: можно проверить текущее и прошлое положение волшебника и если оно не имзменилось, то не пересчитывать webPlan
             wizard.webPlan = this.getWebPlanMap(wizard);
-            wizard.patrolArea = this.getPatrolArea(wizard);
             //Compute enemies
             let maxDist = 10;
             let maxTurns = 3;
@@ -1369,11 +1425,11 @@ class AIControl
                     freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.ensureUnitAIControl(unt).mainTarget == null && (!midTurn || this.canStillAct(unt)));
                 }
             }
-            //If there are units left that do not have a main goal, then we assign them patrol or defense
+            //If there are units left that do not have a main goal, assign them to wizard guard duty or defense
             if(freeunits.length > 0){
                 for(const unit of freeunits){
                     if(this.threats.length > 0) this.chooseTargetThreat(unit,this.threats);
-                    if(unit.aiControl.mainTarget == null) this.choosePatrolTarget(unit);
+                    if(unit.aiControl.mainTarget == null) this.chooseGuardTarget(unit);
                 }
             }
         }
