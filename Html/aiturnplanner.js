@@ -33,8 +33,12 @@ class AIPlannerMatrixAdapter
 			let places=this.ai.getAvailableCells(dmap,unit,null,true).filter(p=>p.dist>=0&&p.dist<=state.move);
 			places.push(...this.frontierEntries(state,unit,dmap,places));
 			if(!places.some(p=>p.cell[0]===state.x&&p.cell[1]===state.y)) places.unshift({cell:[state.x,state.y],dist:0});
-			const gDMap=this.ai.getDistanceMap(unit,this.planner.goal[0],this.planner.goal[1]);
-			this.ai.computeDistMatrix(unit,places,this.planner.goal,gDMap);
+			let gDMap=null;
+			if(!this.planner.isGuardOrder())
+			{
+				gDMap=this.ai.getDistanceMap(unit,this.planner.goal[0],this.planner.goal[1]);
+				this.ai.computeDistMatrix(unit,places,this.planner.goal,gDMap);
+			}
 			if(this.hasAbility('web')&&state.ap>0)this.ai.computeWebMatrix(unit,places);
 
 			for(const p of places)
@@ -200,7 +204,7 @@ class AIFireActionProvider extends AITurnActionProvider
 		if(!firing.length)return[];
 		const picks=[],add=p=>{if(p&&!picks.includes(p))picks.push(p);};
 		add(firing.slice().sort((a,b)=>b.fireWeight-a.fireWeight||b.balancedScore-a.balancedScore||a.dist-b.dist)[0]);
-		add(firing.slice().sort((a,b)=>a.dist-b.dist||b.distWeight-a.distWeight||b.fireWeight-a.fireWeight||a.dangerPenalty-b.dangerPenalty)[0]);
+		add(firing.slice().sort((a,b)=>a.dist-b.dist||b.goalScore-a.goalScore||b.fireWeight-a.fireWeight||a.dangerPenalty-b.dangerPenalty)[0]);
 		add(firing.slice().sort((a,b)=>a.dangerPenalty-b.dangerPenalty||b.fireWeight-a.fireWeight||a.dist-b.dist)[0]);
 		return picks.map(p=>({x:p.cell[0],y:p.cell[1],score:p.fireWeight,source:'FIRE'}));
 	}
@@ -330,15 +334,14 @@ class AITurnPlanner
 		this.maxJumpCandidates=opts.maxJumpCandidates??10;
 		this.profile=opts.profile||'balanced';
 		this.order=opts.order??(unit.aiControl?unit.aiControl.order:null);
-		this.guardTarget=opts.guardTarget||(this.order==='guard'&&unit.player?unit.player.wizard:null);
-		this.guardContext=this.order==='guard'?this.ai.buildGuardContext(unit,this.guardTarget):null;
-		this.guardScoreCache=new Map();
-		this.rootGuardScore=this.order==='guard'?this.guardPositionScoreAt(unit.mapX,unit.mapY):0;
+		const guardTarget=opts.guardTarget||(this.order==='guard'&&unit.player?unit.player.wizard:null);
+		this.guard=this.order==='guard'?new AIGuardEvaluator(this.ai,unit,guardTarget):null;
+		this.rootGuardScore=this.guard&&this.guard.active?this.guard.scoreAt(unit.mapX,unit.mapY):0;
 		this.adapter=new AIPlannerMatrixAdapter(this);
 		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
 		this.matrixCache=new Map();this._terminalPositionScore=null;
-		this.goalMap=this.ai.getDistanceMap(unit,goal[0],goal[1]);
-		this.rootGoalDistance=this.goalMap[unit.mapY]&&this.goalMap[unit.mapY][unit.mapX]!=null?this.goalMap[unit.mapY][unit.mapX]:-1;
+		this.goalMap=this.isGuardOrder()?null:this.ai.getDistanceMap(unit,goal[0],goal[1]);
+		this.rootGoalDistance=this.goalMap&&this.goalMap[unit.mapY]&&this.goalMap[unit.mapY][unit.mapX]!=null?this.goalMap[unit.mapY][unit.mapX]:-1;
 	}
 
 	rootState(){const u=this.unit;return{x:u.mapX,y:u.mapY,move:u.features.move,ap:u.features.abilityPoints,attackPoints:u.features.attackPoints,actionScore:0,actions:[],lastAction:null,used:new Set(),terminal:false};}
@@ -346,9 +349,9 @@ class AITurnPlanner
 	matricesFor(s){const k=this.cacheKey(s);if(!this.matrixCache.has(k))this.matrixCache.set(k,this.adapter.build(s));return this.matrixCache.get(k);}
 	knownEnemies(){return this.adapter.knownEnemies();}
 	positionDangerAt(x,y){return this.ai.threatSystem.getDangerAt(this.unit,x,y);}
-	isGuardOrder(){return this.order==='guard'&&this.guardContext!=null;}
-	guardPositionScoreAt(x,y){const k=x+':'+y;if(this.guardScoreCache.has(k))return this.guardScoreCache.get(k);const v=this.ai.getGuardPositionScore(this.unit,x,y,this.guardContext);this.guardScoreCache.set(k,v);return v;}
-	goalProgressAt(x,y){if(this.isGuardOrder())return this.guardPositionScoreAt(x,y)-this.rootGuardScore;const gd=this.goalMap[y]?this.goalMap[y][x]:-1;return this.rootGoalDistance>=0&&gd>=0?this.rootGoalDistance-gd:-1000;}
+	isGuardOrder(){return this.guard!=null&&this.guard.active;}
+	guardPositionScoreAt(x,y){return this.isGuardOrder()?this.guard.scoreAt(x,y):0;}
+	goalProgressAt(x,y){if(this.isGuardOrder())return this.guard.scoreAt(x,y)-this.rootGuardScore;const gd=this.goalMap[y]?this.goalMap[y][x]:-1;return this.rootGoalDistance>=0&&gd>=0?this.rootGoalDistance-gd:-1000;}
 	positionScoreAt(x,y,profile=this.profile){const p=AI_TACTICAL_PROFILES[profile]||AI_TACTICAL_PROFILES.balanced;return p.goal*this.goalProgressAt(x,y)-p.danger*this.positionDangerAt(x,y);}
 	actionAndPositionScore(actionUtility,endUtility,profile=this.profile){const p=AI_TACTICAL_PROFILES[profile]||AI_TACTICAL_PROFILES.balanced;return p.offense*actionUtility+endUtility;}
 	terminalPositionScore(){if(this._terminalPositionScore!=null)return this._terminalPositionScore;const root=this.rootState(),m=this.matricesFor(root);let worst=Infinity;for(const p of m.places)if(p.dist>=0&&p.dist<=root.move)worst=Math.min(worst,this.positionScoreAt(p.cell[0],p.cell[1]));this._terminalPositionScore=Number.isFinite(worst)?worst:0;return this._terminalPositionScore;}
@@ -369,15 +372,19 @@ class AITurnPlanner
 		return eligible.slice().sort((a,b)=>(b[key]??-Infinity)-(a[key]??-Infinity)||a.dist-b.dist)[0]||null;
 	}
 
-	guardMoveCandidate(state,ctx)
+	guardTacticalCandidate(places,state)
 	{
 		if(!this.isGuardOrder())return null;
-		const eligible=ctx.matrices.places.filter(p=>p.dist>0&&p.dist<=state.move&&Number.isFinite(p.guardScore));
-		if(!eligible.length)return null;
-		eligible.sort((a,b)=>b.guardScore-a.guardScore||a.dist-b.dist);
-		const top=eligible.slice(0,Math.min(3,eligible.length));
-		const p=top[randomInt(0,top.length-1)];
-		return{x:p.cell[0],y:p.cell[1],dist:p.dist,score:p.guardScore,source:'GUARD'};
+		const eligible=places.filter(p=>p.dist>0&&p.dist<=state.move);if(!eligible.length)return null;
+		const profile=AI_TACTICAL_PROFILES[this.profile]||AI_TACTICAL_PROFILES.balanced;
+		let min=Infinity,max=-Infinity;
+		for(const p of eligible)
+		{
+			const tactical=profile.offense*(p.offense||0)-profile.danger*(p.dangerPenalty||0);
+			min=Math.min(min,tactical);max=Math.max(max,tactical);
+		}
+		if(!Number.isFinite(min)||max-min<=AI_MATRIX_EPS)return null;
+		return eligible.slice().sort((a,b)=>(b[this.profile+'Score']??-Infinity)-(a[this.profile+'Score']??-Infinity)||a.dist-b.dist)[0]||null;
 	}
 
 	generateMoveCandidates(state,ctx)
@@ -386,15 +393,19 @@ class AITurnPlanner
 		const raw=[],add=(p,score,source)=>{if(p&&p.dist>0&&p.dist<=state.move)raw.push({x:p.cell[0],y:p.cell[1],dist:p.dist,score,source});};
 		if(this.isGuardOrder())
 		{
-			const guard=this.guardMoveCandidate(state,ctx);
+			const guard=this.guard.pickMoveCandidate(state,ctx.matrices.places);
 			if(guard)raw.push(guard);
+			for(const [key,label] of [['attackScore','ATTACK'],['defenseScore','DEFENSE']])
+			{const best=this.informativeBest(ctx.matrices.places,key,state);if(best)add(best,best[key],label);}
+			const tactical=this.guardTacticalCandidate(ctx.matrices.places,state);
+			if(tactical)add(tactical,tactical[this.profile+'Score'],'TACTICAL');
 		}
 		else
 		{
 			const best=this.informativeBest(ctx.matrices.places,'goalScore',state);if(best)add(best,best.goalScore,'GOAL');
+			for(const [key,label] of [['attackScore','ATTACK'],['defenseScore','DEFENSE'],['balancedScore','BALANCED'],['aggressiveScore','AGGRESSIVE'],['cautiousScore','CAUTIOUS'],['criticalScore','CRITICAL']])
+			{const bestProfile=this.informativeBest(ctx.matrices.places,key,state);if(bestProfile)add(bestProfile,bestProfile[key],label);}
 		}
-		for(const [key,label] of [['attackScore','ATTACK'],['defenseScore','DEFENSE'],['balancedScore','BALANCED'],['aggressiveScore','AGGRESSIVE'],['cautiousScore','CAUTIOUS'],['criticalScore','CRITICAL']])
-		{const best=this.informativeBest(ctx.matrices.places,key,state);if(best)add(best,best[key],label);}
 		for(const provider of this.providers)for(const c of provider.getMoveCandidates(state,ctx)||[]){const p=this.adapter.placeAt(ctx.matrices,c.x,c.y);if(p)add(p,c.score,c.source);}
 		const by=new Map();for(const c of raw){const k=c.x+':'+c.y;if(!by.has(k))by.set(k,{x:c.x,y:c.y,dist:c.dist,sources:[]});const v=by.get(k);if(!v.sources.includes(c.source))v.sources.push(c.source);}
 		const arr=[...by.values()];arr.sort((a,b)=>{const pa=this.adapter.placeAt(ctx.matrices,a.x,a.y),pb=this.adapter.placeAt(ctx.matrices,b.x,b.y);return(pb?.[this.profile+'Score']??-Infinity)-(pa?.[this.profile+'Score']??-Infinity)||a.dist-b.dist;});
