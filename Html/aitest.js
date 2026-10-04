@@ -96,37 +96,30 @@ const AITest = {
 
 	getCurrentState(unit)
 	{
-		const ai = unit && unit.aiControl ? unit.aiControl : {};
-		return {
-			enabled:false,
-			order:ai.order || '',
-			profile:ai.tacticalProfile || 'auto',
-			target:ai.mainTarget && !ai.mainTarget.died ? ai.mainTarget : null,
-			targetPos:ai.mainTargetPos ? [ai.mainTargetPos[0],ai.mainTargetPos[1]] : null,
-			threatTurns:ai.threatTurns ?? null
-		};
+		const ai=unit&&unit.aiControl?unit.aiControl:{};
+		return {enabled:false,order:ai.order||null};
 	},
 
 	getOverride(unit)
 	{
-		const ai = unit && unit.aiControl ? unit.aiControl : null;
-		return ai && ai.aiTestOverride && ai.aiTestOverride.enabled === true ? ai.aiTestOverride : null;
+		const ai=unit&&unit.aiControl?unit.aiControl:null;
+		return ai&&ai.aiTestOverride&&ai.aiTestOverride.enabled===true?ai.aiTestOverride:null;
 	},
 
 	getEffectiveState(unit)
 	{
-		return this.getOverride(unit) || this.getCurrentState(unit);
+		return this.getOverride(unit)||this.getCurrentState(unit);
 	},
 
 	makeDraft(unit)
 	{
-		const state = this.getOverride(unit) || this.getCurrentState(unit);
+		const state=this.getOverride(unit)||this.getCurrentState(unit),order=state.order||null,orderState=AIOrder.state(order)||{};
 		return {
-			order:state.order || '',
-			profile:state.profile || 'auto',
-			target:state.target || null,
-			targetPos:state.targetPos ? [state.targetPos[0],state.targetPos[1]] : null,
-			threatTurns:state.threatTurns ?? null
+			order:AIOrder.type(order)||'',
+			profile:order&&typeof order==='object'?order.profile||'auto':'auto',
+			target:AIOrder.target(order),
+			targetPos:AIOrder.targetPos(order),
+			threatTurns:orderState.threatTurns??null
 		};
 	},
 
@@ -174,9 +167,9 @@ const AITest = {
 		const gameProfile=this.resolveProfile(this.debugUnit,game),effectiveProfile=this.resolveProfile(this.debugUnit,effective);
 		let text='AI TEST | F6 PLAN | F7 STEP | F8 MENU\n';
 		text+=this.unitName(this.debugUnit)+'\n';
-		text+='GAME: '+(game.order||'none')+' ['+gameProfile+'] -> '+this.targetName(game.target,game.targetPos);
+		text+='GAME: '+(AIOrder.type(game.order)||'none')+' ['+gameProfile+'] -> '+this.targetName(AIOrder.target(game.order),AIOrder.targetPos(game.order));
 		if(this.getOverride(this.debugUnit))
-			text+='\nTEST: '+(effective.order||'none')+' ['+effectiveProfile+'] -> '+this.targetName(effective.target,effective.targetPos)+' [ACTIVE]';
+			text+='\nTEST: '+(AIOrder.type(effective.order)||'none')+' ['+effectiveProfile+'] -> '+this.targetName(AIOrder.target(effective.order),AIOrder.targetPos(effective.order))+' [ACTIVE]';
 		else text+='\nTEST: override off';
 		if(this.pickMode)text+='\n'+this.pickPrompt();
 		const now=typeof performance!=='undefined'?performance.now():Date.now();
@@ -204,7 +197,7 @@ const AITest = {
 		const el=this.menu.querySelector('#aiTestCurrentGame');
 		if(el==null)return;
 		const current=this.getCurrentState(this.debugUnit),profile=this.resolveProfile(this.debugUnit,current);
-		el.innerHTML='<b>Current game AI</b><br>Order: '+(current.order||'none')+'<br>Profile: '+profile+'<br>Target: '+this.targetName(current.target,current.targetPos);
+		el.innerHTML='<b>Current game AI</b><br>Order: '+(AIOrder.type(current.order)||'none')+'<br>Profile: '+profile+'<br>Target: '+this.targetName(AIOrder.target(current.order),AIOrder.targetPos(current.order));
 	},
 
 	pickPrompt()
@@ -279,7 +272,7 @@ const AITest = {
 		const game=document.createElement('div');game.id='aiTestCurrentGame';
 		game.style.cssText='margin:10px 0;padding:8px;border:1px solid #444;background:#171717;line-height:1.45';
 		const currentProfile=this.resolveProfile(unit,current);
-		game.innerHTML='<b>Current game AI</b><br>Order: '+(current.order||'none')+'<br>Profile: '+currentProfile+'<br>Target: '+this.targetName(current.target,current.targetPos);
+		game.innerHTML='<b>Current game AI</b><br>Order: '+(AIOrder.type(current.order)||'none')+'<br>Profile: '+currentProfile+'<br>Target: '+this.targetName(AIOrder.target(current.order),AIOrder.targetPos(current.order));
 		this.menu.appendChild(game);
 
 		const test=document.createElement('div');test.style.cssText='margin:10px 0;padding:8px;border:1px solid #555;line-height:1.7';
@@ -316,14 +309,8 @@ const AITest = {
 	{
 		const unit=this.debugUnit;if(unit==null)return;
 		const ai=unit.player.aiControl.ensureUnitAIControl(unit);
-		ai.aiTestOverride={
-			enabled:true,
-			order:this.draft.order || null,
-			profile:this.draft.profile || 'auto',
-			target:this.draft.target || null,
-			targetPos:this.draft.targetPos ? [this.draft.targetPos[0],this.draft.targetPos[1]] : null,
-			threatTurns:this.draft.threatTurns ?? null
-		};
+		const order=this.draft.order?AIOrder.create(this.draft.order,this.draft.target||null,this.draft.targetPos,{profile:this.draft.profile||'auto',state:{threatTurns:this.draft.threatTurns??null}}):null;
+		ai.aiTestOverride={enabled:true,order};
 		this.lastPlan=null;
 		this.updateStatus('override applied');
 		this.renderMenu();
@@ -406,15 +393,25 @@ const AITest = {
 
 	resolveProfile(unit,state)
 	{
-		if(state&&state.profile&&state.profile!=='auto'&&AI_TACTICAL_PROFILES[state.profile])return state.profile;
+		const order=state?state.order:null,profile=order&&typeof order==='object'?order.profile:null;
+		if(profile&&profile!=='auto'&&AI_TACTICAL_PROFILES[profile])return profile;
 		return unit.player.aiControl.getTacticalProfile(unit,state);
 	},
 
 	resolveGoal(state)
 	{
 		if(state==null)return null;
-		if(state.target!=null&&!state.target.died)return[state.target.mapX,state.target.mapY];
-		if(state.targetPos!=null)return[state.targetPos[0],state.targetPos[1]];
+		const order=state.order,target=AIOrder.target(order),targetPos=AIOrder.targetPos(order);
+		if(target!=null&&!target.died)
+		{
+			if(AIOrder.is(order,'guard'))
+			{
+				const unit=this.debugUnit,assignment=unit&&unit.player?unit.player.aiControl.guardCoordinator.ensureAssignment(unit,order):null;
+				if(assignment)return[assignment.x,assignment.y];
+			}
+			return[target.mapX,target.mapY];
+		}
+		if(targetPos!=null)return[targetPos[0],targetPos[1]];
 		return null;
 	},
 
@@ -425,10 +422,8 @@ const AITest = {
 		if(unit.isMoving||unit.processedAbility!=null)return{error:'Unit is busy'};
 		const state=this.getEffectiveState(unit),goal=this.resolveGoal(state);
 		if(goal==null)return{error:'No AI goal/target assigned. Use F8 to set one.'};
-		const ai=unit.player.aiControl,profile=this.resolveProfile(unit,state);
-		const order=state.order||null;
-		const guardTarget=order==='guard'?(state.target||(unit.player?unit.player.wizard:null)):null;
-		const planner=new AITurnPlanner(ai,unit,goal,{...ai.tacticalPlannerOptions,profile,order,guardTarget});
+		const ai=unit.player.aiControl,profile=this.resolveProfile(unit,state),order=state.order||null;
+		const planner=new AITurnPlanner(ai,unit,goal,{...ai.tacticalPlannerOptions,profile,order});
 		const result=planner.plan();
 		return{unit,state,goal,profile,result};
 	},
@@ -437,7 +432,7 @@ const AITest = {
 	{
 		if(plan.error)return'AI TEST: '+plan.error;
 		const labels=plan.result.actions&&plan.result.actions.length?plan.result.actions.map(a=>a.label||a.type).join(' -> '):'HOLD';
-		return plan.unit.config.name+' '+(plan.state.order||'none')+' ['+plan.profile+']\n'+labels+'\nscore='+plan.result.score.toFixed(2);
+		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']\n'+labels+'\nscore='+plan.result.score.toFixed(2);
 	},
 
 	planOnly()

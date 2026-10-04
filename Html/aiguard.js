@@ -1,4 +1,4 @@
-//---------------------------- GUARD tactical position evaluator ----------------------------
+//---------------------------- Global GUARD evaluation and coordination ----------------------------
 
 const AI_GUARD_CONFIG = Object.freeze({
 	minRadius: 2,
@@ -10,39 +10,40 @@ const AI_GUARD_CONFIG = Object.freeze({
 	interceptMaxDistance: 16,
 	shieldBonus: 2,
 	congestionPenalty: .35,
-	topK: 3,
-	topRelativeTolerance: .10,
-	topAbsoluteTolerance: .10
+	anchorTolerance: 0,
+	slotPoolMin: 8,
+	slotPoolMultiplier: 2,
+	slotMinDistance: 2,
+	travelWeight: .15
 });
 
-// Precomputes dynamic GUARD geometry once per tactical planner run.
+// Computes one shared GuardScore field around a guarded unit.
+// It is intentionally frozen for the AI turn; mid-turn it is rebuilt only when the guarded unit moves.
 class AIGuardEvaluator
 {
-	constructor(ai,unit,target,config=AI_GUARD_CONFIG)
+	constructor(ai,target,config=AI_GUARD_CONFIG)
 	{
 		this.ai=ai;
-		this.unit=unit;
 		this.target=target;
 		this.config=config;
-		this.scoreCache=new Map();
-		this.candidateCache=new Map();
 		this.active=target!=null&&!target.died;
-		if(!this.active)return;
-
-		this.ringSet=this.buildRingSet();
-		this.targetDMap=this.ai.getDistanceMap(unit,target.mapX,target.mapY,null,function(){return true;},null);
+		this.scoreCache=new Map();
+		this.ringCells=[];
 		this.interceptLines=[];
 		this.shieldCells=new Set();
 		this.congestionMap=new Map();
+		if(!this.active)return;
+
+		this.buildRingCells();
 		this.buildEnemyGeometry();
 		this.buildCongestionMap();
 	}
 
 	key(x,y){return x+':'+y;}
 
-	buildRingSet()
+	buildRingCells()
 	{
-		const res=new Set(),cfg=this.config,target=this.target,minR2=cfg.minRadius*cfg.minRadius,maxR2=cfg.maxRadius*cfg.maxRadius;
+		const cfg=this.config,target=this.target,minR2=cfg.minRadius*cfg.minRadius,maxR2=cfg.maxRadius*cfg.maxRadius;
 		const minX=Math.max(0,target.mapX-cfg.maxRadius),maxX=Math.min(map.width-1,target.mapX+cfg.maxRadius);
 		const minY=Math.max(0,target.mapY-cfg.maxRadius),maxY=Math.min(map.height-1,target.mapY+cfg.maxRadius);
 		for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++)
@@ -50,22 +51,21 @@ class AIGuardEvaluator
 			if(x===target.mapX&&y===target.mapY)continue;
 			const dx=x-target.mapX,dy=y-target.mapY,d2=dx*dx+dy*dy;
 			if(d2>maxR2||d2<=minR2)continue;
-			if(Entity.getEntityAtMap(x,y)!=null)continue;
 			const wall=wallsLayer.getTileAt(x,y);
 			if(wall!=null&&wall.properties['collides']===true)continue;
-			if(checkLineOfSight(target.mapX,target.mapY,x,y,null,null,function(){return true;})===true)
-				res.add(this.key(x,y));
+			if(Entity.getEntityAtMap(x,y)!=null)continue;
+			if(checkLineOfSight(target.mapX,target.mapY,x,y,null,null,function(){return true;})!==true)continue;
+			this.ringCells.push({x,y});
 		}
-		return res;
 	}
 
-	// Enemy line geometry and shielding LOS are target-dependent but candidate-independent.
+	// Enemy geometry is global for all guards protecting the same target.
 	buildEnemyGeometry()
 	{
 		const cfg=this.config,target=this.target,maxDist2=cfg.interceptMaxDistance*cfg.interceptMaxDistance;
 		for(const enemy of units)
 		{
-			if(enemy.player===this.unit.player||enemy.died||!this.ai.isUnitKnown(enemy))continue;
+			if(enemy.player===target.player||enemy.died||!this.ai.isUnitKnown(enemy))continue;
 			const ex=enemy.mapX,ey=enemy.mapY,vx=target.mapX-ex,vy=target.mapY-ey,len2=vx*vx+vy*vy;
 			if(len2<=1e-9)continue;
 
@@ -96,13 +96,13 @@ class AIGuardEvaluator
 		}
 	}
 
-	// Convert nearby friendly density into O(1) candidate lookups.
+	// One frozen friendly-density field for the whole formation.
 	buildCongestionMap()
 	{
 		const penalty=this.config.congestionPenalty;
-		for(const other of this.unit.player.units)
+		for(const other of this.target.player.units)
 		{
-			if(other===this.unit||other.died)continue;
+			if(other==null||other.died)continue;
 			for(let y=other.mapY-1;y<=other.mapY+1;y++)for(let x=other.mapX-1;x<=other.mapX+1;x++)
 			{
 				if(x<0||y<0||x>=map.width||y>=map.height||(x===other.mapX&&y===other.mapY))continue;
@@ -127,58 +127,195 @@ class AIGuardEvaluator
 
 	scoreAt(x,y)
 	{
-		if(!this.active)return 0;
+		if(!this.active)return-Infinity;
 		const key=this.key(x,y);
 		if(this.scoreCache.has(key))return this.scoreCache.get(key);
-		const pathDist=this.targetDMap[y]?this.targetDMap[y][x]:-1;
-		if(pathDist<0){this.scoreCache.set(key,-1000);return -1000;}
-
-		let score;
-		if(!this.ringSet.has(key))score=-Math.max(1,pathDist-this.config.maxRadius+1);
-		else
-		{
-			const dx=x-this.target.mapX,dy=y-this.target.mapY,r=Math.sqrt(dx*dx+dy*dy);
-			const proximity=this.config.proximityBase-Math.abs(r-this.config.idealRadius)*this.config.proximityFalloff;
-			const intercept=this.getInterceptionScore(x,y);
-			const shield=this.shieldCells.has(key)?this.config.shieldBonus:0;
-			const congestion=this.congestionMap.get(key)||0;
-			score=proximity+intercept+shield-congestion;
-		}
+		const dx=x-this.target.mapX,dy=y-this.target.mapY,r=Math.sqrt(dx*dx+dy*dy);
+		const proximity=this.config.proximityBase-Math.abs(r-this.config.idealRadius)*this.config.proximityFalloff;
+		const intercept=this.getInterceptionScore(x,y);
+		const shield=this.shieldCells.has(key)?this.config.shieldBonus:0;
+		const congestion=this.congestionMap.get(key)||0;
+		const score=proximity+intercept+shield-congestion;
 		this.scoreCache.set(key,score);
 		return score;
 	}
 
-	candidateTolerance(bestScore)
+	getCandidates(guards=[])
 	{
-		return Math.max(this.config.topAbsoluteTolerance,Math.abs(bestScore)*this.config.topRelativeTolerance);
+		if(!this.active)return[];
+		const guardSet=new Set(guards),result=[];
+		for(const cell of this.ringCells)
+		{
+			const occupant=getUnitAtMap(cell.x,cell.y);
+			if(occupant!=null&&!occupant.died&&!guardSet.has(occupant))continue;
+			result.push({x:cell.x,y:cell.y,score:this.scoreAt(cell.x,cell.y)});
+		}
+		result.sort((a,b)=>b.score-a.score||a.y-b.y||a.x-b.x);
+		return result;
+	}
+}
+
+class AIGuardCoordinator
+{
+	constructor(ai,config=AI_GUARD_CONFIG)
+	{
+		this.ai=ai;
+		this.config=config;
+		this.groups=new Map();
+		this.epoch=0;
 	}
 
-	// Randomize only among cells close to the best GuardScore, then cache the choice per state.
-	pickMoveCandidate(state,places)
+	startTurn()
 	{
-		if(!this.active)return null;
-		const stateKey=state.x+':'+state.y+':'+state.move;
-		if(this.candidateCache.has(stateKey))return this.candidateCache.get(stateKey);
+		this.epoch++;
+		this.groups.clear();
+	}
 
-		const eligible=[];
-		for(const p of places)
+	prepareTurnAssignments()
+	{
+		const targets=new Set();
+		for(const unit of this.ai.player.units)
 		{
-			if(p.dist<=0||p.dist>state.move||!Number.isFinite(p.guardScore))continue;
-			eligible.push(p);
+			const order=unit&&unit.aiControl?unit.aiControl.order:null;
+			if(AIOrder.is(order,'guard')&&AIOrder.target(order)!=null)targets.add(AIOrder.target(order));
 		}
-		if(!eligible.length){this.candidateCache.set(stateKey,null);return null;}
+		for(const target of targets)this.rebuildGroup(target);
+	}
 
-		eligible.sort((a,b)=>b.guardScore-a.guardScore||a.dist-b.dist);
-		const best=eligible[0].guardScore,cutoff=best-this.candidateTolerance(best);
-		const nearBest=[];
-		for(const p of eligible)
+	getGuardUnits(target)
+	{
+		return this.ai.player.units.filter(unit=>{
+			if(unit==null||unit.died||unit===target||unit.aiControl==null)return false;
+			const order=unit.aiControl.order;
+			return AIOrder.is(order,'guard')&&AIOrder.target(order)===target;
+		});
+	}
+
+	anchorMoved(group,target)
+	{
+		if(group==null||target==null)return true;
+		const dx=Math.abs(target.mapX-group.anchorX),dy=Math.abs(target.mapY-group.anchorY);
+		return Math.max(dx,dy)>this.config.anchorTolerance;
+	}
+
+	ensureAssignment(unit,order)
+	{
+		if(unit==null||order==null||!AIOrder.is(order,'guard'))return null;
+		const target=AIOrder.target(order);
+		if(target==null||target.died)return null;
+		let group=this.groups.get(target);
+		if(group==null||this.anchorMoved(group,target))group=this.rebuildGroup(target);
+		this.pruneAssignments(group,target);
+		let assignment=group.assignments.get(unit)||null;
+		if(assignment==null)assignment=this.assignMissingUnit(group,unit);
+		AIOrder.state(order).assignment=assignment?{...assignment}:null;
+		return assignment;
+	}
+
+	pruneAssignments(group,target)
+	{
+		for(const unit of [...group.assignments.keys()])
 		{
-			if(p.guardScore<cutoff||nearBest.length>=this.config.topK)break;
-			nearBest.push(p);
+			const order=unit&&unit.aiControl?unit.aiControl.order:null;
+			if(unit==null||unit.died||!AIOrder.is(order,'guard')||AIOrder.target(order)!==target)group.assignments.delete(unit);
 		}
-		const p=nearBest.length===1?nearBest[0]:nearBest[randomInt(0,nearBest.length-1)];
-		const result={x:p.cell[0],y:p.cell[1],dist:p.dist,score:p.guardScore,source:'GUARD'};
-		this.candidateCache.set(stateKey,result);
-		return result;
+	}
+
+	rebuildGroup(target)
+	{
+		const guards=this.getGuardUnits(target),evaluator=new AIGuardEvaluator(this.ai,target,this.config);
+		const candidates=evaluator.getCandidates(guards),slots=this.selectDiverseSlots(candidates,guards.length);
+		const group={target,anchorX:target.mapX,anchorY:target.mapY,evaluator,slots,assignments:new Map(),epoch:this.epoch};
+		this.assignGuards(group,guards);
+		this.groups.set(target,group);
+		return group;
+	}
+
+	selectDiverseSlots(candidates,guardCount)
+	{
+		if(!candidates.length||guardCount<=0)return[];
+		const desired=Math.min(candidates.length,Math.max(this.config.slotPoolMin,guardCount*this.config.slotPoolMultiplier));
+		const selected=[],selectedKeys=new Set(),minD2=this.config.slotMinDistance*this.config.slotMinDistance;
+		for(const c of candidates)
+		{
+			if(selected.length>=desired)break;
+			if(selected.some(s=>{const dx=s.x-c.x,dy=s.y-c.y;return dx*dx+dy*dy<minD2;}))continue;
+			selected.push(c);selectedKeys.add(c.x+':'+c.y);
+		}
+		if(selected.length<desired)
+		{
+			for(const c of candidates)
+			{
+				if(selected.length>=desired)break;
+				const key=c.x+':'+c.y;if(selectedKeys.has(key))continue;
+				selected.push(c);selectedKeys.add(key);
+			}
+		}
+		return selected;
+	}
+
+	buildGuardOptions(guard,slots)
+	{
+		const dmap=this.ai.getDistanceMap(guard,guard.mapX,guard.mapY,null,function(){return true;});
+		const options=[];
+		for(const slot of slots)
+		{
+			const dist=dmap[slot.y]&&dmap[slot.y][slot.x]!=null?dmap[slot.y][slot.x]:-1;
+			if(dist<0)continue;
+			options.push({slot,distance:dist,utility:slot.score-this.config.travelWeight*dist});
+		}
+		options.sort((a,b)=>b.utility-a.utility||a.distance-b.distance||b.slot.score-a.slot.score);
+		return options;
+	}
+
+	assignGuards(group,guards)
+	{
+		const remaining=new Map(),freeSlots=new Set(group.slots);
+		for(const guard of guards)remaining.set(guard,this.buildGuardOptions(guard,group.slots));
+		while(remaining.size>0&&freeSlots.size>0)
+		{
+			let chosenGuard=null,chosen=null,bestRegret=-Infinity,bestUtility=-Infinity;
+			for(const [guard,allOptions] of remaining)
+			{
+				const options=allOptions.filter(o=>freeSlots.has(o.slot));
+				if(!options.length)continue;
+				const best=options[0],second=options[1]||null,regret=second?best.utility-second.utility:1000000;
+				if(regret>bestRegret||(regret===bestRegret&&best.utility>bestUtility))
+				{
+					chosenGuard=guard;chosen=best;bestRegret=regret;bestUtility=best.utility;
+				}
+			}
+			if(chosenGuard==null||chosen==null)break;
+			this.storeAssignment(group,chosenGuard,chosen);
+			freeSlots.delete(chosen.slot);
+			remaining.delete(chosenGuard);
+		}
+		for(const guard of remaining.keys())this.storeFallbackAssignment(group,guard);
+	}
+
+	assignMissingUnit(group,unit)
+	{
+		const used=new Set([...group.assignments.values()].filter(Boolean).map(a=>a.x+':'+a.y));
+		const slots=group.slots.filter(s=>!used.has(s.x+':'+s.y));
+		const option=this.buildGuardOptions(unit,slots)[0]||null;
+		if(option)this.storeAssignment(group,unit,option);
+		else this.storeFallbackAssignment(group,unit);
+		return group.assignments.get(unit)||null;
+	}
+
+	storeAssignment(group,unit,option)
+	{
+		const assignment={x:option.slot.x,y:option.slot.y,score:option.slot.score,travelCost:option.distance,utility:option.utility,epoch:group.epoch,anchorX:group.anchorX,anchorY:group.anchorY};
+		group.assignments.set(unit,assignment);
+		const order=unit.aiControl?unit.aiControl.order:null;
+		if(AIOrder.is(order,'guard'))AIOrder.state(order).assignment={...assignment};
+	}
+
+	storeFallbackAssignment(group,unit)
+	{
+		const assignment={x:unit.mapX,y:unit.mapY,score:group.evaluator.scoreAt(unit.mapX,unit.mapY),travelCost:0,utility:0,epoch:group.epoch,anchorX:group.anchorX,anchorY:group.anchorY,fallback:true};
+		group.assignments.set(unit,assignment);
+		const order=unit.aiControl?unit.aiControl.order:null;
+		if(AIOrder.is(order,'guard'))AIOrder.state(order).assignment={...assignment};
 	}
 }

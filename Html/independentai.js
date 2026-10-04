@@ -13,6 +13,11 @@ class IndependentAIControl extends AIControl
 		};
 	}
 
+	usesStructuredOrders()
+	{
+		return false;
+	}
+
 	ensureIndependentConfig(unit)
 	{
 		if(unit.independentAI == null)

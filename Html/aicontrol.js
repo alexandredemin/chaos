@@ -14,6 +14,7 @@ class AIControl
 	detectedInvisibleUnits = null;
 	invisibleMemoryTurns = 2;
 	threatSystem = null;
+	guardCoordinator = null;
 	aiTestSingleStepUnit = null;
 	tacticalPlannerOptions = {maxDepth:5,beamWidth:16,maxMoveCandidates:10,maxJumpCandidates:10};
 
@@ -23,6 +24,7 @@ class AIControl
         this.traffic = new AITrafficController(this);
         this.detectedInvisibleUnits = new Map();
         this.threatSystem = new AIThreatSystem(this);
+        this.guardCoordinator = new AIGuardCoordinator(this);
     }
 
 	// Invisible units are known only after adjacent detection and remain remembered for a few future turns.
@@ -119,6 +121,7 @@ class AIControl
 		}
 		this.traffic.startTurn();
 		this.threatSystem.startTurn();
+		this.guardCoordinator.startTurn();
 		this.updateInvisibleMemory();
 		this.detectAdjacentInvisibleUnitsForPlayer();
 		this.availableUnits = [];
@@ -254,10 +257,8 @@ class AIControl
 
     isGoalAchieved(unit)
     {
-        if(unit.aiControl && unit.aiControl.order){
-            if(unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && unit.aiControl.mainTarget.died) return true;
-        }
-        return false;
+        const order=unit&&unit.aiControl?unit.aiControl.order:null,target=AIOrder.target(order);
+        return AIOrder.is(order,'intercept')&&target!=null&&target.died;
     }
 
     stepByPlan(unit)
@@ -274,10 +275,9 @@ class AIControl
         if(!unit.aiControl.plan){
             unit.aiControl.action = null;
             let state = GameState.createFrom(units, entities, wallsLayer); 
-            const order = {
-                type: "intercept",
-                targetId: unit.aiControl.mainTarget.id
-            };
+            const target=AIOrder.target(unit.aiControl.order);
+            if(target==null){this.pass();return;}
+            const order = {type:"intercept",targetId:target.id};
             //const { sequence, score } = planBestTurn(state, unit.id, order);
             const startTime = performance.now();
             const { sequence, score } = planBestTurnMCTS(state, unit.id, order, 1000);
@@ -393,14 +393,34 @@ class AIControl
         return true;
     }
 
+	usesStructuredOrders()
+	{
+		return true;
+	}
+
 	ensureUnitAIControl(unit)
 	{
-		if(!unit.aiControl)
+		if(!unit.aiControl)unit.aiControl={target:null,order:null};
+		const ai=unit.aiControl;
+		if(this.usesStructuredOrders()&&ai.order!=null&&typeof ai.order==='string')
 		{
-			unit.aiControl = {target: null};
+			ai.order=AIOrder.create(ai.order,ai.mainTarget||null,ai.mainTargetPos||null,{
+				state:{threatTurns:ai.threatTurns??null,aggression:ai.agression??null}
+			});
+			delete ai.mainTarget;delete ai.mainTargetPos;delete ai.threatTurns;delete ai.agression;
 		}
-		return unit.aiControl;
+		return ai;
 	}
+
+	getOrder(unitOrAI)
+	{
+		const ai=unitOrAI&&unitOrAI.aiControl?this.ensureUnitAIControl(unitOrAI):unitOrAI;
+		return ai?ai.order||null:null;
+	}
+
+	getOrderType(unitOrAI){return AIOrder.type(this.getOrder(unitOrAI));}
+	getOrderTarget(unitOrAI){return AIOrder.target(this.getOrder(unitOrAI));}
+	getOrderTargetPos(unitOrAI){return AIOrder.targetPos(this.getOrder(unitOrAI));}
 
 	getAITestOverride(unit)
 	{
@@ -410,8 +430,17 @@ class AIControl
 
 	getTacticalGoalFromState(unit,state)
 	{
-		if(state&&state.target&&!state.target.died)return[state.target.mapX,state.target.mapY];
-		if(state&&state.targetPos)return[state.targetPos[0],state.targetPos[1]];
+		const order=state?state.order:null,target=AIOrder.target(order),targetPos=AIOrder.targetPos(order);
+		if(target&&!target.died)
+		{
+			if(AIOrder.is(order,'guard'))
+			{
+				const assignment=this.guardCoordinator.ensureAssignment(unit,order);
+				if(assignment)return[assignment.x,assignment.y];
+			}
+			return[target.mapX,target.mapY];
+		}
+		if(targetPos)return[targetPos[0],targetPos[1]];
 		return[unit.mapX,unit.mapY];
 	}
 
@@ -425,62 +454,54 @@ class AIControl
 			return 70;
 		}
 		const testOverride=this.getAITestOverride(unit);
-		const order=testOverride ? testOverride.order : (unit.aiControl ? unit.aiControl.order : null);
-		if(order === 'intercept') return 80;
-		if(order === 'attack') return 60;
-		if(order === 'guard') return 10;
+		const order=testOverride ? testOverride.order : this.getOrder(unit);
+		const type=AIOrder.type(order);
+		if(order&&typeof order==='object'&&order.priority!=null)return order.priority;
+		if(type === 'intercept') return 80;
+		if(type === 'attack') return 60;
+		if(type === 'guard') return 10;
 		return 40;
 	}
 
 	getCurrentMainGoal(unit)
 	{
-		this.ensureUnitAIControl(unit);
-		if(unit.aiControl.mainTarget)
+		const ai=this.ensureUnitAIControl(unit),order=ai.order;
+		if(order==null)return null;
+		const type=AIOrder.type(order),target=AIOrder.target(order);
+		if(target!=null)
 		{
-			if(unit.aiControl.mainTarget.died || !this.isUnitKnown(unit.aiControl.mainTarget))
+			if(target.died||(type!=='guard'&&!this.isUnitKnown(target)))
 			{
-				this.setMainTarget(unit, null, null, null, null);
+				this.setMainTarget(unit,null,null,null,null);
 				return null;
 			}
-			return [unit.aiControl.mainTarget.mapX, unit.aiControl.mainTarget.mapY];
+			if(type==='guard')
+			{
+				const assignment=this.guardCoordinator.ensureAssignment(unit,order);
+				if(assignment!=null)return[assignment.x,assignment.y];
+			}
+			return[target.mapX,target.mapY];
 		}
-		if(unit.aiControl.mainTargetPos)
-		{
-			return [unit.aiControl.mainTargetPos[0], unit.aiControl.mainTargetPos[1]];
-		}
-		return null;
+		const targetPos=AIOrder.targetPos(order);
+		return targetPos?[targetPos[0],targetPos[1]]:null;
 	}
 
 	chooseNewMainGoal(unit)
 	{
-		let mainGoal = null;
-		if(unit.player.wizard && !unit.player.wizard.died)
+		let mainGoal=null;
+		if(unit.player.wizard&&!unit.player.wizard.died)
 		{
-			if(this.threats && this.threats.length > 0)
-			{
-				this.chooseTargetThreat(unit, this.threats);
-			}
-			if(unit.aiControl.mainTarget)
-			{
-				mainGoal = [unit.aiControl.mainTarget.mapX, unit.aiControl.mainTarget.mapY];
-			}
-			else
-			{
-				this.chooseGuardTarget(unit);
-				if(unit.aiControl.mainTarget)
-				{
-					mainGoal = [unit.aiControl.mainTarget.mapX, unit.aiControl.mainTarget.mapY];
-				}
-			}
+			if(this.threats&&this.threats.length>0)this.chooseTargetThreat(unit,this.threats);
+			if(this.getOrder(unit)==null)this.chooseGuardTarget(unit);
+			mainGoal=this.getCurrentMainGoal(unit);
 		}
 		else
 		{
-			let dmap = this.getDistanceMap(unit, unit.mapX, unit.mapY);
-			let trgtWiz = this.getNearestEnemyWizard(dmap, unit);
+			const dmap=this.getDistanceMap(unit,unit.mapX,unit.mapY),trgtWiz=this.getNearestEnemyWizard(dmap,unit);
 			if(trgtWiz)
 			{
-				this.setMainTarget(unit, trgtWiz, [trgtWiz.mapX, trgtWiz.mapY], "attack", 10);
-				mainGoal = [trgtWiz.mapX, trgtWiz.mapY];
+				this.setMainTarget(unit,trgtWiz,[trgtWiz.mapX,trgtWiz.mapY],'attack',10);
+				mainGoal=[trgtWiz.mapX,trgtWiz.mapY];
 			}
 		}
 		return mainGoal;
@@ -489,33 +510,26 @@ class AIControl
 	getMainGoal(unit)
 	{
 		this.ensureUnitAIControl(unit);
-		let mainGoal = this.getCurrentMainGoal(unit);
-		if(mainGoal == null)
-		{
-			mainGoal = this.chooseNewMainGoal(unit);
-		}
-		if(mainGoal == null)
-		{
-			mainGoal = [unit.mapX, unit.mapY];
-		}
-		return mainGoal;
+		let mainGoal=this.getCurrentMainGoal(unit);
+		if(mainGoal==null)mainGoal=this.chooseNewMainGoal(unit);
+		return mainGoal||[unit.mapX,unit.mapY];
 	}
 
     getTacticalProfile(unit, aiState = null)
     {
-        const ai = aiState || this.ensureUnitAIControl(unit);
-        if(ai.profile && ai.profile !== 'auto' && AI_TACTICAL_PROFILES[ai.profile]) return ai.profile;
-        if(ai.tacticalProfile && AI_TACTICAL_PROFILES[ai.tacticalProfile]) return ai.tacticalProfile;
-        if(ai.order === 'intercept')
+        const ai=aiState||this.ensureUnitAIControl(unit),order=ai.order||null,type=AIOrder.type(order);
+        const explicit=(order&&typeof order==='object'?order.profile:null)||(ai.profile&&ai.profile!=='auto'?ai.profile:null)||ai.tacticalProfile;
+        if(explicit&&explicit!=='auto'&&AI_TACTICAL_PROFILES[explicit])return explicit;
+        if(type==='intercept')
         {
-            const turns = ai.threatTurns;
-            if(turns != null && turns <= 1) return 'critical';
-            if(turns != null && turns <= 2) return 'aggressive';
-            if(turns != null && turns <= 3) return 'balanced';
-            return 'cautious';
+            const state=AIOrder.state(order),turns=state?state.threatTurns:null;
+            if(turns!=null&&turns<=1)return'critical';
+            if(turns!=null&&turns<=2)return'aggressive';
+            if(turns!=null&&turns<=3)return'balanced';
+            return'cautious';
         }
-        if(ai.order === 'guard') return 'cautious';
-        return 'balanced';
+        if(type==='guard')return'cautious';
+        return'balanced';
     }
 
     stepUnit(unit)
@@ -528,20 +542,20 @@ class AIControl
         const mainGoal=testOverride?this.getTacticalGoalFromState(unit,testOverride):this.getMainGoal(unit);
         const profile=this.getTacticalProfile(unit,tacticalState);
         const order=tacticalState.order||null;
-        const guardTarget=order==='guard' ? (testOverride ? testOverride.target : ai.mainTarget) : null;
-        const planner=new AITurnPlanner(this,unit,mainGoal,{...this.tacticalPlannerOptions,profile,order,guardTarget});
+        const orderType=AIOrder.type(order);
+        const planner=new AITurnPlanner(this,unit,mainGoal,{...this.tacticalPlannerOptions,profile,order});
         const result = planner.plan();
         const action = result.actions && result.actions.length ? result.actions[0] : null;
         const testTag=testOverride?' [TEST]':'';
 
         if(action == null)
         {
-            console.log(unit.config.name + ' ' + (order || 'none') + ' [' + profile + ']' + testTag + ' hold: no progressing tactical action');
+            console.log(unit.config.name + ' ' + (orderType || 'none') + ' [' + profile + ']' + testTag + ' hold: no progressing tactical action');
             this.pass();
             return;
         }
 
-        console.log(unit.config.name + ' ' + (order || 'none') + ' [' + profile + ']' + testTag + ' plan: ' + result.actions.map(a => a.label || a.type).join(' -> ') + ' score=' + result.score.toFixed(2));
+        console.log(unit.config.name + ' ' + (orderType || 'none') + ' [' + profile + ']' + testTag + ' plan: ' + result.actions.map(a => a.label || a.type).join(' -> ') + ' score=' + result.score.toFixed(2));
         this.executeTacticalAction(unit,action);
     }
 
@@ -1230,7 +1244,7 @@ class AIControl
                 unitAI.plan = null;
                 unitAI.action = null;
             }
-            if(unitAI.order == "attack" && unitAI.mainTarget != null && !unitAI.mainTarget.died && this.isUnitKnown(unitAI.mainTarget)) continue;
+            if(AIOrder.is(unitAI.order,"attack")&&AIOrder.target(unitAI.order)!=null&&!AIOrder.target(unitAI.order).died&&this.isUnitKnown(AIOrder.target(unitAI.order)))continue;
             this.setMainTarget(unit,null,null,null,null);
         }
         if(wizard && !wizard.died){
@@ -1297,7 +1311,7 @@ class AIControl
             this.assignTargets(threats,midTurn);
             this.assignTargets(distantThreats,midTurn);
             //choose targets for units which doesn't have main target
-            let freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.ensureUnitAIControl(unt).mainTarget == null && (!midTurn || this.canStillAct(unt)));
+            let freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.getOrder(unt)==null && (!midTurn || this.canStillAct(unt)));
             let sumStrength = 0;
             for(const unit of freeunits) sumStrength += AICombatValue.unitValue(unit);
             console.log("Attack strength: " + sumStrength);
@@ -1339,14 +1353,14 @@ class AIControl
                         for(const unit of freeunits) this.setMainTarget(unit,targetVictim.wizard,[targetVictim.wizard.mapX,targetVictim.wizard.mapY],"attack",10);
                     }
                     //update list of units which don't have main target
-                    freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.ensureUnitAIControl(unt).mainTarget == null && (!midTurn || this.canStillAct(unt)));
+                    freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.getOrder(unt)==null && (!midTurn || this.canStillAct(unt)));
                 }
             }
             //If there are units left that do not have a main goal, assign them to wizard guard duty or defense
             if(freeunits.length > 0){
                 for(const unit of freeunits){
                     if(this.threats.length > 0) this.chooseTargetThreat(unit,this.threats);
-                    if(unit.aiControl.mainTarget == null) this.chooseGuardTarget(unit);
+                    if(this.getOrder(unit)==null)this.chooseGuardTarget(unit);
                 }
             }
         }
@@ -1359,6 +1373,7 @@ class AIControl
                 if(trgtWiz)this.setMainTarget(unit,trgtWiz,[trgtWiz.mapX,trgtWiz.mapY],"attack",10);
             }
         }
+        if(!midTurn)this.guardCoordinator.prepareTurnAssignments();
     }
   
     /*
@@ -1413,7 +1428,7 @@ class AIControl
                 totalStrength += AICombatValue.unitValue(attacker.unit);
                 attacker.assigned = true;
                 this.setMainTarget(attacker.unit,threat.enemy,[threat.enemy.mapX,threat.enemy.mapY],"intercept",10);
-                attacker.unit.aiControl.threatTurns = threat.turns;
+                AIOrder.state(attacker.unit.aiControl.order).threatTurns=threat.turns;
                 console.log("    - " + attacker.unit.config.name + " target: " + threat.enemy.config.name);
                 if (totalStrength >= enemyStr) break;
             }          
@@ -1445,7 +1460,7 @@ class AIControl
             .filter(unt => !unt.assigned)
             .map(unt => {
                 let target = null;
-                if(unt.unit.aiControl && unt.unit.aiControl.order && unt.unit.aiControl.order == "attack" && unt.unit.aiControl.mainTarget != null && !unt.unit.aiControl.mainTarget.died && this.isUnitKnown(unt.unit.aiControl.mainTarget)) target = unt.unit.aiControl.mainTarget;
+                if(unt.unit.aiControl&&AIOrder.is(unt.unit.aiControl.order,"attack")){const orderTarget=AIOrder.target(unt.unit.aiControl.order);if(orderTarget!=null&&!orderTarget.died&&this.isUnitKnown(orderTarget))target=orderTarget;}
                 let x = {
                 attacker: unt,  
                 distanceToEnemy: this.getBaseCost(unt.dmap,threat.enemy.mapX,threat.enemy.mapY) - unt.dmap[unt.unit.mapY][unt.unit.mapX],
@@ -1471,7 +1486,7 @@ class AIControl
                 totalStrength += AICombatValue.unitValue(attacker.unit);
                 attacker.assigned = true;
                 this.setMainTarget(attacker.unit,threat.enemy,[threat.enemy.mapX,threat.enemy.mapY],"intercept",10);
-                attacker.unit.aiControl.threatTurns = threat.turns;
+                AIOrder.state(attacker.unit.aiControl.order).threatTurns=threat.turns;
                 console.log("    - " + attacker.unit.config.name + " target: " + threat.enemy.config.name);
                 if (totalStrength >= enemyStr) break;
             }          
@@ -1493,22 +1508,33 @@ class AIControl
                     bestThreat = threat;
                 }
             }
-            if(bestThreat != null){this.setMainTarget(unit,bestThreat.enemy,[bestThreat.enemy.mapX,bestThreat.enemy.mapY],"intercept",10);unit.aiControl.threatTurns=bestThreat.turns;}
+            if(bestThreat!=null){this.setMainTarget(unit,bestThreat.enemy,[bestThreat.enemy.mapX,bestThreat.enemy.mapY],"intercept",10);AIOrder.state(unit.aiControl.order).threatTurns=bestThreat.turns;}
             else this.setMainTarget(unit,null,null,null,null);
         }
     }
   
     setMainTarget(unit,target,targetPos,order,agression)
     {
-        if(!unit.aiControl)
+        const ai=this.ensureUnitAIControl(unit);
+        if(!this.usesStructuredOrders())
         {
-            unit.aiControl = {mainTarget: null, order: null, agression: 2};
+            ai.mainTarget=target;
+            ai.mainTargetPos=targetPos;
+            ai.order=order;
+            ai.agression=agression;
+            if(order!=="intercept")ai.threatTurns=null;
+            return;
         }
-        unit.aiControl.mainTarget = target;
-        unit.aiControl.mainTargetPos = targetPos;
-        unit.aiControl.order = order;
-        unit.aiControl.agression = agression;
-        if(order !== "intercept") unit.aiControl.threatTurns = null;
+        if(order==null)
+        {
+            ai.order=null;
+            return;
+        }
+        const old=ai.order,keepState=AIOrder.is(old,order)&&AIOrder.target(old)===target&&typeof old==='object'?old.state:{};
+        ai.order=AIOrder.create(order,target,targetPos,{state:keepState||{}});
+        ai.order.state.aggression=agression;
+        if(order!=="intercept")delete ai.order.state.threatTurns;
     }
+
   
 }
