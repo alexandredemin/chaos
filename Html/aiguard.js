@@ -9,6 +9,7 @@ const AI_GUARD_CONFIG = Object.freeze({
 	interceptHalfWidth: 1.5,
 	interceptMaxDistance: 16,
 	shieldBonus: 2,
+	jumpShieldBonus: 2,
 	congestionPenalty: .35,
 	anchorTolerance: 0,
 	slotPoolMultiplier: 2,
@@ -32,6 +33,8 @@ class AIGuardEvaluator
 		this.ringCells=[];
 		this.interceptLines=[];
 		this.shieldCells=new Set();
+		this.jumpShieldMap=new Map();
+		this.breakdownCache=new Map();
 		this.congestionMap=new Map();
 		if(!this.active)return;
 
@@ -76,17 +79,45 @@ class AIGuardEvaluator
 				if(urgency>0)this.interceptLines.push({ex,ey,vx,vy,len2,urgency});
 			}
 
-			const fire=this.ai.threatSystem.getAbility(enemy,'fire');
-			if(fire==null)continue;
-			const range=fire.config?fire.config.range||0:0,r2=range*range;
 			const threatCache=this.ai.threatSystem.getEnemyCache(enemy);
-			const origins=threatCache&&threatCache.fireOrigins&&threatCache.fireOrigins.length?threatCache.fireOrigins:[{x:ex,y:ey}];
-			for(const origin of origins)
+			const fire=this.ai.threatSystem.getAbility(enemy,'fire');
+			if(fire!=null)
 			{
-				const fx=target.mapX-origin.x,fy=target.mapY-origin.y;
-				if(fx*fx+fy*fy>r2)continue;
-				if(!checkLineOfSight(origin.x,origin.y,target.mapX,target.mapY,null,null,function(){return true;}))continue;
-				this.addLineCells(origin.x,origin.y,target.mapX,target.mapY,this.shieldCells);
+				const range=fire.config?fire.config.range||0:0,r2=range*range;
+				const origins=threatCache&&threatCache.fireOrigins&&threatCache.fireOrigins.length?threatCache.fireOrigins:[{x:ex,y:ey}];
+				for(const origin of origins)
+				{
+					const fx=target.mapX-origin.x,fy=target.mapY-origin.y;
+					if(fx*fx+fy*fy>r2)continue;
+					if(!checkLineOfSight(origin.x,origin.y,target.mapX,target.mapY,null,null,function(){return true;}))continue;
+					this.addLineCells(origin.x,origin.y,target.mapX,target.mapY,this.shieldCells);
+				}
+			}
+
+			// Jump is a ranged LOS threat too: a guard on the line can prevent a suicide jump
+			// onto the guarded unit. Project every legal MOVE -> JUMP origin with AP remaining.
+			const jump=this.ai.threatSystem.getAbility(enemy,'jump');
+			if(jump!=null)
+			{
+				const range=jump.config?jump.config.range||0:0,r2=range*range;
+				const origins=threatCache&&threatCache.jumpOrigins&&threatCache.jumpOrigins.length?threatCache.jumpOrigins:[{x:ex,y:ey}];
+				const counts=new Map();let threatOrigins=0;
+				for(const origin of origins)
+				{
+					const jx=target.mapX-origin.x,jy=target.mapY-origin.y;
+					if((jx===0&&jy===0)||jx*jx+jy*jy>r2)continue;
+					if(!checkLineOfSight(origin.x,origin.y,target.mapX,target.mapY,null,null,function(){return true;}))continue;
+					threatOrigins++;
+					this.addWeightedLineCells(origin.x,origin.y,target.mapX,target.mapY,counts);
+				}
+				if(threatOrigins>0)
+				{
+					for(const [key,count] of counts)
+					{
+						const factor=threatOrigins<=1?1:.5+.5*(count-1)/(threatOrigins-1);
+						this.jumpShieldMap.set(key,(this.jumpShieldMap.get(key)||0)+cfg.jumpShieldBonus*factor);
+					}
+				}
 			}
 		}
 	}
@@ -102,6 +133,18 @@ class AIGuardEvaluator
 			if((px===x1&&py===y1)||(px===x2&&py===y2))continue;
 			out.add(this.key(px,py));
 		}
+	}
+
+	addWeightedLineCells(x1,y1,x2,y2,out)
+	{
+		const cells=new Set();
+		this.addLineCells(x1,y1,x2,y2,cells);
+		for(const key of cells)out.set(key,(out.get(key)||0)+1);
+	}
+
+	getJumpShieldScore(x,y)
+	{
+		return this.jumpShieldMap.get(this.key(x,y))||0;
 	}
 
 	// One frozen friendly-density field for the whole formation.
@@ -133,19 +176,27 @@ class AIGuardEvaluator
 		return best;
 	}
 
-	scoreAt(x,y)
+	getScoreBreakdown(x,y)
 	{
-		if(!this.active)return-Infinity;
+		if(!this.active)return{score:-Infinity,proximity:0,intercept:0,fireShield:0,jumpShield:0,congestion:0};
 		const key=this.key(x,y);
-		if(this.scoreCache.has(key))return this.scoreCache.get(key);
+		if(this.breakdownCache.has(key))return this.breakdownCache.get(key);
 		const dx=x-this.target.mapX,dy=y-this.target.mapY,r=Math.sqrt(dx*dx+dy*dy);
 		const proximity=this.config.proximityBase-Math.abs(r-this.config.idealRadius)*this.config.proximityFalloff;
 		const intercept=this.getInterceptionScore(x,y);
-		const shield=this.shieldCells.has(key)?this.config.shieldBonus:0;
+		const fireShield=this.shieldCells.has(key)?this.config.shieldBonus:0;
+		const jumpShield=this.getJumpShieldScore(x,y);
 		const congestion=this.congestionMap.get(key)||0;
-		const score=proximity+intercept+shield-congestion;
+		const score=proximity+intercept+fireShield+jumpShield-congestion;
+		const result={score,proximity,intercept,fireShield,jumpShield,congestion};
+		this.breakdownCache.set(key,result);
 		this.scoreCache.set(key,score);
-		return score;
+		return result;
+	}
+
+	scoreAt(x,y)
+	{
+		return this.getScoreBreakdown(x,y).score;
 	}
 
 	getCandidates(guards=[])
@@ -382,7 +433,8 @@ class AIGuardCoordinator
 
 	storeAssignment(group,unit,option)
 	{
-		const assignment={x:option.slot.x,y:option.slot.y,score:option.slot.score,travelCost:option.distance,utility:option.utility,epoch:group.epoch,turnStamp:group.turnStamp,anchorX:group.anchorX,anchorY:group.anchorY};
+		const components=group.evaluator.getScoreBreakdown(option.slot.x,option.slot.y);
+		const assignment={x:option.slot.x,y:option.slot.y,score:option.slot.score,travelCost:option.distance,utility:option.utility,epoch:group.epoch,turnStamp:group.turnStamp,anchorX:group.anchorX,anchorY:group.anchorY,components:{...components}};
 		group.assignments.set(unit,assignment);
 		const order=this.getEffectiveOrder(unit);
 		if(AIOrder.is(order,'guard'))AIOrder.state(order).assignment={...assignment};
@@ -390,7 +442,8 @@ class AIGuardCoordinator
 
 	storeFallbackAssignment(group,unit)
 	{
-		const assignment={x:unit.mapX,y:unit.mapY,score:group.evaluator.scoreAt(unit.mapX,unit.mapY),travelCost:0,utility:0,epoch:group.epoch,turnStamp:group.turnStamp,anchorX:group.anchorX,anchorY:group.anchorY,fallback:true};
+		const components=group.evaluator.getScoreBreakdown(unit.mapX,unit.mapY);
+		const assignment={x:unit.mapX,y:unit.mapY,score:components.score,travelCost:0,utility:0,epoch:group.epoch,turnStamp:group.turnStamp,anchorX:group.anchorX,anchorY:group.anchorY,components:{...components},fallback:true};
 		group.assignments.set(unit,assignment);
 		const order=this.getEffectiveOrder(unit);
 		if(AIOrder.is(order,'guard'))AIOrder.state(order).assignment={...assignment};

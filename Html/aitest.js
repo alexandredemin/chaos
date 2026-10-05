@@ -436,8 +436,16 @@ const AITest = {
 		const labels=plan.result.actions&&plan.result.actions.length?plan.result.actions.map(a=>a.label||a.type).join(' -> '):'HOLD';
 		const goal=plan.goal?' goal='+plan.goal[0]+','+plan.goal[1]:'';
 		const assignment=AIOrder.is(plan.state.order,'guard')?AIOrder.state(plan.state.order).assignment:null;
-		const slot=assignment?' slot='+assignment.x+','+assignment.y+' guardScore='+Number(assignment.score||0).toFixed(2)+' epoch='+assignment.epoch+' turn='+String(assignment.turnStamp??'?'):'';
-		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']'+goal+slot+'\n'+labels+'\nscore='+plan.result.score.toFixed(2);
+		let slot='';
+		if(assignment)
+		{
+			slot=' slot='+assignment.x+','+assignment.y+' guardScore='+Number(assignment.score||0).toFixed(2)+' epoch='+assignment.epoch+' turn='+String(assignment.turnStamp??'?');
+			const c=assignment.components;
+			if(c)slot+=' guardParts[p='+Number(c.proximity||0).toFixed(2)+' i='+Number(c.intercept||0).toFixed(2)+' f='+Number(c.fireShield||0).toFixed(2)+' j='+Number(c.jumpShield||0).toFixed(2)+' c='+Number(c.congestion||0).toFixed(2)+']';
+		}
+		const f=plan.unit.features||{};
+		const resources=' pos='+plan.unit.mapX+','+plan.unit.mapY+' M='+Number(f.move||0)+' AP='+Number(f.abilityPoints||0)+' Atk='+Number(f.attackPoints||0);
+		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']'+resources+goal+slot+'\n'+labels+'\nscore='+plan.result.score.toFixed(2);
 	},
 
 	planOnly()
