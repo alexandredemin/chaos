@@ -307,6 +307,7 @@ const AITest = {
 			['fireShield','Fire shield'],
 			['jumpShield','Jump shield'],
 			['congestion','Congestion penalty'],
+			['goalDistance','Guard path distance'],
 			['danger','Tactical danger total'],
 			['dangerMelee','Danger: melee'],
 			['dangerFire','Danger: fire'],
@@ -428,7 +429,7 @@ const AITest = {
 
 	guardOverlayLabel(mode=this.guardOverlayMode)
 	{
-		const labels={score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
+		const labels={score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
 		return labels[mode]||'Off';
 	},
 
@@ -461,7 +462,9 @@ const AITest = {
 		if(coordinator==null)return null;
 		const data=coordinator.getGroupFor(unit,order);
 		if(data==null||data.group==null||data.group.evaluator==null)return null;
-		return{unit,state,order,coordinator,group:data.group,evaluator:data.group.evaluator,assignment:data.assignment,scene:unit.scene};
+		const assignment=data.assignment;
+		const goalMap=assignment?unit.player.aiControl.getDistanceMap(unit,assignment.x,assignment.y):null;
+		return{unit,state,order,coordinator,group:data.group,evaluator:data.group.evaluator,assignment,goalMap,scene:unit.scene};
 	},
 
 	getGuardOverlayValue(ctx,x,y)
@@ -473,6 +476,7 @@ const AITest = {
 		if(mode==='fireShield')return b.fireShield;
 		if(mode==='jumpShield')return b.jumpShield;
 		if(mode==='congestion')return -b.congestion;
+		if(mode==='goalDistance')return ctx.goalMap&&ctx.goalMap[y]?ctx.goalMap[y][x]:-1;
 		if(mode.startsWith('danger'))
 		{
 			const d=ctx.unit.player.aiControl.threatSystem.getDangerBreakdown(ctx.unit,x,y);
@@ -539,7 +543,7 @@ const AITest = {
 		const ai=unit.player.aiControl,profile=this.resolveProfile(unit,state),order=state.order||null;
 		const planner=new AITurnPlanner(ai,unit,goal,{...ai.tacticalPlannerOptions,profile,order});
 		const result=planner.plan();
-		return{unit,state,goal,profile,result};
+		return{unit,state,goal,profile,result,planner};
 	},
 
 	formatPlan(plan)
@@ -557,7 +561,17 @@ const AITest = {
 		}
 		const f=plan.unit.features||{};
 		const resources=' pos='+plan.unit.mapX+','+plan.unit.mapY+' M='+Number(f.move||0)+' AP='+Number(f.abilityPoints||0)+' Atk='+Number(f.attackPoints||0);
-		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']'+resources+goal+slot+'\n'+labels+'\nscore='+plan.result.score.toFixed(2);
+		let nav='';
+		if(AIOrder.is(plan.state.order,'guard')&&plan.planner)
+		{
+			const d0=plan.planner.rootGoalDistance,first=plan.result.actions&&plan.result.actions.length?plan.result.actions[0]:null;
+			let d1=d0;
+			if(first&&first.type==='move'&&first.to&&plan.planner.goalMap[first.to[1]])d1=plan.planner.goalMap[first.to[1]][first.to[0]];
+			nav=' guardNav[d='+d0;
+			if(first&&first.type==='move')nav+=' next='+d1+' progress='+(d0>=0&&d1>=0?(d0-d1):'?');
+			nav+=']';
+		}
+		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']'+resources+goal+slot+nav+'\n'+labels+'\nscore='+plan.result.score.toFixed(2);
 	},
 
 	planOnly()

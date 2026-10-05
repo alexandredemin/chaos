@@ -157,7 +157,29 @@ class AIMoveActionProvider extends AITurnActionProvider
 	getActions(state,ctx)
 	{
 		if(state.lastAction==='move'||state.move<=0)return[];
-		return ctx.moveCandidates.map(c=>({type:'move',to:[c.x,c.y],cost:c.dist,sources:c.sources,label:'MOVE('+c.x+','+c.y+')'})).filter(a=>a.cost>0&&a.cost<=state.move);
+		if(this.planner.orderType!=='guard')
+			return ctx.moveCandidates.map(c=>({type:'move',to:[c.x,c.y],cost:c.dist,sources:c.sources,label:'MOVE('+c.x+','+c.y+')'})).filter(a=>a.cost>0&&a.cost<=state.move);
+
+		// GUARD replans after every physical step. Convert each macro candidate into the
+		// exact adjacent cell runtime will execute, then score that real state.
+		const byStep=new Map();
+		for(const c of ctx.moveCandidates)
+		{
+			const step=this.planner.ai.getOptimalStep(ctx.matrices.dmap,[c.x,c.y],[state.x,state.y]);
+			if(step==null||(step[0]===state.x&&step[1]===state.y))continue;
+			const k=step[0]+':'+step[1];
+			let a=byStep.get(k);
+			if(a==null)
+			{
+				const stepPlace=ctx.adapter.placeAt(ctx.matrices,step[0],step[1]);
+				const cost=stepPlace?Math.max(1,Math.min(state.move,stepPlace.dist)):1;
+				a={type:'move',to:[step[0],step[1]],cost,sources:[],macroTargets:[],label:'MOVE('+step[0]+','+step[1]+')'};
+				byStep.set(k,a);
+			}
+			for(const source of c.sources||[])if(!a.sources.includes(source))a.sources.push(source);
+			a.macroTargets.push([c.x,c.y]);
+		}
+		return[...byStep.values()];
 	}
 }
 
@@ -333,7 +355,7 @@ class AITurnPlanner
 		this.adapter=new AIPlannerMatrixAdapter(this);
 		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
 		this.matrixCache=new Map();this._terminalPositionScore=null;
-		this.goalMap=this.orderType==='guard'?this.ai.getDistanceMap(unit,goal[0],goal[1],null,function(){return true;}):this.ai.getDistanceMap(unit,goal[0],goal[1]);
+		this.goalMap=this.ai.getDistanceMap(unit,goal[0],goal[1]);
 		this.rootGoalDistance=this.goalMap&&this.goalMap[unit.mapY]&&this.goalMap[unit.mapY][unit.mapX]!=null?this.goalMap[unit.mapY][unit.mapX]:-1;
 	}
 
@@ -413,9 +435,9 @@ class AITurnPlanner
 	{
 		if(this.orderType!=='guard'||state==null||!state.actions||state.actions.length===0)return true;
 		if(state.actionScore>AI_MATRIX_EPS)return true;
-		// A guard may hold or move sideways, but should not abandon its globally assigned
-		// defensive slot merely because a farther cell has lower immediate danger.
-		return this.goalProgressAt(state.x,state.y)>=-AI_MATRIX_EPS;
+		// Pure GUARD movement must make real path progress toward the assigned slot.
+		// Sideways/retreat moves are allowed only as part of a useful combat sequence.
+		return this.goalProgressAt(state.x,state.y)>AI_MATRIX_EPS;
 	}
 
 	isProgressState(state)

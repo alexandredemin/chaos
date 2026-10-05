@@ -1029,7 +1029,7 @@ class AIControl
                         let wallTile = wallsLayer.getTileAt(xx,yy);
                         if(wallTile != null && wallTile.properties['collides'] === true) continue;
                         let unt = getUnitAtMap(xx,yy,unit.player);
-                        if(unt != null && unt.died == false)
+                        if(unt != null && unt !== unit && unt.died == false)
                         {
                             if(onUnit)
                             {
