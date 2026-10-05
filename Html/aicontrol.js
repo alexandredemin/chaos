@@ -121,7 +121,7 @@ class AIControl
 		}
 		this.traffic.startTurn();
 		this.threatSystem.startTurn();
-		this.guardCoordinator.startTurn();
+		this.guardCoordinator.startTurn(this.guardCoordinator.getGameTurnStamp());
 		this.updateInvisibleMemory();
 		this.detectAdjacentInvisibleUnitsForPlayer();
 		this.availableUnits = [];

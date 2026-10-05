@@ -171,9 +171,38 @@ class AIGuardCoordinator
 		this.config=config;
 		this.groups=new Map();
 		this.epoch=0;
+		this.turnStamp=null;
 	}
 
-	startTurn()
+	getGameTurnStamp()
+	{
+		if(typeof ScenarioEvents!=='undefined')
+		{
+			const round=ScenarioEvents.roundIndex??0,active=ScenarioEvents.activeTurnPlayerInd;
+			return round+':'+(active==null?'none':active);
+		}
+		if(typeof playerInd!=='undefined')return 'p:'+playerInd;
+		return null;
+	}
+
+	startTurn(stamp=this.getGameTurnStamp())
+	{
+		this.epoch++;
+		this.groups.clear();
+		this.turnStamp=stamp;
+	}
+
+	// AITest bypasses AIControl.startTurn(). Sync against the real game-turn token so
+	// a new F6/F7 planning session in a later turn gets a fresh global GuardScore field.
+	syncTurn()
+	{
+		const stamp=this.getGameTurnStamp();
+		if(stamp==null||stamp===this.turnStamp)return false;
+		this.startTurn(stamp);
+		return true;
+	}
+
+	invalidate()
 	{
 		this.epoch++;
 		this.groups.clear();
@@ -190,6 +219,7 @@ class AIGuardCoordinator
 
 	prepareTurnAssignments()
 	{
+		this.syncTurn();
 		const targets=new Set();
 		for(const unit of this.ai.player.units)
 		{
@@ -217,6 +247,7 @@ class AIGuardCoordinator
 
 	ensureAssignment(unit,order)
 	{
+		this.syncTurn();
 		if(unit==null||order==null||!AIOrder.is(order,'guard'))return null;
 		const target=AIOrder.target(order);
 		if(target==null||target.died)return null;
@@ -249,7 +280,7 @@ class AIGuardCoordinator
 	{
 		const guards=this.getGuardUnits(target),evaluator=new AIGuardEvaluator(this.ai,target,this.config);
 		const candidates=evaluator.getCandidates(guards),slots=this.selectDiverseSlots(candidates,guards.length);
-		const group={target,anchorX:target.mapX,anchorY:target.mapY,evaluator,slots,assignments:new Map(),epoch:this.epoch};
+		const group={target,anchorX:target.mapX,anchorY:target.mapY,evaluator,slots,assignments:new Map(),epoch:this.epoch,turnStamp:this.turnStamp};
 		this.assignGuards(group,guards);
 		this.groups.set(target,group);
 		return group;
@@ -351,7 +382,7 @@ class AIGuardCoordinator
 
 	storeAssignment(group,unit,option)
 	{
-		const assignment={x:option.slot.x,y:option.slot.y,score:option.slot.score,travelCost:option.distance,utility:option.utility,epoch:group.epoch,anchorX:group.anchorX,anchorY:group.anchorY};
+		const assignment={x:option.slot.x,y:option.slot.y,score:option.slot.score,travelCost:option.distance,utility:option.utility,epoch:group.epoch,turnStamp:group.turnStamp,anchorX:group.anchorX,anchorY:group.anchorY};
 		group.assignments.set(unit,assignment);
 		const order=this.getEffectiveOrder(unit);
 		if(AIOrder.is(order,'guard'))AIOrder.state(order).assignment={...assignment};
@@ -359,7 +390,7 @@ class AIGuardCoordinator
 
 	storeFallbackAssignment(group,unit)
 	{
-		const assignment={x:unit.mapX,y:unit.mapY,score:group.evaluator.scoreAt(unit.mapX,unit.mapY),travelCost:0,utility:0,epoch:group.epoch,anchorX:group.anchorX,anchorY:group.anchorY,fallback:true};
+		const assignment={x:unit.mapX,y:unit.mapY,score:group.evaluator.scoreAt(unit.mapX,unit.mapY),travelCost:0,utility:0,epoch:group.epoch,turnStamp:group.turnStamp,anchorX:group.anchorX,anchorY:group.anchorY,fallback:true};
 		group.assignments.set(unit,assignment);
 		const order=this.getEffectiveOrder(unit);
 		if(AIOrder.is(order,'guard'))AIOrder.state(order).assignment={...assignment};

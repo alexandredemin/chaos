@@ -311,6 +311,7 @@ const AITest = {
 		const ai=unit.player.aiControl.ensureUnitAIControl(unit);
 		const order=this.draft.order?AIOrder.create(this.draft.order,this.draft.target||null,this.draft.targetPos,{profile:this.draft.profile||'auto',state:{threatTurns:this.draft.threatTurns??null}}):null;
 		ai.aiTestOverride={enabled:true,order};
+		if(unit.player&&unit.player.aiControl&&unit.player.aiControl.guardCoordinator)unit.player.aiControl.guardCoordinator.invalidate();
 		this.lastPlan=null;
 		this.updateStatus('override applied');
 		this.renderMenu();
@@ -327,6 +328,7 @@ const AITest = {
 	clearOverride(render=true)
 	{
 		if(this.debugUnit && this.debugUnit.aiControl) delete this.debugUnit.aiControl.aiTestOverride;
+		if(this.debugUnit&&this.debugUnit.player&&this.debugUnit.player.aiControl&&this.debugUnit.player.aiControl.guardCoordinator)this.debugUnit.player.aiControl.guardCoordinator.invalidate();
 		this.lastPlan=null;
 		if(this.debugUnit)this.draft=this.makeDraft(this.debugUnit);
 		this.updateStatus('test override cleared');
@@ -434,7 +436,7 @@ const AITest = {
 		const labels=plan.result.actions&&plan.result.actions.length?plan.result.actions.map(a=>a.label||a.type).join(' -> '):'HOLD';
 		const goal=plan.goal?' goal='+plan.goal[0]+','+plan.goal[1]:'';
 		const assignment=AIOrder.is(plan.state.order,'guard')?AIOrder.state(plan.state.order).assignment:null;
-		const slot=assignment?' slot='+assignment.x+','+assignment.y+' guardScore='+Number(assignment.score||0).toFixed(2):'';
+		const slot=assignment?' slot='+assignment.x+','+assignment.y+' guardScore='+Number(assignment.score||0).toFixed(2)+' epoch='+assignment.epoch+' turn='+String(assignment.turnStamp??'?'):'';
 		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']'+goal+slot+'\n'+labels+'\nscore='+plan.result.score.toFixed(2);
 	},
 
