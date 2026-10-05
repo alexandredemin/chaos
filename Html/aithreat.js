@@ -74,6 +74,7 @@ class AIThreatSystem
 		{
 			c.fireMasks = new Map();
 			c.jumpMasks = new Map();
+			c.dangerMaps = new Map();
 		}
 	}
 
@@ -114,36 +115,59 @@ class AIThreatSystem
 
 	getDangerBreakdown(target,x,y)
 	{
-		const result = {melee:0,fire:0,gas:0,jump:0,total:0};
-		if(target == null || x < 0 || y < 0 || x >= map.width || y >= map.height) return result;
-		const idx = y * map.width + x;
+		const result={melee:0,fire:0,gas:0,jump:0,total:0};
+		if(target==null||x<0||y<0||x>=map.width||y>=map.height)return result;
 		for(const enemy of units)
 		{
-			if(!this.isKnownEnemy(enemy) || !this.canBroadReach(enemy,x,y)) continue;
-			const c = this.getEnemyCache(enemy);
-			if(c == null) continue;
-
-			const melee = c.meleeMask[idx] ? AICombatValue.expectedDamageValue(target,enemy.features.strength || 1) : 0;
-			let fire = 0, gas = 0, jump = 0;
-			if(c.fireAbility)
-			{
-				const factor = this.getFireCoverage(c,enemy,target)[idx] || 0;
-				if(factor > 0) fire = factor * AICombatValue.expectedDamageValue(target,c.fireAbility.config.damage || 1);
-			}
-			if(c.gasAbility && !target.features.gasImmunity && c.gasMask[idx])
-				gas = AICombatValue.expectedDamageValue(target,c.gasAbility.config.damage || 1);
-			if(c.jumpAbility && this.getJumpMask(c,enemy,target)[idx])
-				jump = AICombatValue.expectedDamageValue(target,c.jumpAbility.config.damage || 1);
-
-			// Basic attack uses move/attack points; AP abilities compete for the same AP in current units.
-			const abilityDanger = Math.max(fire,gas,jump);
-			result.melee += melee;
-			result.fire += fire;
-			result.gas += gas;
-			result.jump += jump;
-			result.total += melee + abilityDanger;
+			if(!this.isKnownEnemy(enemy)||!this.canBroadReach(enemy,x,y))continue;
+			const c=this.getEnemyCache(enemy);if(c==null)continue;
+			const d=this.getEnemyDangerAt(c,enemy,target,x,y);
+			result.melee+=d.melee;result.fire+=d.fire;result.gas+=d.gas;result.jump+=d.jump;result.total+=d.total;
 		}
 		return result;
+	}
+
+	// Calculate one enemy's best compatible one-turn threat from a single resource state.
+	// This avoids adding melee from one route to Jump/Fire/Gas from a different route.
+	getEnemyDangerAt(c,enemy,target,x,y)
+	{
+		const cur=typeof target.getCurrentFeatures==='function'?target.getCurrentFeatures():target.features||{};
+		const targetKey=(target.id!=null?target.id:target.config.name)+'|'+this.dynamicRevision+'|'+(target.features.health??0)+'|'+(cur.defense??0);
+		let cache=c.dangerMaps.get(targetKey);
+		if(cache==null)
+		{
+			const size=map.width*map.height;
+			cache={done:new Uint8Array(size),melee:new Float32Array(size),fire:new Float32Array(size),gas:new Float32Array(size),jump:new Float32Array(size),total:new Float32Array(size)};
+			c.dangerMaps.set(targetKey,cache);
+		}
+		const idx=y*map.width+x;
+		if(cache.done[idx])return{melee:cache.melee[idx],fire:cache.fire[idx],gas:cache.gas[idx],jump:cache.jump[idx],total:cache.total[idx]};
+
+		const base=enemy.config&&enemy.config.features?enemy.config.features:enemy.features||{};
+		const meleeValue=(base.attackPoints||0)>0?AICombatValue.expectedDamageValue(target,enemy.features.strength||1):0;
+		const fireValue=c.fireAbility?AICombatValue.expectedDamageValue(target,c.fireAbility.config.damage||1):0;
+		const gasValue=c.gasAbility&&!target.features.gasImmunity?AICombatValue.expectedDamageValue(target,c.gasAbility.config.damage||1):0;
+		const jumpValue=c.jumpAbility?AICombatValue.expectedDamageValue(target,c.jumpAbility.config.damage||1):0;
+		const fireFactor=c.fireAbility?(this.getFireCoverage(c,enemy,target)[idx]||0):0;
+		let bestMelee=0,bestFire=0,bestGas=0,bestJump=0,bestTotal=0;
+
+		for(const state of c.states)
+		{
+			const dx=x-state.x,dy=y-state.y,adx=Math.abs(dx),ady=Math.abs(dy),d2=dx*dx+dy*dy;
+			const melee=(meleeValue>0&&state.move>0&&(adx>0||ady>0)&&adx<=1&&ady<=1)?meleeValue:0;
+			let fire=0,gas=0,jump=0;
+			if(state.ap>0)
+			{
+				if(c.fireAbility&&d2<=(c.fireAbility.config.range||0)**2&&checkLineOfSight(state.x,state.y,x,y,null,null,u=>(u===target||u===enemy)?true:false))fire=fireValue*fireFactor;
+				if(c.gasAbility&&d2<=(c.gasAbility.config.range||0)**2)gas=gasValue;
+				if(c.jumpAbility&&(dx!==0||dy!==0)&&d2<=(c.jumpAbility.config.range||0)**2&&checkLineOfSight(state.x,state.y,x,y,null,null,u=>(u===target||u===enemy)?true:false))jump=jumpValue;
+			}
+			bestMelee=Math.max(bestMelee,melee);bestFire=Math.max(bestFire,fire);bestGas=Math.max(bestGas,gas);bestJump=Math.max(bestJump,jump);
+			bestTotal=Math.max(bestTotal,melee+Math.max(fire,gas,jump));
+		}
+
+		cache.done[idx]=1;cache.melee[idx]=bestMelee;cache.fire[idx]=bestFire;cache.gas[idx]=bestGas;cache.jump[idx]=bestJump;cache.total[idx]=bestTotal;
+		return{melee:bestMelee,fire:bestFire,gas:bestGas,jump:bestJump,total:bestTotal};
 	}
 
 	getEnemyCache(enemy)
@@ -177,7 +201,8 @@ class AIThreatSystem
 			fireOrigins:[],
 			jumpOrigins:[],
 			fireMasks:new Map(),
-			jumpMasks:new Map()
+			jumpMasks:new Map(),
+			dangerMaps:new Map()
 		};
 
 		const fireOrigins = new Map(), gasOrigins = new Map(), jumpOrigins = new Map();

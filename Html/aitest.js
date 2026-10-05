@@ -15,6 +15,9 @@ const AITest = {
 	lastPlan: null,
 	consumePointer: false,
 	liveRefresh: false,
+	guardOverlayMode: 'none',
+	guardOverlayObjects: [],
+	guardOverlaySignature: null,
 
 	init()
 	{
@@ -129,8 +132,11 @@ const AITest = {
 		this.debugUnit = unit;
 		this.draft = this.makeDraft(unit);
 		this.lastPlan = null;
+		this.guardOverlaySignature = null;
+		this.clearGuardOverlay();
 		this.statusVisible = true;
 		this.updateStatus(null,true);
+		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
 		return true;
 	},
 
@@ -138,7 +144,7 @@ const AITest = {
 	{
 		const menuOpen=this.menu!=null&&this.menu.style.display!=='none';
 		const statusOpen=this.statusVisible&&this.status!=null&&this.status.style.display!=='none';
-		this.liveRefresh=menuOpen||statusOpen||this.pickMode!=null;
+		this.liveRefresh=menuOpen||statusOpen||this.pickMode!=null||this.guardOverlayMode!=='none';
 	},
 
 	updateStatus(note=null,forceShow=false)
@@ -189,6 +195,7 @@ const AITest = {
 		this.lastStatusTick=now;
 		this.updateCurrentGamePanel();
 		if(this.statusVisible&&this.status!=null&&this.status.style.display!=='none')this.updateStatus();
+		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay();
 	},
 
 	updateCurrentGamePanel()
@@ -289,7 +296,29 @@ const AITest = {
 		targetButtons.appendChild(this.button('Select unit target',()=>{this.closeMenu();this.beginPick('targetUnit');}));
 		targetButtons.appendChild(this.button('Select position',()=>{this.closeMenu();this.beginPick('targetPosition');}));
 		targetButtons.appendChild(this.button('Clear target',()=>{this.draft.target=null;this.draft.targetPos=null;this.renderMenu();}));
-		test.appendChild(targetButtons);this.menu.appendChild(test);
+		test.appendChild(targetButtons);
+
+		const overlayRow=document.createElement('div');overlayRow.style.marginTop='8px';overlayRow.append('Guard overlay: ');
+		overlayRow.appendChild(this.select([
+			['none','Off'],
+			['score','Total GuardScore'],
+			['proximity','Proximity'],
+			['intercept','Interception'],
+			['fireShield','Fire shield'],
+			['jumpShield','Jump shield'],
+			['congestion','Congestion penalty'],
+			['danger','Tactical danger total'],
+			['dangerMelee','Danger: melee'],
+			['dangerFire','Danger: fire'],
+			['dangerGas','Danger: gas'],
+			['dangerJump','Danger: jump']
+		],this.guardOverlayMode,v=>this.setGuardOverlayMode(v)));
+		test.appendChild(overlayRow);
+		const overlayButtons=document.createElement('div');
+		overlayButtons.appendChild(this.button('Refresh overlay',()=>this.refreshGuardOverlay(true)));
+		overlayButtons.appendChild(this.button('Hide overlay',()=>this.setGuardOverlayMode('none')));
+		test.appendChild(overlayButtons);
+		this.menu.appendChild(test);
 
 		const actions=document.createElement('div');actions.style.marginTop='10px';
 		actions.appendChild(this.button('Apply test override',()=>this.applyOverride()));
@@ -313,6 +342,8 @@ const AITest = {
 		ai.aiTestOverride={enabled:true,order};
 		if(unit.player&&unit.player.aiControl&&unit.player.aiControl.guardCoordinator)unit.player.aiControl.guardCoordinator.invalidate();
 		this.lastPlan=null;
+		this.guardOverlaySignature=null;
+		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
 		this.updateStatus('override applied');
 		this.renderMenu();
 	},
@@ -330,6 +361,8 @@ const AITest = {
 		if(this.debugUnit && this.debugUnit.aiControl) delete this.debugUnit.aiControl.aiTestOverride;
 		if(this.debugUnit&&this.debugUnit.player&&this.debugUnit.player.aiControl&&this.debugUnit.player.aiControl.guardCoordinator)this.debugUnit.player.aiControl.guardCoordinator.invalidate();
 		this.lastPlan=null;
+		this.guardOverlaySignature=null;
+		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
 		if(this.debugUnit)this.draft=this.makeDraft(this.debugUnit);
 		this.updateStatus('test override cleared');
 		if(render&&this.menu&&this.menu.style.display!=='none')this.renderMenu();
@@ -393,6 +426,85 @@ const AITest = {
 		return true;
 	},
 
+	guardOverlayLabel(mode=this.guardOverlayMode)
+	{
+		const labels={score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
+		return labels[mode]||'Off';
+	},
+
+	setGuardOverlayMode(mode)
+	{
+		this.guardOverlayMode=mode||'none';
+		this.guardOverlaySignature=null;
+		if(this.guardOverlayMode==='none')this.clearGuardOverlay();
+		else this.refreshGuardOverlay(true);
+		this.refreshLiveRefresh();
+		if(this.menu&&this.menu.style.display!=='none')this.renderMenu();
+	},
+
+	clearGuardOverlay()
+	{
+		for(const obj of this.guardOverlayObjects)
+		{
+			if(obj&&obj.active!==false&&typeof obj.destroy==='function')obj.destroy();
+		}
+		this.guardOverlayObjects=[];
+	},
+
+	getGuardOverlayContext()
+	{
+		const unit=this.debugUnit;
+		if(unit==null||unit.died||unit.player==null||unit.player.aiControl==null)return null;
+		const state=this.getEffectiveState(unit),order=state?state.order:null;
+		if(!AIOrder.is(order,'guard'))return null;
+		const coordinator=unit.player.aiControl.guardCoordinator;
+		if(coordinator==null)return null;
+		const data=coordinator.getGroupFor(unit,order);
+		if(data==null||data.group==null||data.group.evaluator==null)return null;
+		return{unit,state,order,coordinator,group:data.group,evaluator:data.group.evaluator,assignment:data.assignment,scene:unit.scene};
+	},
+
+	getGuardOverlayValue(ctx,x,y)
+	{
+		const mode=this.guardOverlayMode,b=ctx.evaluator.getScoreBreakdown(x,y);
+		if(mode==='score')return b.score;
+		if(mode==='proximity')return b.proximity;
+		if(mode==='intercept')return b.intercept;
+		if(mode==='fireShield')return b.fireShield;
+		if(mode==='jumpShield')return b.jumpShield;
+		if(mode==='congestion')return -b.congestion;
+		if(mode.startsWith('danger'))
+		{
+			const d=ctx.unit.player.aiControl.threatSystem.getDangerBreakdown(ctx.unit,x,y);
+			if(mode==='dangerMelee')return d.melee;
+			if(mode==='dangerFire')return d.fire;
+			if(mode==='dangerGas')return d.gas;
+			if(mode==='dangerJump')return d.jump;
+			return d.total;
+		}
+		return 0;
+	},
+
+	refreshGuardOverlay(force=false)
+	{
+		if(this.guardOverlayMode==='none'){this.clearGuardOverlay();return;}
+		const ctx=this.getGuardOverlayContext();
+		if(ctx==null||ctx.scene==null||ctx.scene.add==null){this.clearGuardOverlay();return;}
+		const threatRevision=ctx.unit.player.aiControl.threatSystem.dynamicRevision??0,a=ctx.assignment,stamp=[this.guardOverlayMode,ctx.group.epoch,ctx.group.turnStamp,ctx.group.anchorX,ctx.group.anchorY,a?a.x:'x',a?a.y:'x',ctx.unit.mapX,ctx.unit.mapY,ctx.unit.features.health,threatRevision].join('|');
+		if(!force&&stamp===this.guardOverlaySignature)return;
+		this.guardOverlaySignature=stamp;
+		this.clearGuardOverlay();
+
+		for(const cell of ctx.evaluator.ringCells)
+		{
+			const value=this.getGuardOverlayValue(ctx,cell.x,cell.y);
+			const pos=map.tileToWorldXY(cell.x,cell.y),isSlot=a&&a.x===cell.x&&a.y===cell.y;
+			const str=(isSlot?'*':'')+(Number.isFinite(value)?value.toFixed(2):'--');
+			const txt=ctx.scene.add.text(pos.x+1,pos.y+1,str,{font:'5px monospace',color:isSlot?'#ffff66':'#ffffff',backgroundColor:'#000000',resolution:6});
+			txt.setDepth(20000);txt.setAlpha(.9);this.guardOverlayObjects.push(txt);
+		}
+	},
+
 	resolveProfile(unit,state)
 	{
 		const order=state?state.order:null,profile=order&&typeof order==='object'?order.profile:null;
@@ -453,6 +565,7 @@ const AITest = {
 		const plan=this.buildPlan();
 		this.lastPlan=plan.error?null:plan;
 		const text=this.formatPlan(plan);console.log(text);this.updateStatus(text.replace(/\n/g,' | '),true);
+		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
 		return plan;
 	},
 
@@ -461,8 +574,12 @@ const AITest = {
 		if(typeof pointerBlocked!=='undefined'&&pointerBlocked){this.updateStatus('cannot step: game action is in progress');return;}
 		const plan=this.buildPlan();
 		if(plan.error){console.log(this.formatPlan(plan));this.updateStatus(plan.error,true);return;}
+		const text=this.formatPlan(plan);
+		console.log(text);
+		this.updateStatus(text.replace(/\n/g,' | '),true);
+		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
 		const action=plan.result.actions&&plan.result.actions.length?plan.result.actions[0]:null;
-		if(action==null){this.updateStatus('AI plan = HOLD',true);console.log(this.formatPlan(plan));return;}
+		if(action==null)return;
 
 		const unit=plan.unit,ai=unit.player.aiControl,unitAI=ai.ensureUnitAIControl(unit);
 		ai.aiTestSingleStepUnit=unit;
@@ -478,7 +595,12 @@ const AITest = {
 
 	onActionComplete(unit)
 	{
-		if(unit===this.debugUnit)this.updateStatus('AI step complete');
+		if(unit===this.debugUnit)
+		{
+			this.guardOverlaySignature=null;
+			if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
+			this.updateStatus('AI step complete');
+		}
 	}
 };
 

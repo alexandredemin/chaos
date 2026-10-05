@@ -32,7 +32,7 @@ class AIGuardEvaluator
 		this.scoreCache=new Map();
 		this.ringCells=[];
 		this.interceptLines=[];
-		this.shieldCells=new Set();
+		this.fireShieldMap=new Map();
 		this.jumpShieldMap=new Map();
 		this.breakdownCache=new Map();
 		this.congestionMap=new Map();
@@ -83,42 +83,40 @@ class AIGuardEvaluator
 			const fire=this.ai.threatSystem.getAbility(enemy,'fire');
 			if(fire!=null)
 			{
-				const range=fire.config?fire.config.range||0:0,r2=range*range;
 				const origins=threatCache&&threatCache.fireOrigins&&threatCache.fireOrigins.length?threatCache.fireOrigins:[{x:ex,y:ey}];
-				for(const origin of origins)
-				{
-					const fx=target.mapX-origin.x,fy=target.mapY-origin.y;
-					if(fx*fx+fy*fy>r2)continue;
-					if(!checkLineOfSight(origin.x,origin.y,target.mapX,target.mapY,null,null,function(){return true;}))continue;
-					this.addLineCells(origin.x,origin.y,target.mapX,target.mapY,this.shieldCells);
-				}
+				this.addAbilityShield(origins,fire.config?fire.config.range||0:0,cfg.shieldBonus,this.fireShieldMap);
 			}
 
-			// Jump is a ranged LOS threat too: a guard on the line can prevent a suicide jump
-			// onto the guarded unit. Project every legal MOVE -> JUMP origin with AP remaining.
+			// Jump is a ranged LOS threat too. Unlike the Fire danger flexibility coefficient,
+			// shield usefulness is proportional to the fraction of actual attack lines blocked:
+			// blocking 1 of 20 possible origins is weak protection, not a 50% shield.
 			const jump=this.ai.threatSystem.getAbility(enemy,'jump');
 			if(jump!=null)
 			{
-				const range=jump.config?jump.config.range||0:0,r2=range*range;
 				const origins=threatCache&&threatCache.jumpOrigins&&threatCache.jumpOrigins.length?threatCache.jumpOrigins:[{x:ex,y:ey}];
-				const counts=new Map();let threatOrigins=0;
-				for(const origin of origins)
-				{
-					const jx=target.mapX-origin.x,jy=target.mapY-origin.y;
-					if((jx===0&&jy===0)||jx*jx+jy*jy>r2)continue;
-					if(!checkLineOfSight(origin.x,origin.y,target.mapX,target.mapY,null,null,function(){return true;}))continue;
-					threatOrigins++;
-					this.addWeightedLineCells(origin.x,origin.y,target.mapX,target.mapY,counts);
-				}
-				if(threatOrigins>0)
-				{
-					for(const [key,count] of counts)
-					{
-						const factor=threatOrigins<=1?1:.5+.5*(count-1)/(threatOrigins-1);
-						this.jumpShieldMap.set(key,(this.jumpShieldMap.get(key)||0)+cfg.jumpShieldBonus*factor);
-					}
-				}
+				this.addAbilityShield(origins,jump.config?jump.config.range||0:0,cfg.jumpShieldBonus,this.jumpShieldMap);
 			}
+		}
+	}
+
+
+	addAbilityShield(origins,range,bonus,out)
+	{
+		const target=this.target,r2=range*range,counts=new Map();
+		let threatOrigins=0;
+		for(const origin of origins)
+		{
+			const dx=target.mapX-origin.x,dy=target.mapY-origin.y;
+			if((dx===0&&dy===0)||dx*dx+dy*dy>r2)continue;
+			if(!checkLineOfSight(origin.x,origin.y,target.mapX,target.mapY,null,null,function(){return true;}))continue;
+			threatOrigins++;
+			this.addWeightedLineCells(origin.x,origin.y,target.mapX,target.mapY,counts);
+		}
+		if(threatOrigins<=0)return;
+		for(const [key,count] of counts)
+		{
+			const factor=count/threatOrigins;
+			out.set(key,(out.get(key)||0)+bonus*factor);
 		}
 	}
 
@@ -140,6 +138,11 @@ class AIGuardEvaluator
 		const cells=new Set();
 		this.addLineCells(x1,y1,x2,y2,cells);
 		for(const key of cells)out.set(key,(out.get(key)||0)+1);
+	}
+
+	getFireShieldScore(x,y)
+	{
+		return this.fireShieldMap.get(this.key(x,y))||0;
 	}
 
 	getJumpShieldScore(x,y)
@@ -184,7 +187,7 @@ class AIGuardEvaluator
 		const dx=x-this.target.mapX,dy=y-this.target.mapY,r=Math.sqrt(dx*dx+dy*dy);
 		const proximity=this.config.proximityBase-Math.abs(r-this.config.idealRadius)*this.config.proximityFalloff;
 		const intercept=this.getInterceptionScore(x,y);
-		const fireShield=this.shieldCells.has(key)?this.config.shieldBonus:0;
+		const fireShield=this.getFireShieldScore(x,y);
 		const jumpShield=this.getJumpShieldScore(x,y);
 		const congestion=this.congestionMap.get(key)||0;
 		const score=proximity+intercept+fireShield+jumpShield-congestion;
@@ -316,6 +319,13 @@ class AIGuardCoordinator
 		}
 		AIOrder.state(order).assignment=assignment?{...assignment}:null;
 		return assignment;
+	}
+
+	getGroupFor(unit,order)
+	{
+		const assignment=this.ensureAssignment(unit,order);
+		const target=AIOrder.target(order);
+		return{group:target?this.groups.get(target)||null:null,assignment};
 	}
 
 	pruneAssignments(group,target)
