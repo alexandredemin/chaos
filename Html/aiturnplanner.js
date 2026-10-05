@@ -406,7 +406,16 @@ class AITurnPlanner
 
 	isCommittedOrder()
 	{
-		return this.orderType==='attack'||this.orderType==='intercept'||this.orderType==='cleanup';
+		return this.orderType==='attack'||this.orderType==='intercept'||this.orderType==='cleanup'||this.orderType==='guard';
+	}
+
+	isGuardAdmissibleState(state)
+	{
+		if(this.orderType!=='guard'||state==null||!state.actions||state.actions.length===0)return true;
+		if(state.actionScore>AI_MATRIX_EPS)return true;
+		// A guard may hold or move sideways, but should not abandon its globally assigned
+		// defensive slot merely because a farther cell has lower immediate danger.
+		return this.goalProgressAt(state.x,state.y)>=-AI_MATRIX_EPS;
 	}
 
 	isProgressState(state)
@@ -419,11 +428,12 @@ class AITurnPlanner
 	plan()
 	{
 		this.matrixCache.clear();this._terminalPositionScore=null;
-		const root=this.rootState();let best=root,bestProgress=null,beam=[root];
+		const root=this.rootState();let best=root,bestProgress=null,bestGuard=root,beam=[root];
 		const consider=s=>
 		{
 			if(this.finalScore(s)>this.finalScore(best))best=s;
 			if(this.isProgressState(s)&&(bestProgress==null||this.finalScore(s)>this.finalScore(bestProgress)))bestProgress=s;
+			if(this.isGuardAdmissibleState(s)&&this.finalScore(s)>this.finalScore(bestGuard))bestGuard=s;
 		};
 
 		for(let depth=0;depth<this.maxDepth;depth++)
@@ -437,9 +447,11 @@ class AITurnPlanner
 		}
 		for(const s of beam)consider(s);
 
-		// ROOT means "hold position". That is valid for guard/cautious play, but a committed
-		// attack/intercept must not deadlock forever merely because every advancing option is risky.
-		// If search found any damaging or goal-progressing plan, execute the least-bad one.
+		if(this.orderType==='guard')best=bestGuard;
+
+		// ROOT means "hold position". A committed order must not deadlock forever merely
+		// because every advancing option is risky. GUARD is committed to its coordinator slot,
+		// but negative goal-progress movement is filtered above unless it performs useful combat.
 		if(best.actions.length===0&&this.isCommittedOrder()&&bestProgress!=null)best=bestProgress;
 		return{best,score:this.finalScore(best),actions:best.actions};
 	}

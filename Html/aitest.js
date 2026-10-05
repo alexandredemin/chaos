@@ -432,7 +432,10 @@ const AITest = {
 	{
 		if(plan.error)return'AI TEST: '+plan.error;
 		const labels=plan.result.actions&&plan.result.actions.length?plan.result.actions.map(a=>a.label||a.type).join(' -> '):'HOLD';
-		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']\n'+labels+'\nscore='+plan.result.score.toFixed(2);
+		const goal=plan.goal?' goal='+plan.goal[0]+','+plan.goal[1]:'';
+		const assignment=AIOrder.is(plan.state.order,'guard')?AIOrder.state(plan.state.order).assignment:null;
+		const slot=assignment?' slot='+assignment.x+','+assignment.y+' guardScore='+Number(assignment.score||0).toFixed(2):'';
+		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']'+goal+slot+'\n'+labels+'\nscore='+plan.result.score.toFixed(2);
 	},
 
 	planOnly()

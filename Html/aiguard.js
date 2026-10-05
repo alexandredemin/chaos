@@ -1,7 +1,7 @@
 //---------------------------- Global GUARD evaluation and coordination ----------------------------
 
 const AI_GUARD_CONFIG = Object.freeze({
-	minRadius: 2,
+	minRadius: 1,
 	maxRadius: 5,
 	idealRadius: 3.5,
 	proximityBase: 2,
@@ -11,9 +11,10 @@ const AI_GUARD_CONFIG = Object.freeze({
 	shieldBonus: 2,
 	congestionPenalty: .35,
 	anchorTolerance: 0,
-	slotPoolMin: 8,
 	slotPoolMultiplier: 2,
 	slotMinDistance: 2,
+	slotNearBestRatio: .9,
+	slotNearBestTolerance: .25,
 	travelWeight: .15
 });
 
@@ -50,7 +51,7 @@ class AIGuardEvaluator
 		{
 			if(x===target.mapX&&y===target.mapY)continue;
 			const dx=x-target.mapX,dy=y-target.mapY,d2=dx*dx+dy*dy;
-			if(d2>maxR2||d2<=minR2)continue;
+			if(d2>maxR2||d2<minR2)continue;
 			const wall=wallsLayer.getTileAt(x,y);
 			if(wall!=null&&wall.properties['collides']===true)continue;
 			if(Entity.getEntityAtMap(x,y)!=null)continue;
@@ -76,10 +77,17 @@ class AIGuardEvaluator
 			}
 
 			const fire=this.ai.threatSystem.getAbility(enemy,'fire');
-			const range=fire&&fire.config?fire.config.range||0:0;
-			if(fire==null||len2>range*range)continue;
-			if(!checkLineOfSight(ex,ey,target.mapX,target.mapY,null,null,function(){return true;}))continue;
-			this.addLineCells(ex,ey,target.mapX,target.mapY,this.shieldCells);
+			if(fire==null)continue;
+			const range=fire.config?fire.config.range||0:0,r2=range*range;
+			const threatCache=this.ai.threatSystem.getEnemyCache(enemy);
+			const origins=threatCache&&threatCache.fireOrigins&&threatCache.fireOrigins.length?threatCache.fireOrigins:[{x:ex,y:ey}];
+			for(const origin of origins)
+			{
+				const fx=target.mapX-origin.x,fy=target.mapY-origin.y;
+				if(fx*fx+fy*fy>r2)continue;
+				if(!checkLineOfSight(origin.x,origin.y,target.mapX,target.mapY,null,null,function(){return true;}))continue;
+				this.addLineCells(origin.x,origin.y,target.mapX,target.mapY,this.shieldCells);
+			}
 		}
 	}
 
@@ -171,12 +179,21 @@ class AIGuardCoordinator
 		this.groups.clear();
 	}
 
+	// AITest orders are real tactical orders for coordinator purposes.
+	// Using only unit.aiControl.order made a manually assigned TEST GUARD invisible to the coordinator.
+	getEffectiveOrder(unit)
+	{
+		if(unit==null||unit.aiControl==null)return null;
+		const test=this.ai.getAITestOverride?this.ai.getAITestOverride(unit):null;
+		return test&&test.order?test.order:unit.aiControl.order||null;
+	}
+
 	prepareTurnAssignments()
 	{
 		const targets=new Set();
 		for(const unit of this.ai.player.units)
 		{
-			const order=unit&&unit.aiControl?unit.aiControl.order:null;
+			const order=this.getEffectiveOrder(unit);
 			if(AIOrder.is(order,'guard')&&AIOrder.target(order)!=null)targets.add(AIOrder.target(order));
 		}
 		for(const target of targets)this.rebuildGroup(target);
@@ -186,7 +203,7 @@ class AIGuardCoordinator
 	{
 		return this.ai.player.units.filter(unit=>{
 			if(unit==null||unit.died||unit===target||unit.aiControl==null)return false;
-			const order=unit.aiControl.order;
+			const order=this.getEffectiveOrder(unit);
 			return AIOrder.is(order,'guard')&&AIOrder.target(order)===target;
 		});
 	}
@@ -207,7 +224,14 @@ class AIGuardCoordinator
 		if(group==null||this.anchorMoved(group,target))group=this.rebuildGroup(target);
 		this.pruneAssignments(group,target);
 		let assignment=group.assignments.get(unit)||null;
-		if(assignment==null)assignment=this.assignMissingUnit(group,unit);
+		if(assignment==null)
+		{
+			// The effective guard set may change outside the normal turn lifecycle (notably AITest).
+			// Rebuild once so slot selection/diversity includes the new guard instead of assigning
+			// a fallback current-position goal from a stale group.
+			group=this.rebuildGroup(target);
+			assignment=group.assignments.get(unit)||this.assignMissingUnit(group,unit);
+		}
 		AIOrder.state(order).assignment=assignment?{...assignment}:null;
 		return assignment;
 	}
@@ -216,7 +240,7 @@ class AIGuardCoordinator
 	{
 		for(const unit of [...group.assignments.keys()])
 		{
-			const order=unit&&unit.aiControl?unit.aiControl.order:null;
+			const order=this.getEffectiveOrder(unit);
 			if(unit==null||unit.died||!AIOrder.is(order,'guard')||AIOrder.target(order)!==target)group.assignments.delete(unit);
 		}
 	}
@@ -234,19 +258,41 @@ class AIGuardCoordinator
 	selectDiverseSlots(candidates,guardCount)
 	{
 		if(!candidates.length||guardCount<=0)return[];
-		const desired=Math.min(candidates.length,Math.max(this.config.slotPoolMin,guardCount*this.config.slotPoolMultiplier));
+
+		// Keep the assignment pool close to the globally best GuardScore.
+		// Otherwise travel cost can make a nearby but strategically wrong-side slot beat
+		// the interception/shielding sector we explicitly built GuardScore to identify.
+		const best=candidates[0].score;
+		const tolerance=Math.max(Math.abs(best)*(1-this.config.slotNearBestRatio),this.config.slotNearBestTolerance);
+		const threshold=best-tolerance;
+		const preferred=candidates.filter(c=>c.score>=threshold);
+		const desired=Math.min(preferred.length,Math.max(guardCount,guardCount*this.config.slotPoolMultiplier));
 		const selected=[],selectedKeys=new Set(),minD2=this.config.slotMinDistance*this.config.slotMinDistance;
-		for(const c of candidates)
+
+		const addDiverse=list=>{
+			for(const c of list)
+			{
+				if(selected.length>=desired)break;
+				if(selected.some(s=>{const dx=s.x-c.x,dy=s.y-c.y;return dx*dx+dy*dy<minD2;}))continue;
+				selected.push(c);selectedKeys.add(c.x+':'+c.y);
+			}
+		};
+
+		addDiverse(preferred);
+		for(const c of preferred)
 		{
 			if(selected.length>=desired)break;
-			if(selected.some(s=>{const dx=s.x-c.x,dy=s.y-c.y;return dx*dx+dy*dy<minD2;}))continue;
-			selected.push(c);selectedKeys.add(c.x+':'+c.y);
+			const key=c.x+':'+c.y;if(selectedKeys.has(key))continue;
+			selected.push(c);selectedKeys.add(key);
 		}
-		if(selected.length<desired)
+
+		// If the near-best sector physically contains fewer cells than guards, widen only
+		// as much as necessary to give every guard a usable slot.
+		if(selected.length<guardCount)
 		{
 			for(const c of candidates)
 			{
-				if(selected.length>=desired)break;
+				if(selected.length>=guardCount)break;
 				const key=c.x+':'+c.y;if(selectedKeys.has(key))continue;
 				selected.push(c);selectedKeys.add(key);
 			}
@@ -307,7 +353,7 @@ class AIGuardCoordinator
 	{
 		const assignment={x:option.slot.x,y:option.slot.y,score:option.slot.score,travelCost:option.distance,utility:option.utility,epoch:group.epoch,anchorX:group.anchorX,anchorY:group.anchorY};
 		group.assignments.set(unit,assignment);
-		const order=unit.aiControl?unit.aiControl.order:null;
+		const order=this.getEffectiveOrder(unit);
 		if(AIOrder.is(order,'guard'))AIOrder.state(order).assignment={...assignment};
 	}
 
@@ -315,7 +361,7 @@ class AIGuardCoordinator
 	{
 		const assignment={x:unit.mapX,y:unit.mapY,score:group.evaluator.scoreAt(unit.mapX,unit.mapY),travelCost:0,utility:0,epoch:group.epoch,anchorX:group.anchorX,anchorY:group.anchorY,fallback:true};
 		group.assignments.set(unit,assignment);
-		const order=unit.aiControl?unit.aiControl.order:null;
+		const order=this.getEffectiveOrder(unit);
 		if(AIOrder.is(order,'guard'))AIOrder.state(order).assignment={...assignment};
 	}
 }
