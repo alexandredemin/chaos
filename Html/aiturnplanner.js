@@ -29,7 +29,7 @@ class AIPlannerMatrixAdapter
 	build(state)
 	{
 		return this.withState(state,unit => {
-			const dmap=this.ai.getDistanceMap(unit,state.x,state.y);
+			const dmap=this.ai.getDistanceMap(unit,state.x,state.y,null,null,cell=>this.ai.canMacroMoveThroughCell(unit,cell[0],cell[1]));
 			let places=this.ai.getAvailableCells(dmap,unit,null,true).filter(p=>p.dist>=0&&p.dist<=state.move);
 			places.push(...this.frontierEntries(state,unit,dmap,places));
 			if(!places.some(p=>p.cell[0]===state.x&&p.cell[1]===state.y)) places.unshift({cell:[state.x,state.y],dist:0});
@@ -76,7 +76,8 @@ class AIPlannerMatrixAdapter
 				if(entity!=null&&entity.evaluateStep(unit)===false)continue;
 
 				// Weighted path cost is heuristic. Physically this cell is one legal step from p.
-				// Consume all simulated movement conservatively; runtime executes one real step and replans.
+				// Consume all simulated movement conservatively; the macro executor walks to the frontier
+				// cell physically and replans only after the MOVE action ends.
 				frontier.set(k,{cell:[x,y],dist:state.move,weightedDist,frontierEntry:true,frontierFrom:[p.cell[0],p.cell[1]]});
 			}
 		}
@@ -157,29 +158,9 @@ class AIMoveActionProvider extends AITurnActionProvider
 	getActions(state,ctx)
 	{
 		if(state.lastAction==='move'||state.move<=0)return[];
-		if(this.planner.orderType!=='guard')
-			return ctx.moveCandidates.map(c=>({type:'move',to:[c.x,c.y],cost:c.dist,sources:c.sources,label:'MOVE('+c.x+','+c.y+')'})).filter(a=>a.cost>0&&a.cost<=state.move);
-
-		// GUARD replans after every physical step. Convert each macro candidate into the
-		// exact adjacent cell runtime will execute, then score that real state.
-		const byStep=new Map();
-		for(const c of ctx.moveCandidates)
-		{
-			const step=this.planner.ai.getOptimalStep(ctx.matrices.dmap,[c.x,c.y],[state.x,state.y]);
-			if(step==null||(step[0]===state.x&&step[1]===state.y))continue;
-			const k=step[0]+':'+step[1];
-			let a=byStep.get(k);
-			if(a==null)
-			{
-				const stepPlace=ctx.adapter.placeAt(ctx.matrices,step[0],step[1]);
-				const cost=stepPlace?Math.max(1,Math.min(state.move,stepPlace.dist)):1;
-				a={type:'move',to:[step[0],step[1]],cost,sources:[],macroTargets:[],label:'MOVE('+step[0]+','+step[1]+')'};
-				byStep.set(k,a);
-			}
-			for(const source of c.sources||[])if(!a.sources.includes(source))a.sources.push(source);
-			a.macroTargets.push([c.x,c.y]);
-		}
-		return[...byStep.values()];
+		return ctx.moveCandidates
+			.map(c=>({type:'move',to:[c.x,c.y],cost:c.dist,sources:c.sources,label:'MOVE('+c.x+','+c.y+')'}))
+			.filter(a=>a.cost>0&&a.cost<=state.move);
 	}
 }
 
@@ -355,7 +336,7 @@ class AITurnPlanner
 		this.adapter=new AIPlannerMatrixAdapter(this);
 		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
 		this.matrixCache=new Map();this._terminalPositionScore=null;
-		this.goalMap=this.ai.getDistanceMap(unit,goal[0],goal[1]);
+		this.goalMap=this.ai.getDistanceMap(unit,goal[0],goal[1],null,null,cell=>this.ai.canMacroMoveThroughCell(unit,cell[0],cell[1]));
 		this.rootGoalDistance=this.goalMap&&this.goalMap[unit.mapY]&&this.goalMap[unit.mapY][unit.mapX]!=null?this.goalMap[unit.mapY][unit.mapX]:-1;
 	}
 

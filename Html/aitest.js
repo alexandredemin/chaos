@@ -341,6 +341,7 @@ const AITest = {
 		const ai=unit.player.aiControl.ensureUnitAIControl(unit);
 		const order=this.draft.order?AIOrder.create(this.draft.order,this.draft.target||null,this.draft.targetPos,{profile:this.draft.profile||'auto',state:{threatTurns:this.draft.threatTurns??null}}):null;
 		ai.aiTestOverride={enabled:true,order};
+		ai.macroMove=null;
 		if(unit.player&&unit.player.aiControl&&unit.player.aiControl.guardCoordinator)unit.player.aiControl.guardCoordinator.invalidate();
 		this.lastPlan=null;
 		this.guardOverlaySignature=null;
@@ -359,7 +360,7 @@ const AITest = {
 
 	clearOverride(render=true)
 	{
-		if(this.debugUnit && this.debugUnit.aiControl) delete this.debugUnit.aiControl.aiTestOverride;
+		if(this.debugUnit && this.debugUnit.aiControl){delete this.debugUnit.aiControl.aiTestOverride;this.debugUnit.aiControl.macroMove=null;}
 		if(this.debugUnit&&this.debugUnit.player&&this.debugUnit.player.aiControl&&this.debugUnit.player.aiControl.guardCoordinator)this.debugUnit.player.aiControl.guardCoordinator.invalidate();
 		this.lastPlan=null;
 		this.guardOverlaySignature=null;
@@ -568,7 +569,12 @@ const AITest = {
 			let d1=d0;
 			if(first&&first.type==='move'&&first.to&&plan.planner.goalMap[first.to[1]])d1=plan.planner.goalMap[first.to[1]][first.to[0]];
 			nav=' guardNav[d='+d0;
-			if(first&&first.type==='move')nav+=' next='+d1+' progress='+(d0>=0&&d1>=0?(d0-d1):'?');
+			if(first&&first.type==='move')
+			{
+				nav+=' next='+d1+' progress='+(d0>=0&&d1>=0?(d0-d1):'?');
+				const ai=plan.unit.player&&plan.unit.player.aiControl,route=ai&&typeof ai.findMacroMovePath==='function'?ai.findMacroMovePath(plan.unit,first.to):null;
+				if(route)nav+=' macroPath='+[[plan.unit.mapX,plan.unit.mapY]].concat(route).map(c=>c[0]+','+c[1]).join('>');
+			}
 			nav+=']';
 		}
 		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']'+resources+goal+slot+nav+'\n'+labels+'\nscore='+plan.result.score.toFixed(2);

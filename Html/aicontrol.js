@@ -120,6 +120,7 @@ class AIControl
 			return;
 		}
 		this.traffic.startTurn();
+		for(const unit of this.player.units) if(unit&&unit.aiControl) unit.aiControl.macroMove=null;
 		this.threatSystem.startTurn();
 		this.guardCoordinator.startTurn(this.guardCoordinator.getGameTurnStamp());
 		this.updateInvisibleMemory();
@@ -197,12 +198,6 @@ class AIControl
 
     step(unit)
 	{
-        if(this.aiTestSingleStepUnit===unit || (unit && unit.aiControl && unit.aiControl.aiTestStopAfterAction===true))
-        {
-			this.finishAITestSingleStep(unit);
-            return;
-        }
-
         GameFlowWatchdog.touch('ai_step',{
             player:this.player ? this.player.name : null,
             unitId:unit ? unit.id : null,
@@ -214,11 +209,20 @@ class AIControl
 
 		if(unit.died)
 		{
-			this.pass(true);
+            this.clearMacroMove(unit);
+            if(this.aiTestSingleStepUnit===unit) this.finishAITestSingleStep(unit);
+            else this.pass(true);
 			return;
 		}
+
+        // A newly detected invisible enemy is a real world-state change: abort the
+        // current macro MOVE and let tactical planning react immediately.
 		if(this.passStage <= this.normalPassStages && this.detectAdjacentInvisibleUnits(unit))
+        {
+            this.clearMacroMove(unit);
 			this.replanAfterInvisibleDetection();
+        }
+
 		if(this.passStage > this.normalPassStages)
 		{
 			const handled = this.traffic.stepOnly(unit);
@@ -241,18 +245,30 @@ class AIControl
 			}
 			return;
 		}
-		if(this.traffic.beforeStep(unit)) return;
+
+        if(this.traffic.beforeStep(unit)) return;
+
+        // Unit.onCallback() fires after every physical tile step. Keep following the
+        // chosen A* route until the tactical MOVE macro-action reaches its endpoint.
+        if(unit.aiControl && unit.aiControl.macroMove != null)
+        {
+            if(this.continueMacroMove(unit)) return;
+        }
+
+        // F7 means one tactical action, not one physical tile. For MOVE the action is
+        // complete only after the macro destination was reached or the macro aborted.
+        if(this.aiTestSingleStepUnit===unit || (unit.aiControl && unit.aiControl.aiTestStopAfterAction===true))
+        {
+			this.finishAITestSingleStep(unit);
+            return;
+        }
+
 		if(unit.config.name === "wizard")
 		{
 			this.stepWizard(unit);
 			return;
 		}
-		//if(unit.aiControl && unit.aiControl.order && unit.aiControl.order == "intercept" && unit.aiControl.mainTarget != null && !unit.aiControl.mainTarget.died){
-		//    this.stepByPlan(unit);
-		//}
-		//else{
-			this.stepUnit(unit);
-		//}
+		this.stepUnit(unit);
 	}
 
     isGoalAchieved(unit)
@@ -349,6 +365,151 @@ class AIControl
             this.pass();
         }
     }
+
+	clearMacroMove(unit)
+	{
+		if(unit && unit.aiControl) unit.aiControl.macroMove = null;
+	}
+
+	canMacroMoveThroughCell(unit,x,y)
+	{
+		const occupant=getUnitAtMap(x,y);
+		if(occupant==null||occupant===unit||occupant.died)return true;
+		if(occupant.player!==unit.player)return false;
+		return this.traffic.canRequestYield(occupant,this.getTrafficPriority(unit));
+	}
+
+	macroMoveCellCost(unit,x,y)
+	{
+		if(x<0||x>=map.width||y<0||y>=map.height)return null;
+		const wall=wallsLayer.getTileAt(x,y);
+		if(wall!=null&&wall.properties['collides']===true)return null;
+
+		if(!this.canMacroMoveThroughCell(unit,x,y))return null;
+		const occupant=getUnitAtMap(x,y);
+
+		let cost=1;
+		const ents=Entity.getEntitiesAtMap(x,y)||[];
+		for(const ent of ents)
+		{
+			if(typeof ent.evaluateStep!=='function')continue;
+			const extra=ent.evaluateStep(unit);
+			if(extra===false)return null;
+			if(Number.isFinite(extra))cost+=Math.floor(extra+.5)*Math.max(1,unit.config.features.move||1);
+		}
+		if(occupant!=null&&occupant!==unit)cost+=Math.max(1,unit.config.features.move||1);
+		return cost;
+	}
+
+	findMacroMovePath(unit,target)
+	{
+		const sx=unit.mapX,sy=unit.mapY,tx=target[0],ty=target[1];
+		if(sx===tx&&sy===ty)return[];
+		if(tx<0||tx>=map.width||ty<0||ty>=map.height)return null;
+		const targetOccupant=getUnitAtMap(tx,ty);
+		if(targetOccupant!=null&&targetOccupant!==unit)return null;
+
+		const key=(x,y)=>x+':'+y;
+		const h=(x,y)=>Math.max(Math.abs(tx-x),Math.abs(ty-y));
+		const startKey=key(sx,sy),open=[{x:sx,y:sy,g:0,f:h(sx,sy)}];
+		const best=new Map([[startKey,0]]),parent=new Map(),closed=new Set();
+
+		while(open.length>0)
+		{
+			let bi=0;
+			for(let i=1;i<open.length;i++)
+				if(open[i].f<open[bi].f||(open[i].f===open[bi].f&&open[i].g<open[bi].g))bi=i;
+			const cur=open.splice(bi,1)[0],ck=key(cur.x,cur.y);
+			if(closed.has(ck))continue;
+			closed.add(ck);
+			if(cur.x===tx&&cur.y===ty)
+			{
+				const path=[];let k=ck;
+				while(k!==startKey)
+				{
+					const [x,y]=k.split(':').map(Number);path.push([x,y]);k=parent.get(k);
+					if(k==null)return null;
+				}
+				path.reverse();return path;
+			}
+
+			for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)
+			{
+				if(dx===0&&dy===0)continue;
+				const nx=cur.x+dx,ny=cur.y+dy,nk=key(nx,ny);
+				if(closed.has(nk))continue;
+				const stepCost=this.macroMoveCellCost(unit,nx,ny);
+				if(stepCost==null)continue;
+				const ng=cur.g+stepCost;
+				if(best.has(nk)&&best.get(nk)<=ng)continue;
+				best.set(nk,ng);parent.set(nk,ck);open.push({x:nx,y:ny,g:ng,f:ng+h(nx,ny)});
+			}
+		}
+		return null;
+	}
+
+	startMacroMove(unit,target)
+	{
+		const ai=this.ensureUnitAIControl(unit),path=this.findMacroMovePath(unit,target);
+		if(path==null||path.length===0||path.length>unit.features.move)return false;
+		ai.macroMove={target:[target[0],target[1]],path,pathIndex:0};
+		return this.continueMacroMove(unit);
+	}
+
+	continueMacroMove(unit)
+	{
+		const ai=unit&&unit.aiControl,move=ai?ai.macroMove:null;
+		if(move==null)return false;
+		if(unit.died||unit.features.move<=0||(unit.mapX===move.target[0]&&unit.mapY===move.target[1]))
+		{
+			this.clearMacroMove(unit);
+			return false;
+		}
+
+		let next=move.path[move.pathIndex]||null;
+		const adjacent=next!=null&&Math.abs(next[0]-unit.mapX)<=1&&Math.abs(next[1]-unit.mapY)<=1;
+		if(!adjacent)
+		{
+			move.path=this.findMacroMovePath(unit,move.target);move.pathIndex=0;
+            if(move.path!=null&&move.path.length>unit.features.move)move.path=null;
+            next=move.path&&move.path[0];
+		}
+		if(next==null)
+		{
+			this.clearMacroMove(unit);
+			return false;
+		}
+
+		const dx=next[0]-unit.mapX,dy=next[1]-unit.mapY;
+		if(unit.canStepTo(dx,dy))
+		{
+			move.pathIndex++;
+			this.traffic.beforeNormalStep(unit,next);
+			unit.stepTo(next[0],next[1]);
+			return true;
+		}
+
+		const blocker=getUnitAtMap(next[0],next[1]);
+		if(blocker!=null&&blocker.player===unit.player&&this.traffic.canRequestYield(blocker,this.getTrafficPriority(unit)))
+		{
+			this.traffic.onFriendlyBlock(unit,next,blocker);
+			return true;
+		}
+
+		move.path=this.findMacroMovePath(unit,move.target);move.pathIndex=0;
+        if(move.path!=null&&move.path.length>unit.features.move)move.path=null;
+        next=move.path&&move.path[0];
+		if(next!=null&&unit.canStepTo(next[0]-unit.mapX,next[1]-unit.mapY))
+		{
+			move.pathIndex=1;
+			this.traffic.beforeNormalStep(unit,next);
+			unit.stepTo(next[0],next[1]);
+			return true;
+		}
+
+		this.clearMacroMove(unit);
+		return false;
+	}
 
 	stepToTarget(unit,target,dmap)
 	{
@@ -581,7 +742,7 @@ class AIControl
         switch(action.type)
         {
             case 'move':
-                if(!this.stepToTarget(unit,action.to)) fail();
+                if(!this.startMacroMove(unit,action.to)) fail();
                 return;
 
             case 'attack':
@@ -1528,9 +1689,12 @@ class AIControl
         if(order==null)
         {
             ai.order=null;
+            ai.macroMove=null;
             return;
         }
-        const old=ai.order,keepState=AIOrder.is(old,order)&&AIOrder.target(old)===target&&typeof old==='object'?old.state:{};
+        const old=ai.order,sameOrder=AIOrder.is(old,order)&&AIOrder.target(old)===target;
+        if(!sameOrder) ai.macroMove=null;
+        const keepState=sameOrder&&typeof old==='object'?old.state:{};
         ai.order=AIOrder.create(order,target,targetPos,{state:keepState||{}});
         ai.order.state.aggression=agression;
         if(order!=="intercept")delete ai.order.state.threatTurns;
