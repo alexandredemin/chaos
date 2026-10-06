@@ -307,6 +307,7 @@ const AITest = {
 			['fireShield','Fire shield'],
 			['jumpShield','Jump shield'],
 			['congestion','Congestion penalty'],
+			['pressure','Guard pressure'],
 			['goalDistance','Guard path distance'],
 			['danger','Tactical danger total'],
 			['dangerMelee','Danger: melee'],
@@ -430,7 +431,7 @@ const AITest = {
 
 	guardOverlayLabel(mode=this.guardOverlayMode)
 	{
-		const labels={score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
+		const labels={score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
 		return labels[mode]||'Off';
 	},
 
@@ -477,6 +478,7 @@ const AITest = {
 		if(mode==='fireShield')return b.fireShield;
 		if(mode==='jumpShield')return b.jumpShield;
 		if(mode==='congestion')return -b.congestion;
+		if(mode==='pressure')return b.pressure;
 		if(mode==='goalDistance')return ctx.goalMap&&ctx.goalMap[y]?ctx.goalMap[y][x]:-1;
 		if(mode.startsWith('danger'))
 		{
@@ -558,7 +560,7 @@ const AITest = {
 		{
 			slot=' slot='+assignment.x+','+assignment.y+' guardScore='+Number(assignment.score||0).toFixed(2)+' epoch='+assignment.epoch+' turn='+String(assignment.turnStamp??'?');
 			const c=assignment.components;
-			if(c)slot+=' guardParts[p='+Number(c.proximity||0).toFixed(2)+' i='+Number(c.intercept||0).toFixed(2)+' f='+Number(c.fireShield||0).toFixed(2)+' j='+Number(c.jumpShield||0).toFixed(2)+' c='+Number(c.congestion||0).toFixed(2)+']';
+			if(c)slot+=' guardParts[p='+Number(c.proximity||0).toFixed(2)+' i='+Number(c.intercept||0).toFixed(2)+' f='+Number(c.fireShield||0).toFixed(2)+' j='+Number(c.jumpShield||0).toFixed(2)+' c='+Number(c.congestion||0).toFixed(2)+' q='+Number(c.pressure||0).toFixed(2)+' r='+Number(c.idealRadius||0).toFixed(2)+']';
 		}
 		const f=plan.unit.features||{};
 		const resources=' pos='+plan.unit.mapX+','+plan.unit.mapY+' M='+Number(f.move||0)+' AP='+Number(f.abilityPoints||0)+' Atk='+Number(f.attackPoints||0);

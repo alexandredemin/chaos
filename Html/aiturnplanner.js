@@ -48,8 +48,11 @@ class AIPlannerMatrixAdapter
 				p.offense=Math.max(0,p.attackScore)+Math.max(0,p.fireWeight)+Math.max(0,p.gasWeight)+Math.max(0,p.webWeight);
 				p.goalScore=p.distWeight||0;
 				p.defenseScore=-p.dangerPenalty;
-				for(const [name,profile] of Object.entries(AI_TACTICAL_PROFILES))
+				for(const name of Object.keys(AI_TACTICAL_PROFILES))
+				{
+					const profile=this.planner.getProfileWeights(name);
 					p[name+'Score']=profile.goal*p.goalScore+profile.offense*p.offense-profile.danger*p.dangerPenalty;
+				}
 			}
 			return{dmap,gDMap,places};
 		});
@@ -272,7 +275,11 @@ class AIJumpActionProvider extends AITurnActionProvider
 		const goal=this.planner.goalProgressAt(cell.x,cell.y),danger=this.planner.positionDangerAt(cell.x,cell.y),offense=Math.max(0,attack)+Math.max(0,fire)+Math.max(0,gas);
 		const m={...cell,terminal,actionUtility,goal,attackScoreOnly:attack,fireWeight:fire,gasWeight:gas,offense,dangerPenalty:danger};
 		m.goalScore=goal;m.defenseScore=-danger;
-		for(const [name,p] of Object.entries(AI_TACTICAL_PROFILES))m[name+'Score']=p.goal*goal+p.offense*offense-p.danger*danger;
+		for(const name of Object.keys(AI_TACTICAL_PROFILES))
+		{
+			const p=this.planner.getProfileWeights(name);
+			m[name+'Score']=p.goal*goal+p.offense*offense-p.danger*danger;
+		}
 		m.endUtility=terminal?this.planner.terminalPositionScore():this.planner.positionScoreAt(cell.x,cell.y,ctx.profile);
 		m.totalUtility=this.planner.actionAndPositionScore(actionUtility,m.endUtility,ctx.profile);
 		return m;
@@ -333,6 +340,8 @@ class AITurnPlanner
 		this.profile=opts.profile||'balanced';
 		this.order=opts.order??(unit.aiControl?unit.aiControl.order:null);
 		this.orderType=AIOrder.type(this.order);
+		const assignment=this.orderType==='guard'?AIOrder.state(this.order)?.assignment:null;
+		this.guardPressure=assignment&&assignment.components?Math.max(0,Math.min(1,assignment.components.pressure||0)):0;
 		this.adapter=new AIPlannerMatrixAdapter(this);
 		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
 		this.matrixCache=new Map();this._terminalPositionScore=null;
@@ -346,8 +355,19 @@ class AITurnPlanner
 	knownEnemies(){return this.adapter.knownEnemies();}
 	positionDangerAt(x,y){return this.ai.threatSystem.getDangerAt(this.unit,x,y);}
 	goalProgressAt(x,y){const gd=this.goalMap[y]?this.goalMap[y][x]:-1;return this.rootGoalDistance>=0&&gd>=0?this.rootGoalDistance-gd:-1000;}
-	positionScoreAt(x,y,profile=this.profile){const p=AI_TACTICAL_PROFILES[profile]||AI_TACTICAL_PROFILES.balanced;return p.goal*this.goalProgressAt(x,y)-p.danger*this.positionDangerAt(x,y);}
-	actionAndPositionScore(actionUtility,endUtility,profile=this.profile){const p=AI_TACTICAL_PROFILES[profile]||AI_TACTICAL_PROFILES.balanced;return p.offense*actionUtility+endUtility;}
+	getProfileWeights(profile=this.profile)
+	{
+		const base=AI_TACTICAL_PROFILES[profile]||AI_TACTICAL_PROFILES.balanced;
+		if(this.orderType!=='guard'||this.guardPressure<=0)return base;
+		const q=this.guardPressure;
+		return{
+			goal:base.goal+(Math.max(base.goal,1.5)-base.goal)*q,
+			offense:base.offense,
+			danger:base.danger+(Math.min(base.danger,.1)-base.danger)*q
+		};
+	}
+	positionScoreAt(x,y,profile=this.profile){const p=this.getProfileWeights(profile);return p.goal*this.goalProgressAt(x,y)-p.danger*this.positionDangerAt(x,y);}
+	actionAndPositionScore(actionUtility,endUtility,profile=this.profile){const p=this.getProfileWeights(profile);return p.offense*actionUtility+endUtility;}
 	terminalPositionScore(){if(this._terminalPositionScore!=null)return this._terminalPositionScore;const root=this.rootState(),m=this.matricesFor(root);let worst=Infinity;for(const p of m.places)if(p.dist>=0&&p.dist<=root.move)worst=Math.min(worst,this.positionScoreAt(p.cell[0],p.cell[1]));this._terminalPositionScore=Number.isFinite(worst)?worst:0;return this._terminalPositionScore;}
 	endPositionScore(s){return s.terminal?this.terminalPositionScore():this.positionScoreAt(s.x,s.y);}
 	finalScore(s){return this.actionAndPositionScore(s.actionScore,this.endPositionScore(s));}

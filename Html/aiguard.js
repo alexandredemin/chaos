@@ -4,12 +4,18 @@ const AI_GUARD_CONFIG = Object.freeze({
 	minRadius: 1,
 	maxRadius: 5,
 	idealRadius: 3.5,
+	minIdealRadius: 1,
+	pressureStartDistance: 4.5,
+	pressureFullDistance: 1.5,
 	proximityBase: 2,
 	proximityFalloff: .4,
 	interceptHalfWidth: 1.5,
 	interceptMaxDistance: 16,
-	shieldBonus: 2,
-	jumpShieldBonus: 2,
+	shieldBonus: 1,
+	jumpShieldBonus: 1,
+	threatSeverityReference: 3,
+	threatSeverityMin: .5,
+	threatSeverityMax: 2,
 	congestionPenalty: .35,
 	anchorTolerance: 0,
 	slotPoolMultiplier: 2,
@@ -36,10 +42,14 @@ class AIGuardEvaluator
 		this.jumpShieldMap=new Map();
 		this.breakdownCache=new Map();
 		this.congestionMap=new Map();
+		this.nearestEnemyDistance=Infinity;
+		this.pressure=0;
+		this.idealRadius=config.idealRadius;
 		if(!this.active)return;
 
 		this.buildRingCells();
 		this.buildEnemyGeometry();
+		this.updateGuardPressure();
 		this.buildCongestionMap();
 	}
 
@@ -63,6 +73,29 @@ class AIGuardEvaluator
 		}
 	}
 
+	// Strategic strength is reused as a bounded threat multiplier. This keeps Goblin/Imp/Demon
+	// on one comparable scale without letting a cost-10 summon become a literal 10x multiplier.
+	getThreatSeverity(enemy)
+	{
+		const cfg=this.config,value=Math.max(0,AICombatValue.unitValue(enemy));
+		const raw=Math.sqrt(value/Math.max(.001,cfg.threatSeverityReference));
+		return Math.max(cfg.threatSeverityMin,Math.min(cfg.threatSeverityMax,raw));
+	}
+
+	updateGuardPressure()
+	{
+		const cfg=this.config,d=this.nearestEnemyDistance;
+		if(!Number.isFinite(d))
+		{
+			this.pressure=0;
+			this.idealRadius=cfg.idealRadius;
+			return;
+		}
+		const span=Math.max(.001,cfg.pressureStartDistance-cfg.pressureFullDistance);
+		this.pressure=Math.max(0,Math.min(1,(cfg.pressureStartDistance-d)/span));
+		this.idealRadius=d>=cfg.pressureStartDistance?cfg.idealRadius:Math.max(cfg.minIdealRadius,Math.min(cfg.idealRadius,d-1));
+	}
+
 	// Enemy geometry is global for all guards protecting the same target.
 	buildEnemyGeometry()
 	{
@@ -72,11 +105,13 @@ class AIGuardEvaluator
 			if(enemy.player===target.player||enemy.died||!this.ai.isUnitKnown(enemy))continue;
 			const ex=enemy.mapX,ey=enemy.mapY,vx=target.mapX-ex,vy=target.mapY-ey,len2=vx*vx+vy*vy;
 			if(len2<=1e-9)continue;
+			const dist=Math.sqrt(len2),severity=this.getThreatSeverity(enemy);
+			this.nearestEnemyDistance=Math.min(this.nearestEnemyDistance,dist);
 
 			if(len2<maxDist2)
 			{
-				const urgency=Math.max(0,1-Math.sqrt(len2)/cfg.interceptMaxDistance);
-				if(urgency>0)this.interceptLines.push({ex,ey,vx,vy,len2,urgency});
+				const urgency=Math.max(0,1-dist/cfg.interceptMaxDistance);
+				if(urgency>0)this.interceptLines.push({ex,ey,vx,vy,len2,urgency,severity});
 			}
 
 			const threatCache=this.ai.threatSystem.getEnemyCache(enemy);
@@ -84,17 +119,16 @@ class AIGuardEvaluator
 			if(fire!=null)
 			{
 				const origins=threatCache&&threatCache.fireOrigins&&threatCache.fireOrigins.length?threatCache.fireOrigins:[{x:ex,y:ey}];
-				this.addAbilityShield(origins,fire.config?fire.config.range||0:0,cfg.shieldBonus,this.fireShieldMap);
+				this.addAbilityShield(origins,fire.config?fire.config.range||0:0,cfg.shieldBonus*severity,this.fireShieldMap);
 			}
 
-			// Jump is a ranged LOS threat too. Unlike the Fire danger flexibility coefficient,
-			// shield usefulness is proportional to the fraction of actual attack lines blocked:
-			// blocking 1 of 20 possible origins is weak protection, not a 50% shield.
+			// Jump uses the same shield scale as Fire. Ability geometry decides coverage;
+			// enemy severity decides how valuable blocking that coverage is.
 			const jump=this.ai.threatSystem.getAbility(enemy,'jump');
 			if(jump!=null)
 			{
 				const origins=threatCache&&threatCache.jumpOrigins&&threatCache.jumpOrigins.length?threatCache.jumpOrigins:[{x:ex,y:ey}];
-				this.addAbilityShield(origins,jump.config?jump.config.range||0:0,cfg.jumpShieldBonus,this.jumpShieldMap);
+				this.addAbilityShield(origins,jump.config?jump.config.range||0:0,cfg.jumpShieldBonus*severity,this.jumpShieldMap);
 			}
 		}
 	}
@@ -150,13 +184,15 @@ class AIGuardEvaluator
 		return this.jumpShieldMap.get(this.key(x,y))||0;
 	}
 
-	// One frozen friendly-density field for the whole formation.
+	// One frozen friendly-density field for the whole formation. The protected unit itself is
+	// never congestion: standing next to the wizard is exactly what emergency bodyguarding needs.
 	buildCongestionMap()
 	{
-		const penalty=this.config.congestionPenalty;
+		const penalty=this.config.congestionPenalty*(1-this.pressure);
+		if(penalty<=1e-9)return;
 		for(const other of this.target.player.units)
 		{
-			if(other==null||other.died)continue;
+			if(other==null||other.died||other===this.target)continue;
 			for(let y=other.mapY-1;y<=other.mapY+1;y++)for(let x=other.mapX-1;x<=other.mapX+1;x++)
 			{
 				if(x<0||y<0||x>=map.width||y>=map.height||(x===other.mapX&&y===other.mapY))continue;
@@ -168,15 +204,16 @@ class AIGuardEvaluator
 
 	getInterceptionScore(x,y)
 	{
-		let best=0;
+		let total=0;
 		for(const line of this.interceptLines)
 		{
 			const wx=x-line.ex,wy=y-line.ey,t=(wx*line.vx+wy*line.vy)/line.len2;
 			if(t<=0||t>=1)continue;
 			const px=line.ex+t*line.vx,py=line.ey+t*line.vy,lineDist=Math.hypot(x-px,y-py);
-			best=Math.max(best,Math.max(0,this.config.interceptHalfWidth-lineDist)*line.urgency);
+			total+=Math.max(0,this.config.interceptHalfWidth-lineDist)*line.urgency*line.severity;
 		}
-		return best;
+		// Multiple threats may reinforce the same sector, but keep the component bounded.
+		return Math.min(total,this.config.interceptHalfWidth*this.config.threatSeverityMax);
 	}
 
 	getScoreBreakdown(x,y)
@@ -185,13 +222,13 @@ class AIGuardEvaluator
 		const key=this.key(x,y);
 		if(this.breakdownCache.has(key))return this.breakdownCache.get(key);
 		const dx=x-this.target.mapX,dy=y-this.target.mapY,r=Math.sqrt(dx*dx+dy*dy);
-		const proximity=this.config.proximityBase-Math.abs(r-this.config.idealRadius)*this.config.proximityFalloff;
+		const proximity=this.config.proximityBase-Math.abs(r-this.idealRadius)*this.config.proximityFalloff;
 		const intercept=this.getInterceptionScore(x,y);
 		const fireShield=this.getFireShieldScore(x,y);
 		const jumpShield=this.getJumpShieldScore(x,y);
 		const congestion=this.congestionMap.get(key)||0;
 		const score=proximity+intercept+fireShield+jumpShield-congestion;
-		const result={score,proximity,intercept,fireShield,jumpShield,congestion};
+		const result={score,proximity,intercept,fireShield,jumpShield,congestion,pressure:this.pressure,idealRadius:this.idealRadius,nearestEnemyDistance:this.nearestEnemyDistance};
 		this.breakdownCache.set(key,result);
 		this.scoreCache.set(key,score);
 		return result;
