@@ -10,12 +10,6 @@ const AI_GUARD_CONFIG = Object.freeze({
 	proximityBase: 2,
 	proximityFalloff: .4,
 	interceptHalfWidth: 1.5,
-	interceptMaxDistance: 16,
-	shieldBonus: 1,
-	jumpShieldBonus: 1,
-	threatSeverityReference: 3,
-	threatSeverityMin: .5,
-	threatSeverityMax: 2,
 	congestionPenalty: .35,
 	anchorTolerance: 0,
 	slotPoolMultiplier: 2,
@@ -29,11 +23,12 @@ const AI_GUARD_CONFIG = Object.freeze({
 // It is intentionally frozen for the AI turn; mid-turn it is rebuilt only when the guarded unit moves.
 class AIGuardEvaluator
 {
-	constructor(ai,target,config=AI_GUARD_CONFIG)
+	constructor(ai,target,config=AI_GUARD_CONFIG,guards=[])
 	{
 		this.ai=ai;
 		this.target=target;
 		this.config=config;
+		this.guards=new Set(guards||[]);
 		this.active=target!=null&&!target.died;
 		this.scoreCache=new Map();
 		this.ringCells=[];
@@ -73,15 +68,6 @@ class AIGuardEvaluator
 		}
 	}
 
-	// Strategic strength is reused as a bounded threat multiplier. This keeps Goblin/Imp/Demon
-	// on one comparable scale without letting a cost-10 summon become a literal 10x multiplier.
-	getThreatSeverity(enemy)
-	{
-		const cfg=this.config,value=Math.max(0,AICombatValue.unitValue(enemy));
-		const raw=Math.sqrt(value/Math.max(.001,cfg.threatSeverityReference));
-		return Math.max(cfg.threatSeverityMin,Math.min(cfg.threatSeverityMax,raw));
-	}
-
 	updateGuardPressure()
 	{
 		const cfg=this.config,d=this.nearestEnemyDistance;
@@ -96,83 +82,56 @@ class AIGuardEvaluator
 		this.idealRadius=d>=cfg.pressureStartDistance?cfg.idealRadius:Math.max(cfg.minIdealRadius,Math.min(cfg.idealRadius,d-1));
 	}
 
-	// Enemy geometry is global for all guards protecting the same target.
+	// Enemy geometry is global for all guards protecting the same target. Interception
+	// urgency comes from the shared cached one-turn mobility envelope rather than an
+	// arbitrary distance cutoff. Ability shields reuse cached Fire/Jump origins and LOS coverage.
 	buildEnemyGeometry()
 	{
-		const cfg=this.config,target=this.target,maxDist2=cfg.interceptMaxDistance*cfg.interceptMaxDistance;
+		const target=this.target;
 		for(const enemy of units)
 		{
 			if(enemy.player===target.player||enemy.died||!this.ai.isUnitKnown(enemy))continue;
 			const ex=enemy.mapX,ey=enemy.mapY,vx=target.mapX-ex,vy=target.mapY-ey,len2=vx*vx+vy*vy;
 			if(len2<=1e-9)continue;
-			const dist=Math.sqrt(len2),severity=this.getThreatSeverity(enemy);
+			const dist=Math.sqrt(len2),threatCache=this.ai.threatSystem.getEnemyCache(enemy);
 			this.nearestEnemyDistance=Math.min(this.nearestEnemyDistance,dist);
 
-			if(len2<maxDist2)
-			{
-				const urgency=Math.max(0,1-dist/cfg.interceptMaxDistance);
-				if(urgency>0)this.interceptLines.push({ex,ey,vx,vy,len2,urgency,severity});
-			}
+			const base=enemy.config&&enemy.config.features?enemy.config.features:enemy.features||{};
+			const approach=this.ai.threatSystem.getApproachMetrics(threatCache,enemy,target);
+			const meleeThreat=(base.attackPoints||0)>0?AICombatValue.hitChance(enemy.features.strength||1,target):0;
+			if(approach.urgency>0&&meleeThreat>0)
+				this.interceptLines.push({ex,ey,vx,vy,len2,urgency:approach.urgency,meleeThreat,eta:approach.eta});
 
-			const threatCache=this.ai.threatSystem.getEnemyCache(enemy);
 			const fire=this.ai.threatSystem.getAbility(enemy,'fire');
 			if(fire!=null)
 			{
-				const origins=threatCache&&threatCache.fireOrigins&&threatCache.fireOrigins.length?threatCache.fireOrigins:[{x:ex,y:ey}];
-				this.addAbilityShield(origins,fire.config?fire.config.range||0:0,cfg.shieldBonus*severity,this.fireShieldMap);
+				const shield=this.ai.threatSystem.getAbilityShieldCoverage(threatCache,enemy,target,'fire');
+				const threat=AICombatValue.hitChance(fire.config.damage||1,target);
+				this.addShieldCoverage(shield,threat,this.fireShieldMap);
 			}
 
-			// Jump uses the same shield scale as Fire. Ability geometry decides coverage;
-			// enemy severity decides how valuable blocking that coverage is.
 			const jump=this.ai.threatSystem.getAbility(enemy,'jump');
 			if(jump!=null)
 			{
-				const origins=threatCache&&threatCache.jumpOrigins&&threatCache.jumpOrigins.length?threatCache.jumpOrigins:[{x:ex,y:ey}];
-				this.addAbilityShield(origins,jump.config?jump.config.range||0:0,cfg.jumpShieldBonus*severity,this.jumpShieldMap);
+				const shield=this.ai.threatSystem.getAbilityShieldCoverage(threatCache,enemy,target,'jump');
+				const threat=AICombatValue.hitChance(jump.config.damage||1,target);
+				this.addShieldCoverage(shield,threat,this.jumpShieldMap);
 			}
 		}
 	}
 
-
-	addAbilityShield(origins,range,bonus,out)
+	addShieldCoverage(shield,threat,out)
 	{
-		const target=this.target,r2=range*range,counts=new Map();
-		let threatOrigins=0;
-		for(const origin of origins)
+		if(shield==null||shield.threatOrigins<=0||threat<=0)return;
+		for(const cell of this.ringCells)
 		{
-			const dx=target.mapX-origin.x,dy=target.mapY-origin.y;
-			if((dx===0&&dy===0)||dx*dx+dy*dy>r2)continue;
-			if(!checkLineOfSight(origin.x,origin.y,target.mapX,target.mapY,null,null,function(){return true;}))continue;
-			threatOrigins++;
-			this.addWeightedLineCells(origin.x,origin.y,target.mapX,target.mapY,counts);
-		}
-		if(threatOrigins<=0)return;
-		for(const [key,count] of counts)
-		{
-			const factor=count/threatOrigins;
-			out.set(key,(out.get(key)||0)+bonus*factor);
+			const coverage=shield.coverage[cell.y*map.width+cell.x]||0;
+			if(coverage<=0)continue;
+			const key=this.key(cell.x,cell.y);
+			out.set(key,(out.get(key)||0)+coverage*threat);
 		}
 	}
 
-	addLineCells(x1,y1,x2,y2,out)
-	{
-		let xx1=x1,xx2=x2,yy1=y1,yy2=y2,inv=false;
-		if(Math.abs(y2-y1)>Math.abs(x2-x1)){inv=true;xx1=y1;xx2=y2;yy1=x1;yy2=x2;}
-		const k=(yy2-yy1)/(xx2-xx1),b=yy1-k*xx1,dx=xx2<xx1?-1:1;
-		for(let x=xx1+dx;x!==xx2;x+=dx)
-		{
-			const y=Math.round(k*x+b),px=inv?y:x,py=inv?x:y;
-			if((px===x1&&py===y1)||(px===x2&&py===y2))continue;
-			out.add(this.key(px,py));
-		}
-	}
-
-	addWeightedLineCells(x1,y1,x2,y2,out)
-	{
-		const cells=new Set();
-		this.addLineCells(x1,y1,x2,y2,cells);
-		for(const key of cells)out.set(key,(out.get(key)||0)+1);
-	}
 
 	getFireShieldScore(x,y)
 	{
@@ -184,15 +143,15 @@ class AIGuardEvaluator
 		return this.jumpShieldMap.get(this.key(x,y))||0;
 	}
 
-	// One frozen friendly-density field for the whole formation. The protected unit itself is
-	// never congestion: standing next to the wizard is exactly what emergency bodyguarding needs.
+	// One frozen density field for non-GUARD friendlies. The protected unit and members of
+	// this GUARD formation are excluded: slot diversity already coordinates the guards themselves.
 	buildCongestionMap()
 	{
 		const penalty=this.config.congestionPenalty*(1-this.pressure);
 		if(penalty<=1e-9)return;
 		for(const other of this.target.player.units)
 		{
-			if(other==null||other.died||other===this.target)continue;
+			if(other==null||other.died||other===this.target||this.guards.has(other))continue;
 			for(let y=other.mapY-1;y<=other.mapY+1;y++)for(let x=other.mapX-1;x<=other.mapX+1;x++)
 			{
 				if(x<0||y<0||x>=map.width||y>=map.height||(x===other.mapX&&y===other.mapY))continue;
@@ -210,10 +169,10 @@ class AIGuardEvaluator
 			const wx=x-line.ex,wy=y-line.ey,t=(wx*line.vx+wy*line.vy)/line.len2;
 			if(t<=0||t>=1)continue;
 			const px=line.ex+t*line.vx,py=line.ey+t*line.vy,lineDist=Math.hypot(x-px,y-py);
-			total+=Math.max(0,this.config.interceptHalfWidth-lineDist)*line.urgency*line.severity;
+			const lineFactor=Math.max(0,1-lineDist/this.config.interceptHalfWidth);
+			total+=lineFactor*line.urgency*line.meleeThreat;
 		}
-		// Multiple threats may reinforce the same sector, but keep the component bounded.
-		return Math.min(total,this.config.interceptHalfWidth*this.config.threatSeverityMax);
+		return total;
 	}
 
 	getScoreBreakdown(x,y)
@@ -376,7 +335,7 @@ class AIGuardCoordinator
 
 	rebuildGroup(target)
 	{
-		const guards=this.getGuardUnits(target),evaluator=new AIGuardEvaluator(this.ai,target,this.config);
+		const guards=this.getGuardUnits(target),evaluator=new AIGuardEvaluator(this.ai,target,this.config,guards);
 		const candidates=evaluator.getCandidates(guards),slots=this.selectDiverseSlots(candidates,guards.length);
 		const group={target,anchorX:target.mapX,anchorY:target.mapY,evaluator,slots,assignments:new Map(),epoch:this.epoch,turnStamp:this.turnStamp};
 		this.assignGuards(group,guards);

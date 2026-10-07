@@ -74,6 +74,7 @@ class AIThreatSystem
 		{
 			c.fireMasks = new Map();
 			c.jumpMasks = new Map();
+			c.shieldMasks = new Map();
 			c.dangerMaps = new Map();
 		}
 	}
@@ -202,6 +203,8 @@ class AIThreatSystem
 			jumpOrigins:[],
 			fireMasks:new Map(),
 			jumpMasks:new Map(),
+			shieldMasks:new Map(),
+			approachMetrics:new Map(),
 			dangerMaps:new Map()
 		};
 
@@ -220,6 +223,79 @@ class AIThreatSystem
 		if(c.gasAbility)
 			for(const origin of gasOrigins.values()) this.markRadius(c.gasMask,origin.x,origin.y,c.gasAbility.config.range || 0);
 		return c;
+	}
+
+	// Reuse the one-turn resource-state mobility envelope to estimate how soon an enemy
+	// can physically enter melee range of a guarded target. On an 8-neighbour grid the
+	// Chebyshev gap is the exact open-field number of MOVE steps; cached states already
+	// include walls, terrain costs and MOVE/JUMP combinations.
+	getApproachMetrics(c,enemy,target)
+	{
+		if(c==null||enemy==null||target==null)return{gap:Infinity,bestGap:Infinity,progress:0,eta:Infinity,urgency:0};
+		const targetId=target.id!=null?target.id:target.config?.name||'target';
+		const key=targetId+'|'+target.mapX+','+target.mapY;
+		if(c.approachMetrics&&c.approachMetrics.has(key))return c.approachMetrics.get(key);
+
+		const gapAt=(x,y)=>Math.max(0,Math.max(Math.abs(target.mapX-x),Math.abs(target.mapY-y))-1);
+		const gap=gapAt(enemy.mapX,enemy.mapY);
+		let bestGap=gap;
+		for(const state of c.states)bestGap=Math.min(bestGap,gapAt(state.x,state.y));
+		const progress=Math.max(0,gap-bestGap);
+		let eta=Infinity,urgency=0;
+		if(gap<=0){eta=0;urgency=1;}
+		else if(progress>0)
+		{
+			eta=gap/progress;
+			// Reaching melee range within one turn is maximally urgent; N-turn approach is 1/N.
+			urgency=Math.min(1,1/Math.max(1,eta));
+		}
+		const result={gap,bestGap,progress,eta,urgency};
+		if(c.approachMetrics)c.approachMetrics.set(key,result);
+		return result;
+	}
+
+	// Fraction of currently legal ability origins whose line to target would be blocked
+	// by each intermediate cell. Mobility origins come from the shared enemy cache; this
+	// method only builds the target-specific LOS projection and caches it per dynamic state.
+	getAbilityShieldCoverage(c,enemy,target,type)
+	{
+		if(c==null||enemy==null||target==null)return null;
+		const ability=type==='fire'?c.fireAbility:type==='jump'?c.jumpAbility:null;
+		if(ability==null)return null;
+		const origins=type==='fire'?c.fireOrigins:c.jumpOrigins;
+		const targetId=target.id!=null?target.id:target.config?.name||'target';
+		const key=type+'|'+targetId+'|'+target.mapX+','+target.mapY+'|'+this.dynamicRevision;
+		if(c.shieldMasks.has(key))return c.shieldMasks.get(key);
+
+		const size=map.width*map.height,counts=new Uint16Array(size),coverage=new Float32Array(size);
+		const range=ability.config.range||0,r2=range*range;
+		let threatOrigins=0;
+		for(const origin of origins)
+		{
+			const dx=target.mapX-origin.x,dy=target.mapY-origin.y;
+			if((dx===0&&dy===0)||dx*dx+dy*dy>r2)continue;
+			// Ignore current units: the map asks where a hypothetical guard could become the blocker.
+			if(!checkLineOfSight(origin.x,origin.y,target.mapX,target.mapY,null,null,function(){return true;}))continue;
+			threatOrigins++;
+			this.addShieldLine(origin.x,origin.y,target.mapX,target.mapY,counts);
+		}
+		if(threatOrigins>0)for(let i=0;i<size;i++)if(counts[i]>0)coverage[i]=counts[i]/threatOrigins;
+		const result={coverage,threatOrigins};
+		c.shieldMasks.set(key,result);
+		return result;
+	}
+
+	addShieldLine(x1,y1,x2,y2,counts)
+	{
+		let xx1=x1,xx2=x2,yy1=y1,yy2=y2,inv=false;
+		if(Math.abs(y2-y1)>Math.abs(x2-x1)){inv=true;xx1=y1;xx2=y2;yy1=x1;yy2=x2;}
+		const k=(yy2-yy1)/(xx2-xx1),b=yy1-k*xx1,dx=xx2<xx1?-1:1;
+		for(let x=xx1+dx;x!==xx2;x+=dx)
+		{
+			const y=Math.round(k*x+b),px=inv?y:x,py=inv?x:y;
+			if(px<0||py<0||px>=map.width||py>=map.height)continue;
+			counts[py*map.width+px]++;
+		}
 	}
 
 	buildMobilityEnvelope(enemy)
