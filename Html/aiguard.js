@@ -9,6 +9,7 @@ const AI_GUARD_CONFIG = Object.freeze({
 	pressureFullDistance: 1.5,
 	proximityBase: 2,
 	proximityFalloff: .4,
+	proximityEmergencyReduction: .75,
 	interceptHalfWidth: 1.5,
 	congestionPenalty: .35,
 	anchorTolerance: 0,
@@ -181,7 +182,9 @@ class AIGuardEvaluator
 		const key=this.key(x,y);
 		if(this.breakdownCache.has(key))return this.breakdownCache.get(key);
 		const dx=x-this.target.mapX,dy=y-this.target.mapY,r=Math.sqrt(dx*dx+dy*dy);
-		const proximity=this.config.proximityBase-Math.abs(r-this.idealRadius)*this.config.proximityFalloff;
+		// Reduce only the distance preference, not the baseline score used by near-best slots.
+		const falloff=this.config.proximityFalloff*(1-this.config.proximityEmergencyReduction*this.pressure);
+		const proximity=this.config.proximityBase-Math.abs(r-this.idealRadius)*falloff;
 		const intercept=this.getInterceptionScore(x,y);
 		const fireShield=this.getFireShieldScore(x,y);
 		const jumpShield=this.getJumpShieldScore(x,y);

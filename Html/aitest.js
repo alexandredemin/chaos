@@ -119,6 +119,7 @@ const AITest = {
 		const state=this.getOverride(unit)||this.getCurrentState(unit),order=state.order||null,orderState=AIOrder.state(order)||{};
 		return {
 			order:AIOrder.type(order)||'',
+			reason:AIOrder.reason(order)||'attack',
 			profile:order&&typeof order==='object'?order.profile||'auto':'auto',
 			target:AIOrder.target(order),
 			targetPos:AIOrder.targetPos(order),
@@ -285,9 +286,15 @@ const AITest = {
 		const test=document.createElement('div');test.style.cssText='margin:10px 0;padding:8px;border:1px solid #555;line-height:1.7';
 		const orderRow=document.createElement('div');orderRow.append('Order: ');
 		orderRow.appendChild(this.select([
-			['','none'],['attack','Attack'],['intercept','Intercept'],['guard','Guard'],['cleanup','Cleanup']
-		],this.draft.order,v=>this.draft.order=v));test.appendChild(orderRow);
-		const profileRow=document.createElement('div');profileRow.append('Profile: ');
+			['','none'],['engage','Engage'],['move_to','Move To'],['guard','Guard']
+		],this.draft.order,v=>{this.draft.order=v;this.renderMenu();}));test.appendChild(orderRow);
+		if(this.draft.order==='engage')
+        {
+            const reasonRow=document.createElement('div');reasonRow.append('Reason: ');
+            reasonRow.appendChild(this.select([['attack','Attack'],['intercept','Intercept'],['cleanup','Cleanup']],this.draft.reason||'attack',v=>this.draft.reason=v));
+            test.appendChild(reasonRow);
+        }
+        const profileRow=document.createElement('div');profileRow.append('Profile: ');
 		profileRow.appendChild(this.select([
 			['auto','Auto'],['cautious','Cautious'],['balanced','Balanced'],['aggressive','Aggressive'],['critical','Critical']
 		],this.draft.profile,v=>this.draft.profile=v));test.appendChild(profileRow);
@@ -339,8 +346,16 @@ const AITest = {
 	applyOverride()
 	{
 		const unit=this.debugUnit;if(unit==null)return;
+        if(this.draft.order==='move_to'&&(!this.draft.targetPos||!Number.isInteger(this.draft.targetPos[0])||!Number.isInteger(this.draft.targetPos[1])))
+        {
+            this.updateStatus('MOVE_TO: select a map position first',true);return;
+        }
+        if(this.draft.order==='engage'&&(!this.draft.target||this.draft.target.died))
+        {
+            this.updateStatus('ENGAGE: select a living target unit first',true);return;
+        }
 		const ai=unit.player.aiControl.ensureUnitAIControl(unit);
-		const order=this.draft.order?AIOrder.create(this.draft.order,this.draft.target||null,this.draft.targetPos,{profile:this.draft.profile||'auto',state:{threatTurns:this.draft.threatTurns??null}}):null;
+		const order=this.draft.order?AIOrder.create(this.draft.order,this.draft.order==='move_to'?null:this.draft.target||null,this.draft.targetPos,{reason:this.draft.order==='engage'?(this.draft.reason||'attack'):null,profile:this.draft.profile||'auto',state:{threatTurns:this.draft.threatTurns??null}}):null;
 		ai.aiTestOverride={enabled:true,order};
 		ai.macroMove=null;
 		if(unit.player&&unit.player.aiControl&&unit.player.aiControl.guardCoordinator)unit.player.aiControl.guardCoordinator.invalidate();
@@ -523,6 +538,7 @@ const AITest = {
 	{
 		if(state==null)return null;
 		const order=state.order,target=AIOrder.target(order),targetPos=AIOrder.targetPos(order);
+		if(AIOrder.is(order,'move_to'))return targetPos;
 		if(target!=null&&!target.died)
 		{
 			if(AIOrder.is(order,'guard'))
@@ -543,6 +559,7 @@ const AITest = {
 		if(unit.isMoving||unit.processedAbility!=null)return{error:'Unit is busy'};
 		const state=this.getEffectiveState(unit),goal=this.resolveGoal(state);
 		if(goal==null)return{error:'No AI goal/target assigned. Use F8 to set one.'};
+		if(AIOrder.is(state.order,'engage')&&(!AIOrder.target(state.order)||AIOrder.target(state.order).died))return{error:'ENGAGE target is missing or dead'};
 		const ai=unit.player.aiControl,profile=this.resolveProfile(unit,state),order=state.order||null;
 		const planner=new AITurnPlanner(ai,unit,goal,{...ai.tacticalPlannerOptions,profile,order});
 		const result=planner.plan();
@@ -552,7 +569,8 @@ const AITest = {
 	formatPlan(plan)
 	{
 		if(plan.error)return'AI TEST: '+plan.error;
-		const labels=plan.result.actions&&plan.result.actions.length?plan.result.actions.map(a=>a.label||a.type).join(' -> '):'HOLD';
+		const completed=AIOrder.is(plan.state.order,'move_to')&&plan.goal&&plan.unit.mapX===plan.goal[0]&&plan.unit.mapY===plan.goal[1];
+		const labels=completed?'MOVE_TO COMPLETE':plan.result.actions&&plan.result.actions.length?plan.result.actions.map(a=>a.label||a.type).join(' -> '):'HOLD';
 		const goal=plan.goal?' goal='+plan.goal[0]+','+plan.goal[1]:'';
 		const assignment=AIOrder.is(plan.state.order,'guard')?AIOrder.state(plan.state.order).assignment:null;
 		let slot='';
@@ -579,7 +597,7 @@ const AITest = {
 			}
 			nav+=']';
 		}
-		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+' ['+plan.profile+']'+resources+goal+slot+nav+'\n'+labels+'\nscore='+plan.result.score.toFixed(2);
+		return plan.unit.config.name+' '+(AIOrder.type(plan.state.order)||'none')+(AIOrder.is(plan.state.order,'engage')?'('+String(AIOrder.reason(plan.state.order)||'attack')+')':'')+' ['+plan.profile+']'+resources+goal+slot+nav+'\n'+labels+'\nscore='+plan.result.score.toFixed(2);
 	},
 
 	planOnly()
