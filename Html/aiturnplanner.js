@@ -418,8 +418,6 @@ class AITurnPlanner
 		const out=[];
 		for(const a of actions)
 		{
-			// MOVE_TO is a pure positional order, not a license to leave the route for combat.
-			if(this.orderType==='move_to'&&a.type!=='move'&&(a.type!=='jump'||a.terminal))continue;
 			const n={...state,used:new Set(state.used),actions:state.actions.concat([a]),lastAction:a.type};
 			if(a.type==='move'){n.x=a.to[0];n.y=a.to[1];n.move=Math.max(0,n.move-a.cost);}
 			else if(a.type==='attack'){if(n.move<=0||n.attackPoints<=0)continue;n.move=Math.max(0,n.move-a.costMove);n.attackPoints=Math.max(0,n.attackPoints-a.costAttack);n.actionScore+=a.score||0;}
@@ -473,7 +471,6 @@ class AITurnPlanner
 		for(const s of beam)consider(s);
 
 		if(this.orderType==='guard')best=bestGuard;
-		if(this.orderType==='move_to'&&this.rootGoalDistance===0)return{best:root,score:this.finalScore(root),actions:[]};
 
 		// ROOT means "hold position". A committed order must not deadlock forever merely
 		// because every advancing option is risky. GUARD is committed to its coordinator slot,

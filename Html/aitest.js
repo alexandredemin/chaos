@@ -536,20 +536,8 @@ const AITest = {
 
 	resolveGoal(state)
 	{
-		if(state==null)return null;
-		const order=state.order,target=AIOrder.target(order),targetPos=AIOrder.targetPos(order);
-		if(AIOrder.is(order,'move_to'))return targetPos;
-		if(target!=null&&!target.died)
-		{
-			if(AIOrder.is(order,'guard'))
-			{
-				const unit=this.debugUnit,assignment=unit&&unit.player?unit.player.aiControl.guardCoordinator.ensureAssignment(unit,order):null;
-				if(assignment)return[assignment.x,assignment.y];
-			}
-			return[target.mapX,target.mapY];
-		}
-		if(targetPos!=null)return[targetPos[0],targetPos[1]];
-		return null;
+		if(state==null||this.debugUnit==null||AIOrder.goal(state.order)==null)return null;
+		return this.debugUnit.player.aiControl.getTacticalGoalFromState(this.debugUnit,state);
 	},
 
 	buildPlan()

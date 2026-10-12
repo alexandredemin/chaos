@@ -34,6 +34,14 @@ class AIOrder
 	}
 	static target(order){return order&&typeof order==='object'?order.target||null:null;}
 	static targetPos(order){return order&&typeof order==='object'&&order.targetPos?[order.targetPos[0],order.targetPos[1]]:null;}
+	// A tactical goal is either a live unit position or a fixed map point.
+	static goal(order)
+	{
+		if(this.type(order)==='move_to')return this.targetPos(order);
+		const target=this.target(order);
+		if(target!=null&&!target.died)return[target.mapX,target.mapY];
+		return this.targetPos(order);
+	}
 	static is(order,type)
 	{
 		if(type==='attack'||type==='intercept'||type==='cleanup')

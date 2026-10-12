@@ -591,19 +591,17 @@ class AIControl
 
 	getTacticalGoalFromState(unit,state)
 	{
-		const order=state?state.order:null,target=AIOrder.target(order),targetPos=AIOrder.targetPos(order);
-		if(AIOrder.is(order,'move_to'))return targetPos||[unit.mapX,unit.mapY];
-		if(target&&!target.died)
+		const order=state?state.order:null;
+		if(AIOrder.is(order,'guard'))
 		{
-			if(AIOrder.is(order,'guard'))
+			const target=AIOrder.target(order);
+			if(target!=null&&!target.died)
 			{
 				const assignment=this.guardCoordinator.ensureAssignment(unit,order);
 				if(assignment)return[assignment.x,assignment.y];
 			}
-			return[target.mapX,target.mapY];
 		}
-		if(targetPos)return[targetPos[0],targetPos[1]];
-		return[unit.mapX,unit.mapY];
+		return AIOrder.goal(order)||[unit.mapX,unit.mapY];
 	}
 
 	getTrafficPriority(unit)
@@ -629,24 +627,21 @@ class AIControl
 	{
 		const ai=this.ensureUnitAIControl(unit),order=ai.order;
 		if(order==null)return null;
-		const type=AIOrder.type(order),target=AIOrder.target(order);
-		if(type==='move_to')return AIOrder.targetPos(order);
+		const target=AIOrder.target(order);
 		if(target!=null)
 		{
-			if(target.died||(type!=='guard'&&!this.isUnitKnown(target)))
+			if(target.died||(!AIOrder.is(order,'guard')&&!this.isUnitKnown(target)))
 			{
 				this.setMainTarget(unit,null,null,null,null);
 				return null;
 			}
-			if(type==='guard')
+			if(AIOrder.is(order,'guard'))
 			{
 				const assignment=this.guardCoordinator.ensureAssignment(unit,order);
 				if(assignment!=null)return[assignment.x,assignment.y];
 			}
-			return[target.mapX,target.mapY];
 		}
-		const targetPos=AIOrder.targetPos(order);
-		return targetPos?[targetPos[0],targetPos[1]]:null;
+		return AIOrder.goal(order);
 	}
 
 	chooseNewMainGoal(unit)
@@ -1619,7 +1614,8 @@ class AIControl
         //Prepare list of available units
         let activeUnits = [];
         for(const unit of this.player.units){
-            if(unit != this.player.wizard && (!midTurn || this.canStillAct(unit)) && !AIOrder.is(this.getOrder(unit),'move_to')){
+            // Every non-wizard combat unit can intercept, regardless of its current order.
+            if(unit != this.player.wizard && (!midTurn || this.canStillAct(unit))){
                 activeUnits.push({
                     unit,
                     assigned: false,
