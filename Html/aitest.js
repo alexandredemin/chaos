@@ -135,6 +135,7 @@ const AITest = {
 		this.lastPlan = null;
 		this.guardOverlaySignature = null;
 		this.clearGuardOverlay();
+		if(AIOrder.is(this.getEffectiveState(unit).order,'move_to'))this.guardOverlayMode='waypoints';
 		this.statusVisible = true;
 		this.updateStatus(null,true);
 		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
@@ -305,9 +306,10 @@ const AITest = {
 		targetButtons.appendChild(this.button('Clear target',()=>{this.draft.target=null;this.draft.targetPos=null;this.renderMenu();}));
 		test.appendChild(targetButtons);
 
-		const overlayRow=document.createElement('div');overlayRow.style.marginTop='8px';overlayRow.append('Guard overlay: ');
+		const overlayRow=document.createElement('div');overlayRow.style.marginTop='8px';overlayRow.append('AI overlay: ');
 		overlayRow.appendChild(this.select([
 			['none','Off'],
+			['waypoints','MOVE_TO waypoints (WP)'],
 			['score','Total GuardScore'],
 			['proximity','Proximity'],
 			['intercept','Interception'],
@@ -359,6 +361,7 @@ const AITest = {
 		ai.aiTestOverride={enabled:true,order};
 		ai.macroMove=null;
 		if(unit.player&&unit.player.aiControl&&unit.player.aiControl.guardCoordinator)unit.player.aiControl.guardCoordinator.invalidate();
+		if(AIOrder.is(order,'move_to'))this.guardOverlayMode='waypoints';
 		this.lastPlan=null;
 		this.guardOverlaySignature=null;
 		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
@@ -446,7 +449,7 @@ const AITest = {
 
 	guardOverlayLabel(mode=this.guardOverlayMode)
 	{
-		const labels={score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
+		const labels={waypoints:'MOVE_TO waypoints',score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
 		return labels[mode]||'Off';
 	},
 
@@ -467,6 +470,38 @@ const AITest = {
 			if(obj&&obj.active!==false&&typeof obj.destroy==='function')obj.destroy();
 		}
 		this.guardOverlayObjects=[];
+	},
+
+	getWaypointOverlayContext()
+	{
+		const unit=this.debugUnit;
+		if(!unit||unit.died||!unit.player?.aiControl)return null;
+		const state=this.getEffectiveState(unit),order=state.order;
+		if(!AIOrder.is(order,'move_to'))return null;
+		const ai=unit.player.aiControl,profile=this.resolveProfile(unit,state);
+		const navigation=ai.navigator.ensure(unit,order,profile);
+		return{unit,order,navigation,scene:unit.scene};
+	},
+
+	refreshWaypointOverlay(force=false)
+	{
+		const ctx=this.getWaypointOverlayContext(),nav=ctx?.navigation;
+		if(!ctx?.scene?.add||!nav){this.clearGuardOverlay();this.guardOverlaySignature=null;return;}
+		const stamp=['wp',ctx.unit.id,ctx.unit.mapX,ctx.unit.mapY,nav.index,
+			...nav.waypoints.map(p=>p.x+','+p.y)].join('|');
+		if(!force&&stamp===this.guardOverlaySignature)return;
+		this.guardOverlaySignature=stamp;
+		this.clearGuardOverlay();
+		for(let i=0;i<nav.waypoints.length;i++)
+		{
+			const wp=nav.waypoints[i],current=i===nav.index,last=i===nav.waypoints.length-1;
+			const pos=map.tileToWorldXY(wp.x,wp.y),label=last?'GOAL':'WP'+(i+1);
+			const txt=ctx.scene.add.text(pos.x+1,pos.y+1,label,{
+				font:'5px monospace',color:current?'#ffff66':last?'#77ff99':'#ffae66',
+				backgroundColor:'#000000',resolution:6
+			});
+			txt.setDepth(20001);txt.setAlpha(.95);this.guardOverlayObjects.push(txt);
+		}
 	},
 
 	getGuardOverlayContext()
@@ -510,6 +545,7 @@ const AITest = {
 	refreshGuardOverlay(force=false)
 	{
 		if(this.guardOverlayMode==='none'){this.clearGuardOverlay();return;}
+		if(this.guardOverlayMode==='waypoints'){this.refreshWaypointOverlay(force);return;}
 		const ctx=this.getGuardOverlayContext();
 		if(ctx==null||ctx.scene==null||ctx.scene.add==null){this.clearGuardOverlay();return;}
 		const threatRevision=ctx.unit.player.aiControl.threatSystem.dynamicRevision??0,a=ctx.assignment,stamp=[this.guardOverlayMode,ctx.group.epoch,ctx.group.turnStamp,ctx.group.anchorX,ctx.group.anchorY,a?a.x:'x',a?a.y:'x',ctx.unit.mapX,ctx.unit.mapY,ctx.unit.features.health,threatRevision].join('|');
@@ -557,7 +593,7 @@ const AITest = {
 	formatPlan(plan)
 	{
 		if(plan.error)return'AI TEST: '+plan.error;
-		const completed=AIOrder.is(plan.state.order,'move_to')&&plan.goal&&plan.unit.mapX===plan.goal[0]&&plan.unit.mapY===plan.goal[1];
+		const destination=AIOrder.goal(plan.state.order),completed=AIOrder.is(plan.state.order,'move_to')&&destination&&plan.unit.mapX===destination[0]&&plan.unit.mapY===destination[1];
 		const labels=completed?'MOVE_TO COMPLETE':plan.result.actions&&plan.result.actions.length?plan.result.actions.map(a=>a.label||a.type).join(' -> '):'HOLD';
 		const goal=plan.goal?' goal='+plan.goal[0]+','+plan.goal[1]:'';
 		const assignment=AIOrder.is(plan.state.order,'guard')?AIOrder.state(plan.state.order).assignment:null;
@@ -571,6 +607,11 @@ const AITest = {
 		const f=plan.unit.features||{};
 		const resources=' pos='+plan.unit.mapX+','+plan.unit.mapY+' M='+Number(f.move||0)+' AP='+Number(f.abilityPoints||0)+' Atk='+Number(f.attackPoints||0);
 		let nav='';
+		if(AIOrder.is(plan.state.order,'move_to'))
+		{
+			const route=AIOrder.state(plan.state.order).navigation;
+			if(route)nav=' navigation[WP='+route.waypoints.map((p,i)=>(i===route.index?'*':'')+(i+1)+':'+p.x+','+p.y).join(' > ')+']';
+		}
 		if(AIOrder.is(plan.state.order,'guard')&&plan.planner)
 		{
 			const d0=plan.planner.rootGoalDistance,first=plan.result.actions&&plan.result.actions.length?plan.result.actions[0]:null;

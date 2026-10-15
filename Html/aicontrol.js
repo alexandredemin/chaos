@@ -15,6 +15,7 @@ class AIControl
 	invisibleMemoryTurns = 2;
 	threatSystem = null;
 	guardCoordinator = null;
+	navigator = null;
 	aiTestSingleStepUnit = null;
 	tacticalPlannerOptions = {maxDepth:5,beamWidth:16,maxMoveCandidates:10,maxJumpCandidates:10};
 
@@ -25,6 +26,7 @@ class AIControl
         this.detectedInvisibleUnits = new Map();
         this.threatSystem = new AIThreatSystem(this);
         this.guardCoordinator = new AIGuardCoordinator(this);
+        this.navigator = new AIMoveToNavigator(this);
     }
 
 	// Invisible units are known only after adjacent detection and remain remembered for a few future turns.
@@ -120,6 +122,7 @@ class AIControl
 			return;
 		}
 		this.traffic.startTurn();
+		this.navigator.startTurn();
 		for(const unit of this.player.units) if(unit&&unit.aiControl) unit.aiControl.macroMove=null;
 		this.threatSystem.startTurn();
 		this.guardCoordinator.startTurn(this.guardCoordinator.getGameTurnStamp());
@@ -601,6 +604,8 @@ class AIControl
 				if(assignment)return[assignment.x,assignment.y];
 			}
 		}
+		if(AIOrder.is(order,'move_to'))
+			return this.navigator.goalFor(unit,order,this.getTacticalProfile(unit,state))||[unit.mapX,unit.mapY];
 		return AIOrder.goal(order)||[unit.mapX,unit.mapY];
 	}
 
@@ -641,6 +646,8 @@ class AIControl
 				if(assignment!=null)return[assignment.x,assignment.y];
 			}
 		}
+		if(AIOrder.is(order,'move_to'))
+			return this.navigator.goalFor(unit,order,this.getTacticalProfile(unit,ai));
 		return AIOrder.goal(order);
 	}
 
@@ -701,7 +708,8 @@ class AIControl
         const profile=this.getTacticalProfile(unit,tacticalState);
         const order=tacticalState.order||null;
         const orderType=AIOrder.type(order);
-        if(orderType==='move_to'&&mainGoal&&unit.mapX===mainGoal[0]&&unit.mapY===mainGoal[1])
+        const strategicGoal=AIOrder.goal(order);
+        if(orderType==='move_to'&&strategicGoal&&unit.mapX===strategicGoal[0]&&unit.mapY===strategicGoal[1])
         {
             this.completeMoveToOrder(unit,order);
             console.log(unit.config.name+' MOVE_TO completed at '+unit.mapX+','+unit.mapY);
