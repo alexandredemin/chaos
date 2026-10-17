@@ -123,7 +123,8 @@ const AITest = {
 			profile:order&&typeof order==='object'?order.profile||'auto':'auto',
 			target:AIOrder.target(order),
 			targetPos:AIOrder.targetPos(order),
-			threatTurns:orderState.threatTurns??null
+			threatTurns:orderState.threatTurns??null,
+			areaMode:orderState.areaMode||'radius',radius:orderState.radius||5
 		};
 	},
 
@@ -136,6 +137,7 @@ const AITest = {
 		this.guardOverlaySignature = null;
 		this.clearGuardOverlay();
 		if(AIOrder.is(this.getEffectiveState(unit).order,'move_to'))this.guardOverlayMode='waypoints';
+		if(AIOrder.is(this.getEffectiveState(unit).order,'hold'))this.guardOverlayMode='hold:score';
 		this.statusVisible = true;
 		this.updateStatus(null,true);
 		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
@@ -287,7 +289,7 @@ const AITest = {
 		const test=document.createElement('div');test.style.cssText='margin:10px 0;padding:8px;border:1px solid #555;line-height:1.7';
 		const orderRow=document.createElement('div');orderRow.append('Order: ');
 		orderRow.appendChild(this.select([
-			['','none'],['engage','Engage'],['move_to','Move To'],['guard','Guard']
+			['','none'],['engage','Engage'],['move_to','Move To'],['guard','Guard'],['hold','Hold']
 		],this.draft.order,v=>{this.draft.order=v;this.renderMenu();}));test.appendChild(orderRow);
 		if(this.draft.order==='engage')
         {
@@ -299,6 +301,14 @@ const AITest = {
 		profileRow.appendChild(this.select([
 			['auto','Auto'],['cautious','Cautious'],['balanced','Balanced'],['aggressive','Aggressive'],['critical','Critical']
 		],this.draft.profile,v=>this.draft.profile=v));test.appendChild(profileRow);
+		if(this.draft.order==='hold')
+		{
+			const row=document.createElement('div');row.append('HOLD area: ');
+			row.appendChild(this.select([['room','Room'],['radius','Radius']],this.draft.areaMode||'radius',v=>{this.draft.areaMode=v;this.renderMenu();}));
+			row.append(' radius: ');
+			const radius=document.createElement('input');radius.type='number';radius.min=1;radius.max=30;radius.value=this.draft.radius||5;radius.style.width='55px';
+			radius.onchange=()=>this.draft.radius=Math.max(1,Math.min(30,Number(radius.value)||5));row.appendChild(radius);test.appendChild(row);
+		}
 		const target=document.createElement('div');target.id='aiTestTargetLabel';target.textContent='Target: '+this.targetName(this.draft.target,this.draft.targetPos);test.appendChild(target);
 		const targetButtons=document.createElement('div');
 		targetButtons.appendChild(this.button('Select unit target',()=>{this.closeMenu();this.beginPick('targetUnit');}));
@@ -310,6 +320,14 @@ const AITest = {
 		overlayRow.appendChild(this.select([
 			['none','Off'],
 			['waypoints','MOVE_TO waypoints (WP)'],
+			['hold:score','HOLD: total HoldScore'],
+			['hold:fireProtection','HOLD: FireProtection'],
+			['hold:meleeProtection','HOLD: MeleeProtection'],
+			['hold:fireControl','HOLD: FireControl'],
+			['hold:meleeControl','HOLD: MeleeControl'],
+			['hold:congestion','HOLD: congestion'],
+			['hold:area','HOLD: area and slots'],
+			['hold:entry','HOLD: entry cells'],
 			['score','Total GuardScore'],
 			['proximity','Proximity'],
 			['intercept','Interception'],
@@ -348,20 +366,21 @@ const AITest = {
 	applyOverride()
 	{
 		const unit=this.debugUnit;if(unit==null)return;
-        if(this.draft.order==='move_to'&&(!this.draft.targetPos||!Number.isInteger(this.draft.targetPos[0])||!Number.isInteger(this.draft.targetPos[1])))
+        if((this.draft.order==='move_to'||this.draft.order==='hold')&&(!this.draft.targetPos||!Number.isInteger(this.draft.targetPos[0])||!Number.isInteger(this.draft.targetPos[1])))
         {
-            this.updateStatus('MOVE_TO: select a map position first',true);return;
+            this.updateStatus('MOVE_TO/HOLD: select a map position first',true);return;
         }
         if(this.draft.order==='engage'&&(!this.draft.target||this.draft.target.died))
         {
             this.updateStatus('ENGAGE: select a living target unit first',true);return;
         }
 		const ai=unit.player.aiControl.ensureUnitAIControl(unit);
-		const order=this.draft.order?AIOrder.create(this.draft.order,this.draft.order==='move_to'?null:this.draft.target||null,this.draft.targetPos,{reason:this.draft.order==='engage'?(this.draft.reason||'attack'):null,profile:this.draft.profile||'auto',state:{threatTurns:this.draft.threatTurns??null}}):null;
+		const order=this.draft.order?AIOrder.create(this.draft.order,(this.draft.order==='move_to'||this.draft.order==='hold')?null:this.draft.target||null,this.draft.targetPos,{reason:this.draft.order==='engage'?(this.draft.reason||'attack'):null,profile:this.draft.profile||'auto',state:{threatTurns:this.draft.threatTurns??null,areaMode:this.draft.areaMode||'radius',radius:this.draft.radius||5}}):null;
 		ai.aiTestOverride={enabled:true,order};
 		ai.macroMove=null;
 		if(unit.player&&unit.player.aiControl&&unit.player.aiControl.guardCoordinator)unit.player.aiControl.guardCoordinator.invalidate();
 		if(AIOrder.is(order,'move_to'))this.guardOverlayMode='waypoints';
+		if(AIOrder.is(order,'hold'))this.guardOverlayMode='hold:score';
 		this.lastPlan=null;
 		this.guardOverlaySignature=null;
 		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay(true);
@@ -449,7 +468,10 @@ const AITest = {
 
 	guardOverlayLabel(mode=this.guardOverlayMode)
 	{
-		const labels={waypoints:'MOVE_TO waypoints',score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
+		const labels={
+			'hold:score':'HOLD: HoldScore','hold:fireProtection':'HOLD: FireProtection','hold:meleeProtection':'HOLD: MeleeProtection',
+			'hold:fireControl':'HOLD: FireControl','hold:meleeControl':'HOLD: MeleeControl','hold:congestion':'HOLD: congestion',
+			'hold:area':'HOLD area','hold:entry':'HOLD entries',waypoints:'MOVE_TO waypoints',score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
 		return labels[mode]||'Off';
 	},
 
@@ -504,6 +526,46 @@ const AITest = {
 		}
 	},
 
+	getHoldOverlayContext()
+	{
+		const unit=this.debugUnit;
+		if(!unit||unit.died||!unit.player?.aiControl)return null;
+		const state=this.getEffectiveState(unit),order=state.order;
+		if(!AIOrder.is(order,'hold'))return null;
+		const ai=unit.player.aiControl,ctx=ai.holdCoordinator.getContext(unit,order);
+		return ctx?{...ctx,unit,scene:unit.scene,coordinator:ai.holdCoordinator}:null;
+	},
+
+	refreshHoldOverlay(force=false)
+	{
+		const ctx=this.getHoldOverlayContext();
+		if(!ctx?.scene?.add){this.clearGuardOverlay();this.guardOverlaySignature=null;return;}
+		const stamp=['hold',this.guardOverlayMode,ctx.group.epoch,ctx.group.turnStamp,ctx.assignment?.x,ctx.assignment?.y,
+			ctx.unit.id,ctx.unit.mapX,ctx.unit.mapY,ctx.focusTarget?.id].join('|');
+		if(!force&&this.guardOverlaySignature===stamp)return;
+		this.guardOverlaySignature=stamp;this.clearGuardOverlay();
+		const mode=this.guardOverlayMode,area=ctx.area,assignments=[...ctx.group.assignments.values()];
+		for(const c of area.cells)
+		{
+			const b=area.breakdown(ctx.unit,c.x,c.y);
+			if(!b)continue;
+			const isSlot=assignments.some(a=>a.x===c.x&&a.y===c.y);
+			const mySlot=ctx.assignment&&ctx.assignment.x===c.x&&ctx.assignment.y===c.y;
+			const isEntry=area.entries.some(e=>e.k===c.k);
+			const congestion=ctx.coordinator.congestion(c,assignments.filter(a=>!mySlot||a.x!==c.x||a.y!==c.y).map(a=>({x:a.x,y:a.y})));
+			let value='';
+			if(mode==='hold:area')value=mySlot?'S':isSlot?'s':isEntry?'E':'·';
+			else if(mode==='hold:entry')value=isEntry?'E':'';
+			else if(mode==='hold:congestion')value=(-congestion).toFixed(2);
+			else value=(mode==='hold:score'?b.score-congestion:b[mode.slice(5)]??0).toFixed(2);
+			if(!value)continue;
+			const pos=map.tileToWorldXY(c.x,c.y),txt=ctx.scene.add.text(pos.x+1,pos.y+1,(mySlot?'*':'')+value,{
+				font:'5px monospace',color:mySlot?'#ffff66':isSlot?'#ffae66':'#ffffff',backgroundColor:'#000000',resolution:6
+			});
+			txt.setDepth(20002);txt.setAlpha(.9);this.guardOverlayObjects.push(txt);
+		}
+	},
+
 	getGuardOverlayContext()
 	{
 		const unit=this.debugUnit;
@@ -546,6 +608,7 @@ const AITest = {
 	{
 		if(this.guardOverlayMode==='none'){this.clearGuardOverlay();return;}
 		if(this.guardOverlayMode==='waypoints'){this.refreshWaypointOverlay(force);return;}
+		if(this.guardOverlayMode.startsWith('hold:')){this.refreshHoldOverlay(force);return;}
 		const ctx=this.getGuardOverlayContext();
 		if(ctx==null||ctx.scene==null||ctx.scene.add==null){this.clearGuardOverlay();return;}
 		const threatRevision=ctx.unit.player.aiControl.threatSystem.dynamicRevision??0,a=ctx.assignment,stamp=[this.guardOverlayMode,ctx.group.epoch,ctx.group.turnStamp,ctx.group.anchorX,ctx.group.anchorY,a?a.x:'x',a?a.y:'x',ctx.unit.mapX,ctx.unit.mapY,ctx.unit.features.health,threatRevision].join('|');
@@ -596,13 +659,14 @@ const AITest = {
 		const destination=AIOrder.goal(plan.state.order),completed=AIOrder.is(plan.state.order,'move_to')&&destination&&plan.unit.mapX===destination[0]&&plan.unit.mapY===destination[1];
 		const labels=completed?'MOVE_TO COMPLETE':plan.result.actions&&plan.result.actions.length?plan.result.actions.map(a=>a.label||a.type).join(' -> '):'HOLD';
 		const goal=plan.goal?' goal='+plan.goal[0]+','+plan.goal[1]:'';
-		const assignment=AIOrder.is(plan.state.order,'guard')?AIOrder.state(plan.state.order).assignment:null;
+		const assignment=(AIOrder.is(plan.state.order,'guard')||AIOrder.is(plan.state.order,'hold'))?AIOrder.state(plan.state.order).assignment:null;
 		let slot='';
 		if(assignment)
 		{
-			slot=' slot='+assignment.x+','+assignment.y+' guardScore='+Number(assignment.score||0).toFixed(2)+' epoch='+assignment.epoch+' turn='+String(assignment.turnStamp??'?');
+			slot=' slot='+assignment.x+','+assignment.y+' score='+Number(assignment.score||0).toFixed(2)+' epoch='+assignment.epoch+' turn='+String(assignment.turnStamp??'?');
 			const c=assignment.components;
-			if(c)slot+=' guardParts[p='+Number(c.proximity||0).toFixed(2)+' i='+Number(c.intercept||0).toFixed(2)+' f='+Number(c.fireShield||0).toFixed(2)+' j='+Number(c.jumpShield||0).toFixed(2)+' c='+Number(c.congestion||0).toFixed(2)+' q='+Number(c.pressure||0).toFixed(2)+' r='+Number(c.idealRadius||0).toFixed(2)+']';
+			if(AIOrder.is(plan.state.order,'hold'))slot+=' focus='+String(AIOrder.state(plan.state.order).focusTarget?.config?.name||'-');
+			if(c&&AIOrder.is(plan.state.order,'guard'))slot+=' guardParts[p='+Number(c.proximity||0).toFixed(2)+' i='+Number(c.intercept||0).toFixed(2)+' f='+Number(c.fireShield||0).toFixed(2)+' j='+Number(c.jumpShield||0).toFixed(2)+' c='+Number(c.congestion||0).toFixed(2)+' q='+Number(c.pressure||0).toFixed(2)+' r='+Number(c.idealRadius||0).toFixed(2)+']';
 		}
 		const f=plan.unit.features||{};
 		const resources=' pos='+plan.unit.mapX+','+plan.unit.mapY+' M='+Number(f.move||0)+' AP='+Number(f.abilityPoints||0)+' Atk='+Number(f.attackPoints||0);

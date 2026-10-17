@@ -15,6 +15,7 @@ class AIControl
 	invisibleMemoryTurns = 2;
 	threatSystem = null;
 	guardCoordinator = null;
+	holdCoordinator = null;
 	navigator = null;
 	aiTestSingleStepUnit = null;
 	tacticalPlannerOptions = {maxDepth:5,beamWidth:16,maxMoveCandidates:10,maxJumpCandidates:10};
@@ -26,6 +27,7 @@ class AIControl
         this.detectedInvisibleUnits = new Map();
         this.threatSystem = new AIThreatSystem(this);
         this.guardCoordinator = new AIGuardCoordinator(this);
+        this.holdCoordinator = new AIHoldCoordinator(this);
         this.navigator = new AIMoveToNavigator(this);
     }
 
@@ -126,6 +128,7 @@ class AIControl
 		for(const unit of this.player.units) if(unit&&unit.aiControl) unit.aiControl.macroMove=null;
 		this.threatSystem.startTurn();
 		this.guardCoordinator.startTurn(this.guardCoordinator.getGameTurnStamp());
+		this.holdCoordinator.startTurn(this.holdCoordinator.getTurnStamp());
 		this.updateInvisibleMemory();
 		this.detectAdjacentInvisibleUnitsForPlayer();
 		this.availableUnits = [];
@@ -376,6 +379,13 @@ class AIControl
 
 	canMacroMoveThroughCell(unit,x,y)
 	{
+		const order=this.getAITestOverride(unit)?.order||this.getOrder(unit);
+		if(AIOrder.is(order,'hold'))
+		{
+			const area=this.holdCoordinator.getArea(order);
+			// Allow a unit ordered from outside to reach the area; once inside, stay inside.
+			if(area&&area.contains(unit.mapX,unit.mapY)&&!area.contains(x,y))return false;
+		}
 		const occupant=getUnitAtMap(x,y);
 		if(occupant==null||occupant===unit||occupant.died)return true;
 		if(occupant.player!==unit.player)return false;
@@ -604,6 +614,11 @@ class AIControl
 				if(assignment)return[assignment.x,assignment.y];
 			}
 		}
+		if(AIOrder.is(order,'hold'))
+		{
+			const assignment=this.holdCoordinator.ensureAssignment(unit,order);
+			if(assignment)return[assignment.x,assignment.y];
+		}
 		if(AIOrder.is(order,'move_to'))
 			return this.navigator.goalFor(unit,order,this.getTacticalProfile(unit,state))||[unit.mapX,unit.mapY];
 		return AIOrder.goal(order)||[unit.mapX,unit.mapY];
@@ -623,7 +638,7 @@ class AIControl
 		const type=AIOrder.type(order);
 		if(order&&typeof order==='object'&&order.priority!=null)return order.priority;
 		if(type==='engage')return AIOrder.reason(order)==='intercept'?80:60;
-		if(type==='guard')return 10;
+		if(type==='guard'||type==='hold')return 10;
 		if(type==='move_to')return 40;
 		return 40;
 	}
@@ -645,6 +660,11 @@ class AIControl
 				const assignment=this.guardCoordinator.ensureAssignment(unit,order);
 				if(assignment!=null)return[assignment.x,assignment.y];
 			}
+		}
+		if(AIOrder.is(order,'hold'))
+		{
+			const assignment=this.holdCoordinator.ensureAssignment(unit,order);
+			if(assignment)return[assignment.x,assignment.y];
 		}
 		if(AIOrder.is(order,'move_to'))
 			return this.navigator.goalFor(unit,order,this.getTacticalProfile(unit,ai));
@@ -693,7 +713,7 @@ class AIControl
             if(turns!=null&&turns<=3)return'balanced';
             return'cautious';
         }
-        if(type==='guard')return'cautious';
+		if(type==='guard'||type==='hold')return'cautious';
         return'balanced';
     }
 
@@ -1425,6 +1445,8 @@ class AIControl
                 const pos=AIOrder.targetPos(activeOrder);
                 if(pos&&!(unit.mapX===pos[0]&&unit.mapY===pos[1]))continue;
             }
+            // HOLD remains assigned across turns until explicitly replaced (including intercept).
+            if(activeType==='hold')continue;
             // Strategic attack persists; interception and cleanup may be reassigned.
             if(activeType==='engage'&&AIOrder.reason(activeOrder)==='attack'&&activeTarget&&!activeTarget.died&&this.isUnitKnown(activeTarget))continue;
             this.setMainTarget(unit,null,null,null,null);
@@ -1550,12 +1572,19 @@ class AIControl
         //If no wizard or wizard died
             for(const unit of this.player.units){
                 if(midTurn && !this.canStillAct(unit)) continue;
+                if(AIOrder.is(this.getOrder(unit),'hold'))continue; // Persistent even without a living wizard.
                 let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
                 let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
                 if(trgtWiz)this.setEngageOrder(unit,trgtWiz,{reason:'attack'});
             }
         }
         if(!midTurn)this.guardCoordinator.prepareTurnAssignments();
+        // HOLD assignments are cached per area and built lazily from the effective orders.
+        for(const unit of this.player.units)
+        {
+            const order=this.getOrder(unit);
+            if(AIOrder.is(order,'hold'))this.holdCoordinator.ensureAssignment(unit,order);
+        }
     }
   
     /*
@@ -1617,6 +1646,15 @@ class AIControl
     }
     */
   
+    // HOLD handles intruders in its own area with focusTarget; distant attackers
+    // remain eligible for the existing global interception mechanism.
+    isHoldIntruder(unit,enemy)
+    {
+        const order=this.getAITestOverride(unit)?.order||this.getOrder(unit);
+        if(!AIOrder.is(order,'hold'))return false;
+        return this.holdCoordinator.getArea(order)?.contains(enemy.mapX,enemy.mapY)===true;
+    }
+
     assignTargets(threats,midTurn=false)
     {
         //Prepare list of available units
@@ -1639,7 +1677,7 @@ class AIControl
             for(let u of activeUnits) logStr = logStr + u.unit.config.name + " ";
             console.log(" - activeUnits: " + logStr);
             const nearestUnits = activeUnits
-            .filter(unt => !unt.assigned)
+            .filter(unt => !unt.assigned && !this.isHoldIntruder(unt.unit,threat.enemy))
             .map(unt => {
                 let target = null;
                 if(unt.unit.aiControl&&AIOrder.is(unt.unit.aiControl.order,"engage")&&AIOrder.reason(unt.unit.aiControl.order)==='attack'){const orderTarget=AIOrder.target(unt.unit.aiControl.order);if(orderTarget!=null&&!orderTarget.died&&this.isUnitKnown(orderTarget))target=orderTarget;}
@@ -1700,15 +1738,18 @@ class AIControl
         const ai=this.ensureUnitAIControl(unit);
         if(order==null){this.setMainTarget(unit,null,null,null,null);return null;}
         const type=AIOrder.type(order),target=AIOrder.target(order),targetPos=AIOrder.targetPos(order);
-        if(type==='move_to'&&(!targetPos||!Number.isInteger(targetPos[0])||!Number.isInteger(targetPos[1])))
-            throw new Error('MOVE_TO requires integer targetPos [x,y]');
+        if((type==='move_to'||type==='hold')&&(!targetPos||!Number.isInteger(targetPos[0])||!Number.isInteger(targetPos[1])))
+            throw new Error(type+' requires integer targetPos [x,y]');
         if(type==='engage'&&target==null)throw new Error('ENGAGE requires a target unit');
         const old=ai.order,same=AIOrder.type(old)===type&&AIOrder.target(old)===target&&
-            AIOrder.reason(old)===AIOrder.reason(order)&&(type!=='move_to'||String(AIOrder.targetPos(old))===String(targetPos));
+            AIOrder.reason(old)===AIOrder.reason(order)&&
+            ((type!=='move_to'&&type!=='hold')||String(AIOrder.targetPos(old))===String(targetPos))&&
+            (type!=='hold'||(AIOrder.state(old).areaMode===AIOrder.state(order).areaMode&&AIOrder.state(old).radius===AIOrder.state(order).radius));
         if(!same)
         {
             ai.macroMove=null;
             if(this.guardCoordinator&&(AIOrder.is(old,'guard')||type==='guard'))this.guardCoordinator.invalidate();
+            if(this.holdCoordinator&&(AIOrder.is(old,'hold')||type==='hold'))this.holdCoordinator.groups.clear();
         }
         ai.order=AIOrder.create(type,target,targetPos,{
             reason:AIOrder.reason(order),profile:order.profile,priority:order.priority,
@@ -1729,6 +1770,12 @@ class AIControl
     setMoveToOrder(unit,position,options={})
     {
         return this.setOrder(unit,AIOrder.create('move_to',null,position,options));
+    }
+
+    setHoldOrder(unit,position,options={})
+    {
+        const state={...(options.state||{}),areaMode:options.areaMode||options.state?.areaMode||'radius',radius:options.radius||options.state?.radius||5};
+        return this.setOrder(unit,AIOrder.create('hold',null,position,{...options,state}));
     }
 
     completeMoveToOrder(unit,order)
