@@ -602,6 +602,16 @@ class AIControl
 		return o&&o.enabled===true?o:null;
 	}
 
+	getHoldTacticalGoal(unit,order)
+	{
+		const assignment=this.holdCoordinator.ensureAssignment(unit,order);
+		const focus=AIOrder.state(order).focusTarget;
+		const area=this.holdCoordinator.getArea(order);
+		if(focus&&!focus.died&&this.isUnitKnown(focus)&&area?.contains(focus.mapX,focus.mapY))
+			return[focus.mapX,focus.mapY];
+		return assignment?[assignment.x,assignment.y]:AIOrder.targetPos(order);
+	}
+
 	getTacticalGoalFromState(unit,state)
 	{
 		const order=state?state.order:null;
@@ -614,11 +624,7 @@ class AIControl
 				if(assignment)return[assignment.x,assignment.y];
 			}
 		}
-		if(AIOrder.is(order,'hold'))
-		{
-			const assignment=this.holdCoordinator.ensureAssignment(unit,order);
-			if(assignment)return[assignment.x,assignment.y];
-		}
+		if(AIOrder.is(order,'hold'))return this.getHoldTacticalGoal(unit,order)||[unit.mapX,unit.mapY];
 		if(AIOrder.is(order,'move_to'))
 			return this.navigator.goalFor(unit,order,this.getTacticalProfile(unit,state))||[unit.mapX,unit.mapY];
 		return AIOrder.goal(order)||[unit.mapX,unit.mapY];
@@ -661,11 +667,7 @@ class AIControl
 				if(assignment!=null)return[assignment.x,assignment.y];
 			}
 		}
-		if(AIOrder.is(order,'hold'))
-		{
-			const assignment=this.holdCoordinator.ensureAssignment(unit,order);
-			if(assignment)return[assignment.x,assignment.y];
-		}
+		if(AIOrder.is(order,'hold'))return this.getHoldTacticalGoal(unit,order);
 		if(AIOrder.is(order,'move_to'))
 			return this.navigator.goalFor(unit,order,this.getTacticalProfile(unit,ai));
 		return AIOrder.goal(order);

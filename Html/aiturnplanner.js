@@ -435,7 +435,8 @@ class AITurnPlanner
 
 	isCommittedOrder()
 	{
-		return this.orderType==='engage'||this.orderType==='guard'||this.orderType==='move_to'; // HOLD may intentionally stay at its slot
+		return this.orderType==='engage'||this.orderType==='guard'||this.orderType==='move_to'||
+			(this.orderType==='hold'&&this.focusTarget!=null&&!this.focusTarget.died&&this.holdArea?.contains(this.focusTarget.mapX,this.focusTarget.mapY));
 	}
 
 	isGuardAdmissibleState(state)

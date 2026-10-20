@@ -1,6 +1,7 @@
 //---------------------------- HOLD: shared area geometry, unit scoring and assignments ----------------------------
 
-const AI_HOLD_CONFIG=Object.freeze({defaultRadius:5,slotSpacing:1,travelPenalty:.05,congestionPenalty:.35});
+const AI_HOLD_CONFIG=Object.freeze({defaultRadius:5,slotSpacing:1,travelPenalty:.05,congestionPenalty:.35,
+	fireRayCount:16,fireRayRadius:20,fireExposureTau:16});
 
 class AIHoldArea
 {
@@ -8,7 +9,7 @@ class AIHoldArea
 	{
 		this.ai=ai;this.center=center;this.mode=mode;this.radius=radius;this.config=config;
 		this.cells=[];this.keys=new Set();this.entries=[];this.entryBand=[];
-		this.fireMasks=new Map();this.meleeMasks=new Map();this.fireProtection=new Map();this.meleeProtection=new Map();
+		this.fireMasks=new Map();this.meleeMasks=new Map();this.fireProtection=new Map();this.externalExposure=new Map();this.meleeProtection=new Map();
 		this.unitScores=new WeakMap();
 		this.buildGeometry();this.buildMatrices();
 	}
@@ -71,6 +72,56 @@ class AIHoldArea
 	bit(mask,index){return(mask[index>>>5]&(1<<(index&31)))!==0;}
 	popcount(mask){let n=0;for(let v of mask){v>>>=0;while(v){v&=v-1;n++;}}return n;}
 	los(x,y,tx,ty){return x===tx&&y===ty||checkLineOfSight(x,y,tx,ty,null,null,()=>true)===true;}
+	// Fast, approximate structural exposure to outside firing origins. Ray traces use
+	// adjacent grid cells (Bresenham) and never treat temporary units as cover.
+	// A door is considered potentially open, even when it is currently closed.
+	blocksFireRay(x,y)
+	{
+		const tile=wallsLayer.getTileAt(x,y);
+		if(tile!=null&&tile.properties?.collides===true)return true;
+		for(const entity of Entity.getEntitiesAtMap(x,y)||[])
+		{
+			if(entity.config?.name==='door')continue;
+			if(entity.features?.blocksLOS!==false)return true;
+		}
+		return false;
+	}
+	buildExternalExposure()
+	{
+		const rays=Math.max(1,this.config.fireRayCount),radius=this.config.fireRayRadius;
+		const visited=new Int32Array(map.width*map.height);let stamp=0;
+		const vectors=[];
+		for(let i=0;i<rays;i++)
+		{
+			const angle=2*Math.PI*i/rays;
+			vectors.push([Math.round(radius*Math.cos(angle)),Math.round(radius*Math.sin(angle))]);
+		}
+		for(const origin of this.cells)
+		{
+			stamp++;let exposure=0;
+			for(const [dx,dy] of vectors)
+			{
+				let x=origin.x,y=origin.y,ax=Math.abs(dx),ay=Math.abs(dy);
+				const sx=dx>=0?1:-1,sy=dy>=0?1:-1;
+				let error=ax-ay;
+				for(let step=0;step<Math.max(ax,ay);step++)
+				{
+					const e2=2*error;
+					if(e2>-ay){error-=ay;x+=sx;}
+					if(e2<ax){error+=ax;y+=sy;}
+					if(x<0||y<0||x>=map.width||y>=map.height)break;
+					if((x-origin.x)**2+(y-origin.y)**2>radius*radius)break;
+					if(this.blocksFireRay(x,y))break;
+					if(this.contains(x,y))continue;
+					const k=this.key(x,y);
+					if(visited[k]===stamp)continue;
+					visited[k]=stamp;exposure++;
+				}
+			}
+			this.externalExposure.set(origin.k,exposure);
+			this.fireProtection.set(origin.k,Math.exp(-exposure/this.config.fireExposureTau));
+		}
+	}
 	buildMatrices()
 	{
 		const ne=this.entries.length,nb=this.entryBand.length;
@@ -80,12 +131,12 @@ class AIHoldArea
 			for(let i=0;i<ne;i++)if(this.los(c.x,c.y,this.entries[i].x,this.entries[i].y))this.setBit(fire,i);
 			for(let i=0;i<nb;i++)if(Math.max(Math.abs(c.x-this.entryBand[i].x),Math.abs(c.y-this.entryBand[i].y))===1)this.setBit(melee,i);
 			this.fireMasks.set(c.k,fire);this.meleeMasks.set(c.k,melee);
-			this.fireProtection.set(c.k,ne?1-this.popcount(fire)/ne:1);
 			let exposed=0;
 			for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)if(dx||dy)
 				if(this.passable(c.x+dx,c.y+dy))exposed++;
 			this.meleeProtection.set(c.k,1-exposed/8);
 		}
+		this.buildExternalExposure();
 	}
 	positionsFrom(x,y,maxCost,unit)
 	{
@@ -149,13 +200,13 @@ class AIHoldArea
 		if(!this.unitScores.has(unit))this.unitScores.set(unit,new Map());
 		const cache=this.unitScores.get(unit);
 		if(cache.has(k))return cache.get(k);
-		const fireProtection=this.fireProtection.get(k),meleeProtection=this.meleeProtection.get(k);
+		const fireProtection=this.fireProtection.get(k),externalExposure=this.externalExposure.get(k),meleeProtection=this.meleeProtection.get(k);
 		const fire=Object.values(unit.config?.abilities||{}).find(a=>a?.type==='fire');
 		const fireControl=fire?this.coverage(unit,{x,y},'fire',fire.config.range||0):0;
 		const meleeControl=this.coverage(unit,{x,y},'melee');
 		const offense=fire?Math.max(fireControl,meleeControl):meleeControl;
 		const defense=(fireProtection+meleeProtection)/2;
-		const out={fireProtection,meleeProtection,fireControl,meleeControl,offense,defense,congestion:0,score:defense+offense};
+		const out={fireProtection,externalExposure,meleeProtection,fireControl,meleeControl,offense,defense,congestion:0,score:defense+offense};
 		cache.set(k,out);return out;
 	}
 }

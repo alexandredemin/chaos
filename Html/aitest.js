@@ -322,6 +322,7 @@ const AITest = {
 			['waypoints','MOVE_TO waypoints (WP)'],
 			['hold:score','HOLD: total HoldScore'],
 			['hold:fireProtection','HOLD: FireProtection'],
+			['hold:externalExposure','HOLD: ExternalExposure'],
 			['hold:meleeProtection','HOLD: MeleeProtection'],
 			['hold:fireControl','HOLD: FireControl'],
 			['hold:meleeControl','HOLD: MeleeControl'],
@@ -469,7 +470,7 @@ const AITest = {
 	guardOverlayLabel(mode=this.guardOverlayMode)
 	{
 		const labels={
-			'hold:score':'HOLD: HoldScore','hold:fireProtection':'HOLD: FireProtection','hold:meleeProtection':'HOLD: MeleeProtection',
+			'hold:score':'HOLD: HoldScore','hold:fireProtection':'HOLD: FireProtection','hold:externalExposure':'HOLD: ExternalExposure','hold:meleeProtection':'HOLD: MeleeProtection',
 			'hold:fireControl':'HOLD: FireControl','hold:meleeControl':'HOLD: MeleeControl','hold:congestion':'HOLD: congestion',
 			'hold:area':'HOLD area','hold:entry':'HOLD entries',waypoints:'MOVE_TO waypoints',score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
 		return labels[mode]||'Off';
@@ -665,7 +666,12 @@ const AITest = {
 		{
 			slot=' slot='+assignment.x+','+assignment.y+' score='+Number(assignment.score||0).toFixed(2)+' epoch='+assignment.epoch+' turn='+String(assignment.turnStamp??'?');
 			const c=assignment.components;
-			if(AIOrder.is(plan.state.order,'hold'))slot+=' focus='+String(AIOrder.state(plan.state.order).focusTarget?.config?.name||'-');
+			if(AIOrder.is(plan.state.order,'hold'))
+			{
+				const focus=AIOrder.state(plan.state.order).focusTarget;
+				slot+=' HOLD_MODE='+(focus?'ENGAGEMENT':'FORMATION')+' focus='+String(focus?.config?.name||'-');
+				slot+=' tacticalGoal='+String(plan.goal?.join(',')||'-');
+			}
 			if(c&&AIOrder.is(plan.state.order,'guard'))slot+=' guardParts[p='+Number(c.proximity||0).toFixed(2)+' i='+Number(c.intercept||0).toFixed(2)+' f='+Number(c.fireShield||0).toFixed(2)+' j='+Number(c.jumpShield||0).toFixed(2)+' c='+Number(c.congestion||0).toFixed(2)+' q='+Number(c.pressure||0).toFixed(2)+' r='+Number(c.idealRadius||0).toFixed(2)+']';
 		}
 		const f=plan.unit.features||{};
