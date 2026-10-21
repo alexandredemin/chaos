@@ -343,6 +343,7 @@ class FireEntity extends Entity
 
     onStepIn(unit)
     {
+        if(unit.features.fireImmunity === true) return null;
         unit.features.health--;
         let killed = false;
         if(unit.features.health <= 0) killed = true;
@@ -356,6 +357,7 @@ class FireEntity extends Entity
         if(this.atackQueue.length > 0)
         {
             let unit = this.atackQueue.pop();
+            if(unit.features.fireImmunity === true){this.atack();return;}
             unit.features.health--;
             let killed = false;
             if(unit.features.health <= 0) killed = true;

@@ -63,7 +63,8 @@ class AIGuardEvaluator
 			if(d2>maxR2||d2<minR2)continue;
 			const wall=wallsLayer.getTileAt(x,y);
 			if(wall!=null&&wall.properties['collides']===true)continue;
-			if(Entity.getEntityAtMap(x,y)!=null)continue;
+			// Unit-dependent entity restrictions are applied by the shared cell policy
+			// during candidate filtering and assignment, not by excluding all entities.
 			if(checkLineOfSight(target.mapX,target.mapY,x,y,null,null,function(){return true;})!==true)continue;
 			this.ringCells.push({x,y});
 		}
@@ -209,7 +210,12 @@ class AIGuardEvaluator
 		{
 			const occupant=getUnitAtMap(cell.x,cell.y);
 			if(occupant!=null&&!occupant.died&&!guardSet.has(occupant))continue;
-			result.push({x:cell.x,y:cell.y,score:this.scoreAt(cell.x,cell.y)});
+			const policies=[...guardSet].map(unit=>AICellPolicy.assess(unit,cell.x,cell.y)).filter(p=>!p.blocked);
+			if(!policies.length)continue;
+			const baseScore=this.scoreAt(cell.x,cell.y);
+			// Use the cheapest eligible defender for the global slot pool; individual
+			// costs are applied again using each guard's own immunity and abilities.
+			result.push({x:cell.x,y:cell.y,score:baseScore-Math.min(...policies.map(p=>p.slotPenalty)),baseScore});
 		}
 		result.sort((a,b)=>b.score-a.score||a.y-b.y||a.x-b.x);
 		return result;
@@ -397,9 +403,11 @@ class AIGuardCoordinator
 		const options=[];
 		for(const slot of slots)
 		{
+			const policy=AICellPolicy.assess(guard,slot.x,slot.y);
+			if(policy.blocked)continue;
 			const dist=dmap[slot.y]&&dmap[slot.y][slot.x]!=null?dmap[slot.y][slot.x]:-1;
 			if(dist<0)continue;
-			options.push({slot,distance:dist,utility:slot.score-this.config.travelWeight*dist});
+			options.push({slot,distance:dist,utility:(slot.baseScore??slot.score)-policy.slotPenalty-this.config.travelWeight*dist});
 		}
 		options.sort((a,b)=>b.utility-a.utility||a.distance-b.distance||b.slot.score-a.slot.score);
 		return options;

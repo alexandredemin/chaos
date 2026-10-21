@@ -321,6 +321,7 @@ const AITest = {
 			['none','Off'],
 			['waypoints','MOVE_TO waypoints (WP)'],
 			['hold:score','HOLD: total HoldScore'],
+			['hold:slotPenalty','HOLD: slot penalty / X blocked'],
 			['hold:fireProtection','HOLD: FireProtection'],
 			['hold:externalExposure','HOLD: ExternalExposure'],
 			['hold:meleeProtection','HOLD: MeleeProtection'],
@@ -330,6 +331,7 @@ const AITest = {
 			['hold:area','HOLD: area and slots'],
 			['hold:entry','HOLD: entry cells'],
 			['score','Total GuardScore'],
+			['cellPenalty','GUARD: slot penalty / X blocked'],
 			['proximity','Proximity'],
 			['intercept','Interception'],
 			['fireShield','Fire shield'],
@@ -470,9 +472,9 @@ const AITest = {
 	guardOverlayLabel(mode=this.guardOverlayMode)
 	{
 		const labels={
-			'hold:score':'HOLD: HoldScore','hold:fireProtection':'HOLD: FireProtection','hold:externalExposure':'HOLD: ExternalExposure','hold:meleeProtection':'HOLD: MeleeProtection',
+			'hold:score':'HOLD: HoldScore','hold:slotPenalty':'HOLD: slot penalty','hold:fireProtection':'HOLD: FireProtection','hold:externalExposure':'HOLD: ExternalExposure','hold:meleeProtection':'HOLD: MeleeProtection',
 			'hold:fireControl':'HOLD: FireControl','hold:meleeControl':'HOLD: MeleeControl','hold:congestion':'HOLD: congestion',
-			'hold:area':'HOLD area','hold:entry':'HOLD entries',waypoints:'MOVE_TO waypoints',score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
+			'hold:area':'HOLD area','hold:entry':'HOLD entries',waypoints:'MOVE_TO waypoints',cellPenalty:'GUARD slot penalty',score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
 		return labels[mode]||'Off';
 	},
 
@@ -558,6 +560,11 @@ const AITest = {
 			if(mode==='hold:area')value=mySlot?'S':isSlot?'s':isEntry?'E':'·';
 			else if(mode==='hold:entry')value=isEntry?'E':'';
 			else if(mode==='hold:congestion')value=(-congestion).toFixed(2);
+			else if(mode==='hold:slotPenalty')
+			{
+				const policy=AICellPolicy.assess(ctx.unit,c.x,c.y);
+				value=policy.blocked?'X':policy.slotPenalty.toFixed(2);
+			}
 			else value=(mode==='hold:score'?b.score-congestion:b[mode.slice(5)]??0).toFixed(2);
 			if(!value)continue;
 			const pos=map.tileToWorldXY(c.x,c.y),txt=ctx.scene.add.text(pos.x+1,pos.y+1,(mySlot?'*':'')+value,{
@@ -585,6 +592,11 @@ const AITest = {
 	getGuardOverlayValue(ctx,x,y)
 	{
 		const mode=this.guardOverlayMode,b=ctx.evaluator.getScoreBreakdown(x,y);
+		if(mode==='cellPenalty')
+		{
+			const policy=AICellPolicy.assess(ctx.unit,x,y);
+			return policy.blocked?NaN:policy.slotPenalty;
+		}
 		if(mode==='score')return b.score;
 		if(mode==='proximity')return b.proximity;
 		if(mode==='intercept')return b.intercept;
@@ -621,7 +633,7 @@ const AITest = {
 		{
 			const value=this.getGuardOverlayValue(ctx,cell.x,cell.y);
 			const pos=map.tileToWorldXY(cell.x,cell.y),isSlot=a&&a.x===cell.x&&a.y===cell.y;
-			const str=(isSlot?'*':'')+(Number.isFinite(value)?value.toFixed(2):'--');
+			const str=(isSlot?'*':'')+(Number.isFinite(value)?value.toFixed(2):this.guardOverlayMode==='cellPenalty'?'X':'--');
 			const txt=ctx.scene.add.text(pos.x+1,pos.y+1,str,{font:'5px monospace',color:isSlot?'#ffff66':'#ffffff',backgroundColor:'#000000',resolution:6});
 			txt.setDepth(20000);txt.setAlpha(.9);this.guardOverlayObjects.push(txt);
 		}

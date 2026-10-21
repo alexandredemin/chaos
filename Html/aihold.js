@@ -81,6 +81,8 @@ class AIHoldArea
 		if(tile!=null&&tile.properties?.collides===true)return true;
 		for(const entity of Entity.getEntitiesAtMap(x,y)||[])
 		{
+			// TODO: If another entity has a potentially transparent state, replace
+			// this door-only exception with a declarative potential-LOS feature.
 			if(entity.config?.name==='door')continue;
 			if(entity.features?.blocksLOS!==false)return true;
 		}
@@ -152,14 +154,9 @@ class AIHoldArea
 				if(!dx&&!dy)continue;
 				const nx=px+dx,ny=py+dy,k=this.key(nx,ny);
 				if(!this.contains(nx,ny))continue;
-				let cost=1;
-				for(const entity of Entity.getEntitiesAtMap(nx,ny)||[])
-				{
-					if(typeof entity.evaluateStep!=='function')continue;
-					const extra=entity.evaluateStep(unit);
-					if(extra===false){cost=Infinity;break;}
-					if(Number.isFinite(extra))cost+=Math.floor(extra+.5)*Math.max(1,unit.config?.features?.move||1);
-				}
+				const policy=AICellPolicy.assess(unit,nx,ny);
+				if(policy.blocked)continue;
+				const cost=1+Math.floor(policy.movePenalty+.5)*Math.max(1,unit.config?.features?.move||1);
 				const nd=d+cost;
 				if(nd>maxCost||nd>=(best.get(k)??Infinity))continue;
 				best.set(k,nd);queue.push([nx,ny,nd]);
@@ -262,9 +259,11 @@ class AIHoldCoordinator
 			{
 				const occupant=getUnitAtMap(c.x,c.y);
 				if(occupant&&!holders.includes(occupant))continue;
+				const policy=AICellPolicy.assess(unit,c.x,c.y);
+				if(policy.blocked)continue;
 				const b=area.breakdown(unit,c.x,c.y),d=dmap[c.y]?.[c.x];
 				if(!b||d==null||d<0)continue;
-				list.push({cell:c,b,base:b.score-this.config.travelPenalty*Math.max(0,d-dmap[unit.mapY][unit.mapX])});
+				list.push({cell:c,b,base:b.score-this.config.travelPenalty*Math.max(0,d-dmap[unit.mapY][unit.mapX])-policy.slotPenalty});
 			}
 			list.sort((a,b)=>b.base-a.base);options.set(unit,list);
 		}

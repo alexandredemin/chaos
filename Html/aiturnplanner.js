@@ -30,8 +30,8 @@ class AIPlannerMatrixAdapter
 	{
 		return this.withState(state,unit => {
 			const dmap=this.ai.getDistanceMap(unit,state.x,state.y,null,null,cell=>this.ai.canMacroMoveThroughCell(unit,cell[0],cell[1]));
-			let places=this.ai.getAvailableCells(dmap,unit,null,true).filter(p=>p.dist>=0&&p.dist<=state.move&&this.planner.isHoldMoveAllowed(p.cell[0],p.cell[1]));
-			places.push(...this.frontierEntries(state,unit,dmap,places).filter(p=>this.planner.isHoldMoveAllowed(p.cell[0],p.cell[1])));
+			let places=this.ai.getAvailableCells(dmap,unit,null,true).filter(p=>p.dist>=0&&p.dist<=state.move);
+			places.push(...this.frontierEntries(state,unit,dmap,places));
 			if(!places.some(p=>p.cell[0]===state.x&&p.cell[1]===state.y)) places.unshift({cell:[state.x,state.y],dist:0});
 			const gDMap=this.planner.goalMap;
 			this.ai.computeDistMatrix(unit,places,this.planner.goal,gDMap);
@@ -75,8 +75,7 @@ class AIPlannerMatrixAdapter
 				if(wall!=null&&wall.properties['collides']===true)continue;
 				const occupant=getUnitAtMap(x,y);
 				if(occupant!=null&&occupant!==unit&&!occupant.died)continue;
-				const entity=Entity.getEntityAtMap(x,y);
-				if(entity!=null&&entity.evaluateStep(unit)===false)continue;
+				if(AICellPolicy.assess(unit,x,y).blocked)continue;
 
 				// Weighted path cost is heuristic. Physically this cell is one legal step from p.
 				// Consume all simulated movement conservatively; the macro executor walks to the frontier
@@ -257,7 +256,7 @@ class AIJumpActionProvider extends AITurnActionProvider
 		{
 			const dx=x-state.x,dy=y-state.y;if((dx===0&&dy===0)||dx*dx+dy*dy>r2)continue;
 			const wall=wallsLayer.getTileAt(x,y);if(wall!=null&&wall.properties['collides']===true)continue;
-			if(!this.planner.isHoldMoveAllowed(x,y))continue;
+			if(AICellPolicy.assess(this.planner.unit,x,y).blocked)continue;
 			if(!checkLineOfSight(state.x,state.y,x,y,null,null,u=>u===this.planner.unit?true:false))continue;
 			let occupant=getUnitAtMap(x,y);if(occupant===this.planner.unit)occupant=null;if(occupant&&occupant.player===this.planner.unit.player)continue;
 			out.push({x,y,occupant});
@@ -342,7 +341,6 @@ class AITurnPlanner
 		this.order=opts.order??(unit.aiControl?unit.aiControl.order:null);
 		this.orderType=AIOrder.type(this.order);
 		this.holdArea=this.orderType==='hold'?this.ai.holdCoordinator.getArea(this.order):null;
-		this.holdRootInside=this.holdArea?.contains(unit.mapX,unit.mapY)||false;
 		this.focusTarget=this.orderType==='hold'?AIOrder.state(this.order).focusTarget:null;
 		const assignment=this.orderType==='guard'?AIOrder.state(this.order)?.assignment:null;
 		this.guardPressure=assignment&&assignment.components?Math.max(0,Math.min(1,assignment.components.pressure||0)):0;
@@ -357,7 +355,6 @@ class AITurnPlanner
 	cacheKey(s){return s.x+','+s.y+'|'+s.move+'|'+s.ap+'|'+s.attackPoints;}
 	matricesFor(s){const k=this.cacheKey(s);if(!this.matrixCache.has(k))this.matrixCache.set(k,this.adapter.build(s));return this.matrixCache.get(k);}
 	knownEnemies(){return this.adapter.knownEnemies();}
-	isHoldMoveAllowed(x,y){return !this.holdRootInside||!this.holdArea||this.holdArea.contains(x,y);}
 	focusScore(target,score){return this.focusTarget===target?score*1.1:score;}
 	positionDangerAt(x,y){return this.ai.threatSystem.getDangerAt(this.unit,x,y);}
 	goalProgressAt(x,y){const gd=this.goalMap[y]?this.goalMap[y][x]:-1;return this.rootGoalDistance>=0&&gd>=0?this.rootGoalDistance-gd:-1000;}

@@ -110,19 +110,12 @@ class AIMoveToNavigator
 
 	cellCost(unit,x,y,isGoal)
 	{
-		const wall=wallsLayer.getTileAt(x,y);
-		if(wall!=null&&wall.properties.collides===true)return null;
+		const policy=AICellPolicy.assess(unit,x,y);
+		if(policy.blocked)return null;
 		const occupant=getUnitAtMap(x,y);
 		if(!isGoal&&occupant!=null&&occupant!==unit&&!occupant.died&&
 			!this.ai.canMacroMoveThroughCell(unit,x,y))return null;
-		let cost=1;
-		for(const entity of Entity.getEntitiesAtMap(x,y)||[])
-		{
-			if(typeof entity.evaluateStep!=='function')continue;
-			const extra=entity.evaluateStep(unit);
-			if(extra===false)return null;
-			if(Number.isFinite(extra))cost+=Math.floor(extra+.5)*this.fullMove(unit);
-		}
+		let cost=1+Math.floor(policy.movePenalty+.5)*this.fullMove(unit);
 		if(occupant!=null&&occupant!==unit&&!isGoal)cost+=this.fullMove(unit);
 		return cost;
 	}

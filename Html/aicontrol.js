@@ -331,7 +331,7 @@ class AIControl
                             if(pos.x !== unit.mapX || pos.y !== unit.mapY) break;
                         }
                         if(action.params.path.length === 0) unit.aiControl.action = null;
-                        if(pos && unit.canStepTo(pos.x-unit.mapX,pos.y-unit.mapY)){                   
+                        if(pos && !AICellPolicy.assess(unit,pos.x,pos.y).blocked && unit.canStepTo(pos.x-unit.mapX,pos.y-unit.mapY)){
                             unit.stepTo(pos.x,pos.y);
                         }
                         else{
@@ -379,13 +379,8 @@ class AIControl
 
 	canMacroMoveThroughCell(unit,x,y)
 	{
-		const order=this.getAITestOverride(unit)?.order||this.getOrder(unit);
-		if(AIOrder.is(order,'hold'))
-		{
-			const area=this.holdCoordinator.getArea(order);
-			// Allow a unit ordered from outside to reach the area; once inside, stay inside.
-			if(area&&area.contains(unit.mapX,unit.mapY)&&!area.contains(x,y))return false;
-		}
+		// HOLD area defines strategic responsibility, not a physical movement boundary.
+		if(AICellPolicy.assess(unit,x,y).blocked)return false;
 		const occupant=getUnitAtMap(x,y);
 		if(occupant==null||occupant===unit||occupant.died)return true;
 		if(occupant.player!==unit.player)return false;
@@ -395,21 +390,10 @@ class AIControl
 	macroMoveCellCost(unit,x,y)
 	{
 		if(x<0||x>=map.width||y<0||y>=map.height)return null;
-		const wall=wallsLayer.getTileAt(x,y);
-		if(wall!=null&&wall.properties['collides']===true)return null;
-
-		if(!this.canMacroMoveThroughCell(unit,x,y))return null;
+		const policy=AICellPolicy.assess(unit,x,y);
+		if(policy.blocked||!this.canMacroMoveThroughCell(unit,x,y))return null;
 		const occupant=getUnitAtMap(x,y);
-
-		let cost=1;
-		const ents=Entity.getEntitiesAtMap(x,y)||[];
-		for(const ent of ents)
-		{
-			if(typeof ent.evaluateStep!=='function')continue;
-			const extra=ent.evaluateStep(unit);
-			if(extra===false)return null;
-			if(Number.isFinite(extra))cost+=Math.floor(extra+.5)*Math.max(1,unit.config.features.move||1);
-		}
+		let cost=1+Math.floor(policy.movePenalty+.5)*Math.max(1,unit.config.features.move||1);
 		if(occupant!=null&&occupant!==unit)cost+=Math.max(1,unit.config.features.move||1);
 		return cost;
 	}
@@ -494,7 +478,7 @@ class AIControl
 		}
 
 		const dx=next[0]-unit.mapX,dy=next[1]-unit.mapY;
-		if(unit.canStepTo(dx,dy))
+		if(!AICellPolicy.assess(unit,next[0],next[1]).blocked&&unit.canStepTo(dx,dy))
 		{
 			move.pathIndex++;
 			this.traffic.beforeNormalStep(unit,next);
@@ -512,7 +496,7 @@ class AIControl
 		move.path=this.findMacroMovePath(unit,move.target);move.pathIndex=0;
         if(move.path!=null&&move.path.length>unit.features.move)move.path=null;
         next=move.path&&move.path[0];
-		if(next!=null&&unit.canStepTo(next[0]-unit.mapX,next[1]-unit.mapY))
+		if(next!=null&&!AICellPolicy.assess(unit,next[0],next[1]).blocked&&unit.canStepTo(next[0]-unit.mapX,next[1]-unit.mapY))
 		{
 			move.pathIndex=1;
 			this.traffic.beforeNormalStep(unit,next);
@@ -531,7 +515,7 @@ class AIControl
 		if(cell == null) return false;
 		let dx = cell[0] - unit.mapX;
 		let dy = cell[1] - unit.mapY;
-		if(unit.canStepTo(dx,dy))
+		if(!AICellPolicy.assess(unit,cell[0],cell[1]).blocked&&unit.canStepTo(dx,dy))
 		{
 			this.traffic.beforeNormalStep(unit,cell);
 			unit.stepTo(cell[0],cell[1]);
@@ -1237,20 +1221,14 @@ class AIControl
                                 else d += unt.config.features.health*unit.config.features.move;
                             }
                         }
-                        let entity = Entity.getEntityAtMap(xx,yy);
-                        if(entity != null)
+                        const policy=AICellPolicy.assess(unit,xx,yy);
+                        if(policy.blocked)continue;
+                        const cellEntities=Entity.getEntitiesAtMap(xx,yy)||[];
+                        if(onEntity)
                         {
-                            if(onEntity)
-                            {
-                                if(onEntity(entity) === false) continue;
-                            }
-                            else
-                            {
-                                const stepCost = entity.evaluateStep(unit);
-                                if(stepCost === false) continue;
-                                d += Math.floor(stepCost+0.5)*unit.config.features.move;
-                            }
+                            if(cellEntities.some(entity=>onEntity(entity)===false))continue;
                         }
+                        else d+=Math.floor(policy.movePenalty+.5)*unit.config.features.move;
                         if(onCell && onCell([xx,yy]) === false) continue;
                         if(penaltyMap) d += penaltyMap[yy][xx];
                         if(distMap[yy][xx] > -1 && cell[2]+d >= distMap[yy][xx]) continue;

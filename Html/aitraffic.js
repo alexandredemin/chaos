@@ -181,7 +181,7 @@ class AITrafficController
 
 	canUseCell(unit, x, y, ignoreUnit=null)
 	{
-		if(x < 0 || x >= map.width || y < 0 || y >= map.height) return false;
+		if(AICellPolicy.assess(unit,x,y).blocked)return false;
 		const occupant = getUnitAtMap(x,y);
 		if(occupant != null && occupant !== ignoreUnit) return false;
 
@@ -219,8 +219,8 @@ class AITrafficController
 			{
 				if(dx === 0 && dy === 0) continue;
 				if(!unit.canStepTo(dx,dy)) continue;
-
 				const cell = [unit.mapX+dx,unit.mapY+dy];
+				if(!this.canUseCell(unit,cell[0],cell[1],unit))continue;
 				const score = this.openDegree(unit,cell[0],cell[1]);
 				if(score > bestScore) {best = [cell]; bestScore = score;}
 				else if(score === bestScore) best.push(cell);
@@ -266,7 +266,7 @@ class AITrafficController
 
 	startTrafficStep(unit, cell, options={})
 	{
-		if(cell == null || !unit.canStepTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) return false;
+		if(cell == null || !this.canUseCell(unit,cell[0],cell[1],unit) || !unit.canStepTo(cell[0]-unit.mapX,cell[1]-unit.mapY)) return false;
 		const state = this.getState(unit);
 
 		state.pendingStep = {

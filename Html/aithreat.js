@@ -334,17 +334,9 @@ class AIThreatSystem
 
 	getStepCost(enemy,x,y)
 	{
-		const wall = wallsLayer.getTileAt(x,y);
-		if(wall != null && wall.properties['collides'] === true) return null;
-		let cost = 1;
-		const entity = Entity.getEntityAtMap(x,y);
-		if(entity != null)
-		{
-			const stepCost = entity.evaluateStep(enemy);
-			if(stepCost === false) return null;
-			cost += Math.floor(stepCost+.5) * Math.max(1,enemy.config.features.move||1);
-		}
-		return cost;
+		const policy=AICellPolicy.assess(enemy,x,y);
+		if(policy.blocked)return null;
+		return 1+Math.floor(policy.movePenalty+.5)*Math.max(1,enemy.config.features.move||1);
 	}
 
 	acceptState(mapByCell,state)
