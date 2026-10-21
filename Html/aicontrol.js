@@ -1,5 +1,33 @@
 //---------------------------- AIControl class ----------------------------
 
+// Binary min-heap shared by weighted single/multi-source distance searches.
+class AIDistanceMinHeap
+{
+    constructor(){this.items=[];}
+    push(v)
+    {
+        const a=this.items;let i=a.length;a.push(v);
+        while(i>0){const j=(i-1)>>1;if(a[j].d<=v.d)break;a[i]=a[j];i=j;}
+        a[i]=v;
+    }
+    pop()
+    {
+        const a=this.items,r=a[0],v=a.pop();
+        if(a.length)
+        {
+            let i=0;
+            while(2*i+1<a.length)
+            {
+                let j=2*i+1;if(j+1<a.length&&a[j+1].d<a[j].d)j++;
+                if(v.d<=a[j].d)break;a[i]=a[j];i=j;
+            }
+            a[i]=v;
+        }
+        return r;
+    }
+    get length(){return this.items.length;}
+}
+
 class AIControl
 {
     player = null;
@@ -805,7 +833,7 @@ class AIControl
     {
         for(let place of stepPlaces) place.distWeight = 0;
         if(goal == null)return;
-        if(gDMap == null) gDMap = this.getDistanceMap(unit,goal[0],goal[1]);
+        if(gDMap == null) gDMap = this.getMultiSourceDistanceMap(unit,[goal],{reverse:true}).distances;
         let b = gDMap[unit.mapY][unit.mapX];
         for(let place of stepPlaces)
         {
@@ -1175,6 +1203,11 @@ class AIControl
         return penaltyMap;
     }
 
+    /* LEGACY DISTANCE MAP (kept temporarily for regression comparison).
+     * The wavefront is NOT proper weighted Dijkstra: nodes may be frozen in a
+     * breadth wave before their cheapest path is established. It also charged
+     * entity penalties on entry, whereas Web/Glue pay their movement cost on EXIT.
+     * To restore: uncomment this method and disable the active one below.
     getDistanceMap(unit,x,y,onEntity,onUnit,onCell,maxDist=0,penaltyMap=null)
     {
         let distMap = [];
@@ -1250,6 +1283,125 @@ class AIControl
         return distMap;
     }
   
+    */
+
+    /**
+     * getMultiSourceDistanceMap(unit, sources, options={})
+     *
+     * Generic, non-negative weighted Dijkstra over the 8-neighbor map.
+     * `sources` is [[x,y],...] or [{x,y},...]. All sources start at distance 0.
+     * Returns {distances, nearestSource}, 2D arrays with -1 for unreachable.
+     * nearestSource[y][x] contains the INDEX of the closest initial source.
+     *
+     * CRITICAL EXIT-COST SEMANTICS: Web/Glue penalize LEAVING their cell.
+     * `reverse:false` yields costs from sources TO every reachable cell;
+     * `reverse:true` yields costs FROM each cell TO its nearest source.
+     * In reverse mode relaxation current->neighbor charges the cost of
+     * neighbor->current (including the policy at neighbor), not current->neighbor.
+     * Use reverse mode for goal-distance gradients and approaching HOLD entrances.
+     *
+     * options:
+     *   reverse (default false), maxDist (0=unlimited), onEntity, onUnit,
+     *   onCell, penaltyMap, canEnter(x,y) (optional search-domain restriction).
+     * Callbacks retain getDistanceMap's legacy API. When onEntity is supplied,
+     * its predicate filters entities, and entity movement penalties are ignored
+     * (as in the old method). AICellPolicy.blocked is ALWAYS enforced.
+     * A search is a current-world snapshot. Recompute after major world changes.
+     *
+     * Complexity: O((V+E)log V) time / O(V) memory; E<=8V on this grid.
+     */
+    getMultiSourceDistanceMap(unit,sources,options={})
+    {
+        const width=map.width,height=map.height,size=width*height;
+        const {reverse=false,maxDist=0,onEntity=null,onUnit=null,onCell=null,penaltyMap=null,canEnter=null}=options;
+        const dist=new Float64Array(size),sourceIndex=new Int32Array(size);
+        dist.fill(Infinity);sourceIndex.fill(-1);
+        const heap=new AIDistanceMinHeap(),steps=Math.max(1,unit.config?.features?.move||1);
+        const toIndex=(x,y)=>y*width+x;
+        const inBounds=(x,y)=>x>=0&&y>=0&&x<width&&y<height;
+        // Compute destination occupancy and source exit costs once per visited cell.
+        const policies=new Map(),occupants=new Map(),entities=new Map();
+        const policyAt=(x,y)=>
+        {
+            const k=toIndex(x,y);
+            if(!policies.has(k))policies.set(k,AICellPolicy.assess(unit,x,y));
+            return policies.get(k);
+        };
+        const entityAt=(x,y)=>
+        {
+            const k=toIndex(x,y);
+            if(!entities.has(k))entities.set(k,Entity.getEntitiesAtMap(x,y)||[]);
+            return entities.get(k);
+        };
+        const occupantAt=(x,y)=>
+        {
+            const k=toIndex(x,y);
+            if(!occupants.has(k))occupants.set(k,getUnitAtMap(x,y,unit.player));
+            return occupants.get(k);
+        };
+        // Include the source even if it is currently occupied; normal candidate
+        // validation applies when the search enters it from another cell.
+        for(let i=0;i<sources.length;i++)
+        {
+            const s=sources[i],x=Array.isArray(s)?s[0]:s.x,y=Array.isArray(s)?s[1]:s.y;
+            if(!inBounds(x,y)||(canEnter&&!canEnter(x,y)))continue;
+            const k=toIndex(x,y);if(dist[k]===0)continue;
+            dist[k]=0;sourceIndex[k]=i;heap.push({k,x,y,d:0});
+        }
+        while(heap.length)
+        {
+            const current=heap.pop(),k=current.k;
+            if(current.d!==dist[k])continue;
+            if(maxDist>0&&current.d>maxDist)break;
+            for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)
+            {
+                if(!dx&&!dy)continue;
+                const nx=current.x+dx,ny=current.y+dy;
+                if(!inBounds(nx,ny)||(canEnter&&!canEnter(nx,ny)))continue;
+                const nk=toIndex(nx,ny);
+                // In reverse search this corresponds to the REAL edge nx,ny -> current.
+                const fromX=reverse?nx:current.x,fromY=reverse?ny:current.y;
+                const destX=reverse?current.x:nx,destY=reverse?current.y:ny;
+                if(policyAt(nx,ny).blocked||policyAt(current.x,current.y).blocked)continue;
+                if(onCell&&onCell([nx,ny])===false)continue;
+                const destEntities=entityAt(destX,destY);
+                if(onEntity&&destEntities.some(entity=>onEntity(entity)===false))continue;
+                const occupant=occupantAt(destX,destY);
+                let extra=0;
+                if(occupant&&occupant!==unit&&!occupant.died)
+                {
+                    if(onUnit){if(onUnit(occupant)===false)continue;}
+                    else extra+=(occupant.player===unit.player?steps:(occupant.config?.features?.health||1)*steps);
+                }
+                if(!onEntity)extra+=Math.floor(policyAt(fromX,fromY).movePenalty+.5)*steps;
+                if(penaltyMap)extra+=Number(penaltyMap[destY]?.[destX]||0);
+                const edge=1+extra;
+                if(!Number.isFinite(edge)||edge<0)continue; // Dijkstra requires non-negative costs.
+                const nd=current.d+edge;
+                if((maxDist>0&&nd>maxDist)||nd>=dist[nk])continue;
+                dist[nk]=nd;sourceIndex[nk]=sourceIndex[k];heap.push({k:nk,x:nx,y:ny,d:nd});
+            }
+        }
+        const distances=[],nearestSource=[];
+        for(let y=0;y<height;y++)
+        {
+            const row=[],src=[];for(let x=0;x<width;x++)
+            {
+                const k=toIndex(x,y);row.push(Number.isFinite(dist[k])?dist[k]:-1);src.push(sourceIndex[k]);
+            }
+            distances.push(row);nearestSource.push(src);
+        }
+        return {distances,nearestSource};
+    }
+
+    /** Backwards-compatible single-source wrapper. For a GOAL map explicitly use
+     * getMultiSourceDistanceMap(unit, [[goalX,goalY]], {reverse:true}).distances. */
+    getDistanceMap(unit,x,y,onEntity,onUnit,onCell,maxDist=0,penaltyMap=null)
+    {
+        return this.getMultiSourceDistanceMap(unit,[[x,y]],
+            {onEntity,onUnit,onCell,maxDist,penaltyMap}).distances;
+    }
+
     getBaseCost(dMap,x,y)
     {
         let baseCost = dMap[y][x];

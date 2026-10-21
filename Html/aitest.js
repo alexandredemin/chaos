@@ -321,6 +321,9 @@ const AITest = {
 			['none','Off'],
 			['waypoints','MOVE_TO waypoints (WP)'],
 			['hold:score','HOLD: total HoldScore'],
+			['hold:direction','HOLD: direction bonus'],
+			['hold:assignmentUtility','HOLD: assignment utility'],
+			['hold:entryThreat','HOLD: entry threat weights'],
 			['hold:slotPenalty','HOLD: slot penalty / X blocked'],
 			['hold:fireProtection','HOLD: FireProtection'],
 			['hold:externalExposure','HOLD: ExternalExposure'],
@@ -472,7 +475,7 @@ const AITest = {
 	guardOverlayLabel(mode=this.guardOverlayMode)
 	{
 		const labels={
-			'hold:score':'HOLD: HoldScore','hold:slotPenalty':'HOLD: slot penalty','hold:fireProtection':'HOLD: FireProtection','hold:externalExposure':'HOLD: ExternalExposure','hold:meleeProtection':'HOLD: MeleeProtection',
+			'hold:score':'HOLD: HoldScore','hold:direction':'HOLD: Direction bonus','hold:assignmentUtility':'HOLD: Assignment utility','hold:entryThreat':'HOLD: Entry threat weights','hold:slotPenalty':'HOLD: slot penalty','hold:fireProtection':'HOLD: FireProtection','hold:externalExposure':'HOLD: ExternalExposure','hold:meleeProtection':'HOLD: MeleeProtection',
 			'hold:fireControl':'HOLD: FireControl','hold:meleeControl':'HOLD: MeleeControl','hold:congestion':'HOLD: congestion',
 			'hold:area':'HOLD area','hold:entry':'HOLD entries',waypoints:'MOVE_TO waypoints',cellPenalty:'GUARD slot penalty',score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
 		return labels[mode]||'Off';
@@ -548,6 +551,7 @@ const AITest = {
 		if(!force&&this.guardOverlaySignature===stamp)return;
 		this.guardOverlaySignature=stamp;this.clearGuardOverlay();
 		const mode=this.guardOverlayMode,area=ctx.area,assignments=[...ctx.group.assignments.values()];
+		const assignDMap=mode==='hold:assignmentUtility'?ctx.unit.player.aiControl.getDistanceMap(ctx.unit,ctx.unit.mapX,ctx.unit.mapY,null,()=>true):null;
 		for(const c of area.cells)
 		{
 			const b=area.breakdown(ctx.unit,c.x,c.y);
@@ -560,6 +564,22 @@ const AITest = {
 			if(mode==='hold:area')value=mySlot?'S':isSlot?'s':isEntry?'E':'·';
 			else if(mode==='hold:entry')value=isEntry?'E':'';
 			else if(mode==='hold:congestion')value=(-congestion).toFixed(2);
+			else if(mode==='hold:entryThreat')
+			{
+				const index=area.entries.findIndex(e=>e.k===c.k);
+				value=index<0?'':(ctx.group.approach?.weights[index]||0).toFixed(2);
+			}
+			else if(mode==='hold:direction')value=ctx.coordinator.directionBonus(area,ctx.unit,c,ctx.group.approach,b).toFixed(2);
+			else if(mode==='hold:assignmentUtility')
+			{
+				const policy=AICellPolicy.assess(ctx.unit,c.x,c.y);
+				const d=assignDMap[c.y]?.[c.x],atStart=assignDMap[ctx.unit.mapY][ctx.unit.mapX];
+				const previous=ctx.group.previousAssignments?.get(ctx.unit);
+				const keep=previous?.x===c.x&&previous?.y===c.y?ctx.coordinator.config.keepSlotBonus:0;
+				value=policy.blocked||d==null||d<0?'X':(
+					b.score+ctx.coordinator.directionBonus(area,ctx.unit,c,ctx.group.approach,b)+keep-
+					ctx.coordinator.config.travelPenalty*Math.max(0,d-atStart)-policy.slotPenalty-congestion).toFixed(2);
+			}
 			else if(mode==='hold:slotPenalty')
 			{
 				const policy=AICellPolicy.assess(ctx.unit,c.x,c.y);
@@ -585,7 +605,7 @@ const AITest = {
 		const data=coordinator.getGroupFor(unit,order);
 		if(data==null||data.group==null||data.group.evaluator==null)return null;
 		const assignment=data.assignment;
-		const goalMap=assignment?unit.player.aiControl.getDistanceMap(unit,assignment.x,assignment.y):null;
+		const goalMap=assignment?unit.player.aiControl.getMultiSourceDistanceMap(unit,[[assignment.x,assignment.y]],{reverse:true}).distances:null;
 		return{unit,state,order,coordinator,group:data.group,evaluator:data.group.evaluator,assignment,goalMap,scene:unit.scene};
 	},
 

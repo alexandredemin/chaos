@@ -1,7 +1,7 @@
 //---------------------------- HOLD: shared area geometry, unit scoring and assignments ----------------------------
 
 const AI_HOLD_CONFIG=Object.freeze({defaultRadius:5,slotSpacing:1,travelPenalty:.05,congestionPenalty:.35,
-	fireRayCount:16,fireRayRadius:20,fireExposureTau:16});
+	fireRayCount:16,fireRayRadius:20,fireExposureTau:16,approachMaxCost:20,approachTurns:4,directionWeight:.7,keepSlotBonus:.12});
 
 class AIHoldArea
 {
@@ -156,7 +156,9 @@ class AIHoldArea
 				if(!this.contains(nx,ny))continue;
 				const policy=AICellPolicy.assess(unit,nx,ny);
 				if(policy.blocked)continue;
-				const cost=1+Math.floor(policy.movePenalty+.5)*Math.max(1,unit.config?.features?.move||1);
+				// Web/Glue impose their movement penalty when LEAVING a cell, not on entry.
+				const departure=AICellPolicy.assess(unit,px,py);
+				const cost=1+Math.floor(departure.movePenalty+.5)*Math.max(1,unit.config?.features?.move||1);
 				const nd=d+cost;
 				if(nd>maxCost||nd>=(best.get(k)??Infinity))continue;
 				best.set(k,nd);queue.push([nx,ny,nd]);
@@ -164,10 +166,10 @@ class AIHoldArea
 		}
 		return result;
 	}
-	coverage(unit,c,kind,range=Infinity)
+	coverageMask(unit,c,kind,range=Infinity)
 	{
 		const fire=kind==='fire',points=fire?this.entries:this.entryBand;
-		if(!points.length)return 0;
+		if(!points.length)return new Uint32Array(0);
 		const move=Math.max(0,unit.config?.features?.move||0);
 		// For FIRE allow step-out / shoot / step-back; for melee allow movement + attack.
 		const attackCost=unit.features?.attackCost??unit.config?.features?.attackCost??move;
@@ -187,7 +189,12 @@ class AIHoldArea
 				this.setBit(mask,i);
 			}
 		}
-		return this.popcount(mask)/points.length;
+		return mask;
+	}
+	coverage(unit,c,kind,range=Infinity)
+	{
+		const points=kind==='fire'?this.entries:this.entryBand;
+		return points.length?this.popcount(this.coverageMask(unit,c,kind,range))/points.length:0;
 	}
 	breakdown(unit,x,y)
 	{
@@ -199,11 +206,14 @@ class AIHoldArea
 		if(cache.has(k))return cache.get(k);
 		const fireProtection=this.fireProtection.get(k),externalExposure=this.externalExposure.get(k),meleeProtection=this.meleeProtection.get(k);
 		const fire=Object.values(unit.config?.abilities||{}).find(a=>a?.type==='fire');
-		const fireControl=fire?this.coverage(unit,{x,y},'fire',fire.config.range||0):0;
-		const meleeControl=this.coverage(unit,{x,y},'melee');
+		const fireMask=fire?this.coverageMask(unit,{x,y},'fire',fire.config.range||0):new Uint32Array(this.maskLength(this.entries.length));
+		const meleeMask=this.coverageMask(unit,{x,y},'melee');
+		const fireControl=fire&&this.entries.length?this.popcount(fireMask)/this.entries.length:0;
+		const meleeControl=this.entryBand.length?this.popcount(meleeMask)/this.entryBand.length:0;
 		const offense=fire?Math.max(fireControl,meleeControl):meleeControl;
 		const defense=(fireProtection+meleeProtection)/2;
-		const out={fireProtection,externalExposure,meleeProtection,fireControl,meleeControl,offense,defense,congestion:0,score:defense+offense};
+		const out={fireProtection,externalExposure,meleeProtection,fireControl,meleeControl,offense,defense,congestion:0,score:defense+offense,
+			fireMask,meleeMask};
 		cache.set(k,out);return out;
 	}
 }
@@ -246,13 +256,81 @@ class AIHoldCoordinator
 		if(group&&holders.length===group.holders.length&&holders.every(h=>group.holders.includes(h)))return group;
 		return this.rebuild(key,area,holders);
 	}
+	/**
+	 * One reverse multi-source Dijkstra per HOLD area and AI turn, seeded from its
+	 * entrance cells. Distances outside the area describe the cost of APPROACHING
+	 * the nearest entry; Web/Glue charges are applied on EXIT from occupied cells.
+	 * The representative holder approximates mobility for all incoming enemies.
+	 * The base HOLD matrices remain independent of current enemy positions.
+	 */
+	prepareApproach(area,holders)
+	{
+		if(area.approach)return area.approach;
+		const entries=area.entries,weights=new Float64Array(entries.length);
+		if(!entries.length)return area.approach={distances:null,nearestSource:null,weights,bandWeights:new Float64Array(area.entryBand.length),total:0};
+		const reference=holders.find(u=>!u.features?.webImmunity)||holders[0];
+		if(!reference)return null;
+		const entryKeys=new Set(entries.map(e=>e.k));
+		const search=this.ai.getMultiSourceDistanceMap(reference,entries,{
+			reverse:true,maxDist:this.config.approachMaxCost,onUnit:()=>true,
+			canEnter:(x,y)=>!area.contains(x,y)||entryKeys.has(area.key(x,y))
+		});
+		let total=0;
+		for(const enemy of units)
+		{
+			if(!enemy||enemy.died||enemy.player===this.ai.player||!this.ai.isUnitKnown(enemy))continue;
+			if(area.contains(enemy.mapX,enemy.mapY))continue; // focusTarget handles intruders.
+			const d=search.distances[enemy.mapY]?.[enemy.mapX];
+			if(d==null||d<0||d>Math.min(this.config.approachMaxCost,this.config.approachTurns*Math.max(1,enemy.config?.features?.move||1)))continue;
+			const entry=search.nearestSource[enemy.mapY]?.[enemy.mapX];
+			if(entry==null||entry<0)continue;
+			const weight=1/(1+d/4);
+			weights[entry]+=weight;total+=weight;
+		}
+		const bandWeights=new Float64Array(area.entryBand.length);
+		let bandTotal=0;
+		if(total>0)for(let j=0;j<area.entryBand.length;j++)
+		{
+			const b=area.entryBand[j];let weight=0;
+			for(let i=0;i<entries.length;i++)if(weights[i]>0&&Math.max(Math.abs(b.x-entries[i].x),Math.abs(b.y-entries[i].y))<=2)
+				weight=Math.max(weight,weights[i]);
+			bandWeights[j]=weight;bandTotal+=weight;
+		}
+		return area.approach={...search,weights,bandWeights,total,bandTotal};
+	}
+
+	/** Weighted control of likely enemy entrances using already cached coverage masks.
+	 * Zero for no approaching known enemies. The bonus is relative to the
+	 * unit's normal uniform control, so base HoldScore is never double-counted. */
+	directionBonus(area,unit,c,approach,b=null)
+	{
+		if(!approach||approach.total<=0)return 0;
+		b=b||area.breakdown(unit,c.x,c.y);
+		if(!b)return 0;
+		let fire=0,melee=0;
+		for(let i=0;i<area.entries.length;i++)
+			if(area.bit(b.fireMask,i))fire+=approach.weights[i];
+		fire/=approach.total;
+		if(approach.bandTotal>0)
+		{
+			for(let i=0;i<area.entryBand.length;i++)if(area.bit(b.meleeMask,i))melee+=approach.bandWeights[i];
+			melee/=approach.bandTotal;
+		}
+		const hasFire=Object.values(unit.config?.abilities||{}).some(a=>a?.type==='fire');
+		const directed=hasFire?Math.max(fire,melee):melee;
+		return this.config.directionWeight*(directed-b.offense);
+	}
+
 	rebuild(key,area,holders)
 	{
-		const group={area,holders,assignments:new Map(),epoch:this.epoch,turnStamp:this.turnStamp};
+		const group={area,holders,assignments:new Map(),previousAssignments:new Map(),epoch:this.epoch,turnStamp:this.turnStamp};
 		this.groups.set(key,group);
+		group.approach=this.prepareApproach(area,holders);
 		const options=new Map(),remaining=new Set(holders);
 		for(const unit of holders)
 		{
+			const previous=AIOrder.state(this.effectiveOrder(unit))?.assignment||null;
+			group.previousAssignments.set(unit,previous);
 			const dmap=this.ai.getDistanceMap(unit,unit.mapX,unit.mapY,null,()=>true);
 			const list=[];
 			for(const c of area.cells)
@@ -263,7 +341,10 @@ class AIHoldCoordinator
 				if(policy.blocked)continue;
 				const b=area.breakdown(unit,c.x,c.y),d=dmap[c.y]?.[c.x];
 				if(!b||d==null||d<0)continue;
-				list.push({cell:c,b,base:b.score-this.config.travelPenalty*Math.max(0,d-dmap[unit.mapY][unit.mapX])-policy.slotPenalty});
+				const directionBonus=this.directionBonus(area,unit,c,group.approach,b);
+				const keepBonus=previous?.x===c.x&&previous?.y===c.y?this.config.keepSlotBonus:0;
+				list.push({cell:c,b,directionBonus,keepBonus,base:b.score+directionBonus+keepBonus-
+					this.config.travelPenalty*Math.max(0,d-dmap[unit.mapY][unit.mapX])-policy.slotPenalty});
 			}
 			list.sort((a,b)=>b.base-a.base);options.set(unit,list);
 		}
@@ -280,7 +361,7 @@ class AIHoldCoordinator
 				if(!bestPick||regret>bestPick.regret||(regret===bestPick.regret&&scored[0].utility>bestPick.p.utility))bestPick={unit,p:scored[0],regret};
 			}
 			if(!bestPick)break;
-			const {unit,p}=bestPick,assignment={x:p.cell.x,y:p.cell.y,score:p.utility,components:{...p.b,congestion:this.congestion(p.cell,used)},epoch:this.epoch};
+			const {unit,p}=bestPick,assignment={x:p.cell.x,y:p.cell.y,score:p.utility,components:{...p.b,directionBonus:p.directionBonus,keepBonus:p.keepBonus,congestion:this.congestion(p.cell,used)},epoch:this.epoch};
 			group.assignments.set(unit,assignment);used.push(p.cell);remaining.delete(unit);
 		}
 		for(const unit of remaining)group.assignments.set(unit,{x:unit.mapX,y:unit.mapY,score:0,components:null,epoch:this.epoch});

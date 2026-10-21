@@ -347,7 +347,7 @@ class AITurnPlanner
 		this.adapter=new AIPlannerMatrixAdapter(this);
 		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
 		this.matrixCache=new Map();this._terminalPositionScore=null;
-		this.goalMap=this.ai.getDistanceMap(unit,goal[0],goal[1],null,null,cell=>this.ai.canMacroMoveThroughCell(unit,cell[0],cell[1]));
+		this.goalMap=this.ai.getMultiSourceDistanceMap(unit,[goal],{reverse:true,onCell:cell=>this.ai.canMacroMoveThroughCell(unit,cell[0],cell[1])}).distances;
 		this.rootGoalDistance=this.goalMap&&this.goalMap[unit.mapY]&&this.goalMap[unit.mapY][unit.mapX]!=null?this.goalMap[unit.mapY][unit.mapX]:-1;
 	}
 
