@@ -63,8 +63,14 @@ class AIPlannerMatrixAdapter
 	{
 		if(state.move<=0)return[];
 		const startCost=dmap[state.y][state.x],maxInnerCost=state.move-1,frontier=new Map();
+		// A frontier attempt is needed when the unit STARTS a turn on Web/Glue:
+		// it may free itself despite weighted exit cost > current MOVE.
+		// After ENTERING Web/Glue in this turn, onStepIn() ends movement; do not
+		// offer unreachable frontier actions from those intermediate cells.
+		if(AICellPolicy.assess(unit,state.x,state.y).movePenalty<=0)return[];
 		for(const p of reachablePlaces)
 		{
+			if(p.cell[0]!==state.x||p.cell[1]!==state.y)continue;
 			if(p.dist<0||p.dist>maxInnerCost)continue;
 			for(let y=p.cell[1]-1;y<=p.cell[1]+1;y++)for(let x=p.cell[0]-1;x<=p.cell[0]+1;x++)
 			{

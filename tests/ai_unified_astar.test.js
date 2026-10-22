@@ -38,7 +38,9 @@ assert.equal(ai.getMultiSourceDistanceMap(unit,[[1,2]],{reverse:true}).distances
 const corridor=AIPathfinder.findPath(unit,[1,2],[5,2]);
 assert.equal(corridor.cost,13,'correct A* weighted corridor cost');
 assert.deepEqual(corridor.cells,[[2,2],[3,2],[4,2],[5,2]]);
-assert.equal(ai.findMacroMovePath(unit,[5,2]).length,4,'macro-MOVE uses shared route');
+unit.features.move=13;
+assert.equal(ai.findMacroMovePath(unit,[5,2]).length,4,'macro-MOVE requires enough weighted movement cost');
+unit.features.move=3;
 assert.equal(ai.navigator.findPath(unit,[1,2],[5,2],0).cost,13,'MOVE_TO uses shared route');
 entities.length=0;obstacles.clear();
 for(let x=0;x<W;x++){obstacles.add(key(x,0));obstacles.add(key(x,H-1));}
@@ -97,5 +99,7 @@ const clearRoute=ai.navigator.findPath(unit,[1,2],[9,2],0);
 const safeRoute=ai.navigator.findPath(unit,[1,2],[9,2],2);
 assert(clearRoute&&safeRoute);
 assert(safeRoute.cells.some(([x,y])=>y!==2),'risk-aware MOVE_TO diverts around dangerous cells');
+unit.features.move=9;
 assert.equal(pathCost(ai.findMacroMovePath(unit,[9,2]),[1,2]),clearRoute.cost,'macro-MOVE optimizes ordinary physical cost without risk');
+unit.features.move=3;
 console.log('UNIFIED_ASTAR_PASS',{cases,weightedCorridor:13,riskAwareCost:safeRoute.cost});

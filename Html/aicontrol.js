@@ -431,7 +431,13 @@ class AIControl
 		if(target==null)return null;
 		const occupant=getUnitAtMap(target[0],target[1]);
 		if(occupant&&occupant!==unit)return null;
+		// When already trapped in Web/Glue, one physical escape attempt is valid
+		// even though its modeled exit cost may exceed the current movement budget.
+		// Otherwise every macro route must be executable WITHIN the movement budget.
+		const trapped=AICellPolicy.assess(unit,unit.mapX,unit.mapY).movePenalty>0;
 		const result=AIPathfinder.findPath(unit,[unit.mapX,unit.mapY],target,{
+			maxSteps:trapped?Math.min(1,unit.features.move):Math.max(0,unit.features.move),
+			maxCost:trapped?Infinity:Math.max(0,unit.features.move),
 			canEnter:(x,y)=>this.canMacroMoveThroughCell(unit,x,y),
 			occupantAt:(x,y)=>getUnitAtMap(x,y),
 			occupantCost:()=>Math.max(1,unit.config?.features?.move||1)
@@ -1268,7 +1274,9 @@ class AIControl
      *
      * options:
      *   reverse (default false), maxDist (0=unlimited), onEntity, onUnit,
-     *   onCell, penaltyMap, canEnter(x,y) (optional search-domain restriction).
+     *   onCell, penaltyMap, riskPenalty(x,y,fromX,fromY),
+     *   occupantAt(x,y), occupantCost(occupant,x,y),
+     *   canEnter(x,y) (search-domain restriction).
      * Callbacks retain getDistanceMap's legacy API. When onEntity is supplied,
      * its predicate filters entities, and entity movement penalties are ignored
      * (as in the old method). AICellPolicy.blocked is ALWAYS enforced.
@@ -1279,7 +1287,7 @@ class AIControl
     getMultiSourceDistanceMap(unit,sources,options={})
     {
         const width=map.width,height=map.height,size=width*height;
-        const {reverse=false,maxDist=0,onEntity=null,onUnit=null,onCell=null,penaltyMap=null,canEnter=null}=options;
+        const {reverse=false,maxDist=0,onEntity=null,onUnit=null,onCell=null,penaltyMap=null,canEnter=null,riskPenalty=null,occupantCost=null}=options;
         const dist=new Float64Array(size),sourceIndex=new Int32Array(size);
         dist.fill(Infinity);sourceIndex.fill(-1);
         const heap=new AIDistanceMinHeap();
@@ -1302,7 +1310,7 @@ class AIControl
         const occupantAt=(x,y)=>
         {
             const k=toIndex(x,y);
-            if(!occupants.has(k))occupants.set(k,getUnitAtMap(x,y,unit.player));
+            if(!occupants.has(k))occupants.set(k,options.occupantAt?options.occupantAt(x,y):getUnitAtMap(x,y,unit.player));
             return occupants.get(k);
         };
         // Include the source even if it is currently occupied; normal candidate
@@ -1331,7 +1339,7 @@ class AIControl
                 if(onCell&&onCell([nx,ny])===false)continue;
                 const edge=AICellPolicy.transitionCost(unit,fromX,fromY,destX,destY,{
                     policyAt,entitiesAt:entityAt,occupantAt,
-                    onEntity,onUnit,penaltyMap
+                    onEntity,onUnit,penaltyMap,riskPenalty,canEnter,occupantCost
                 });
                 if(edge==null)continue;
                 const nd=current.d+edge;

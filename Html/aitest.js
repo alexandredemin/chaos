@@ -18,6 +18,11 @@ const AITest = {
 	guardOverlayMode: 'none',
 	guardOverlayObjects: [],
 	guardOverlaySignature: null,
+	pathGoal: null,
+	pathRisk: 0,
+	pathLimitMove: false,
+	pathViewRadius: 20,
+	pathSummary: '',
 
 	init()
 	{
@@ -216,6 +221,7 @@ const AITest = {
 		if(this.pickMode === 'debugUnit') return 'Click any unit to inspect (ESC cancel)';
 		if(this.pickMode === 'targetUnit') return 'Click target unit (ESC cancel)';
 		if(this.pickMode === 'targetPosition') return 'Click target map position (ESC cancel)';
+		if(this.pickMode === 'pathGoal') return 'Click diagnostic A*/Dijkstra destination (ESC cancel)';
 		return '';
 	},
 
@@ -316,10 +322,32 @@ const AITest = {
 		targetButtons.appendChild(this.button('Clear target',()=>{this.draft.target=null;this.draft.targetPos=null;this.renderMenu();}));
 		test.appendChild(targetButtons);
 
+		const pathRow=document.createElement('div');
+		pathRow.style.cssText='margin-top:10px;padding:8px;border:1px solid #555;background:#171717';
+		const pathTitle=document.createElement('div');pathTitle.textContent='PATHFINDER DIAGNOSTICS (independent of order)';pathTitle.style.fontWeight='bold';pathRow.appendChild(pathTitle);
+		const goal=document.createElement('div');goal.textContent='From: '+unit.mapX+','+unit.mapY+'   To: '+(this.pathGoal?this.pathGoal.join(','):'not selected');pathRow.appendChild(goal);
+		pathRow.appendChild(this.button('Select path goal on map',()=>{this.closeMenu();this.beginPick('pathGoal');}));
+		const riskRow=document.createElement('div');riskRow.append('Risk factor: ');
+		const risk=document.createElement('input');risk.type='number';risk.min=0;risk.max=20;risk.step=.25;risk.value=this.pathRisk;risk.style.width='65px';
+		risk.onchange=()=>{this.pathRisk=Math.max(0,Math.min(20,Number(risk.value)||0));this.guardOverlaySignature=null;this.refreshGuardOverlay(true);};
+		riskRow.appendChild(risk);riskRow.append(' × AI danger at destination');pathRow.appendChild(riskRow);
+		const limitRow=document.createElement('label'),limit=document.createElement('input');limit.type='checkbox';limit.checked=this.pathLimitMove;
+		limit.onchange=()=>{this.pathLimitMove=limit.checked;this.guardOverlaySignature=null;this.refreshGuardOverlay(true);};
+		limitRow.appendChild(limit);limitRow.append(' Limit A* to one-turn budget (steps + cost)');pathRow.appendChild(limitRow);
+		const radiusRow=document.createElement('div');radiusRow.append('Show values around start/goal: ');
+		radiusRow.appendChild(this.select([['10','10 cells'],['20','20 cells'],['40','40 cells'],['0','whole map']],String(this.pathViewRadius),v=>{this.pathViewRadius=Number(v);this.refreshGuardOverlay(true);}));
+		pathRow.appendChild(radiusRow);
+		const info=document.createElement('div');info.id='aiTestPathInfo';info.style.cssText='color:#ddd;white-space:pre-wrap;font-size:11px;margin-top:5px';info.textContent=this.pathSummary;pathRow.appendChild(info);
+		test.appendChild(pathRow);
 		const overlayRow=document.createElement('div');overlayRow.style.marginTop='8px';overlayRow.append('AI overlay: ');
 		overlayRow.appendChild(this.select([
 			['none','Off'],
 			['waypoints','MOVE_TO waypoints (WP)'],
+			['path:route','PATH: A* route / steps'],
+			['path:astar','PATH: A* discovered g-cost'],
+			['path:expanded','PATH: A* expanded cells'],
+			['path:dijkstra','PATH: Dijkstra from unit'],
+			['path:reverse','PATH: Dijkstra to goal'],
 			['hold:score','HOLD: total HoldScore'],
 			['hold:direction','HOLD: direction bonus'],
 			['hold:assignmentUtility','HOLD: assignment utility'],
@@ -427,9 +455,10 @@ const AITest = {
 	{
 		if(unit==null||unit.died)return false;
 		const mode=this.pickMode;
-		if(mode!=='debugUnit'&&mode!=='targetUnit'&&mode!=='targetPosition')return false;
+		if(mode!=='debugUnit'&&mode!=='targetUnit'&&mode!=='targetPosition'&&mode!=='pathGoal')return false;
 		this.pickMode=null;this.consumePointer=true;pointerPressed=true;
 		if(mode==='debugUnit')this.setDebugUnit(unit);
+		else if(mode==='pathGoal'){this.pathGoal=[unit.mapX,unit.mapY];this.guardOverlayMode='path:route';this.guardOverlaySignature=null;}
 		else if(mode==='targetUnit'){this.draft.target=unit;this.draft.targetPos=[unit.mapX,unit.mapY];}
 		else {this.draft.target=null;this.draft.targetPos=[unit.mapX,unit.mapY];}
 		this.openMenu(mode!=='debugUnit');
@@ -465,6 +494,10 @@ const AITest = {
 			this.consumePointer=false;pointerPressed=false;
 			this.acceptUnitPick(unit);return true;
 		}
+		if(mode==='pathGoal')
+		{
+			this.pathGoal=[tile.x,tile.y];this.guardOverlayMode='path:route';this.guardOverlaySignature=null;this.openMenu(true);this.refreshGuardOverlay(true);return true;
+		}
 		if(mode==='targetPosition')
 		{
 			this.draft.target=null;this.draft.targetPos=[tile.x,tile.y];this.openMenu(true);return true;
@@ -475,6 +508,8 @@ const AITest = {
 	guardOverlayLabel(mode=this.guardOverlayMode)
 	{
 		const labels={
+			'path:route':'A* route','path:astar':'A* best discovered g','path:expanded':'A* expanded cells',
+			'path:dijkstra':'Dijkstra from unit','path:reverse':'Dijkstra to goal',
 			'hold:score':'HOLD: HoldScore','hold:direction':'HOLD: Direction bonus','hold:assignmentUtility':'HOLD: Assignment utility','hold:entryThreat':'HOLD: Entry threat weights','hold:slotPenalty':'HOLD: slot penalty','hold:fireProtection':'HOLD: FireProtection','hold:externalExposure':'HOLD: ExternalExposure','hold:meleeProtection':'HOLD: MeleeProtection',
 			'hold:fireControl':'HOLD: FireControl','hold:meleeControl':'HOLD: MeleeControl','hold:congestion':'HOLD: congestion',
 			'hold:area':'HOLD area','hold:entry':'HOLD entries',waypoints:'MOVE_TO waypoints',cellPenalty:'GUARD slot penalty',score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
@@ -529,6 +564,81 @@ const AITest = {
 				backgroundColor:'#000000',resolution:6
 			});
 			txt.setDepth(20001);txt.setAlpha(.95);this.guardOverlayObjects.push(txt);
+		}
+	},
+
+	/** Pathfinding inspector: uses exactly the SAME transition/cell policies as
+	 * macro-MOVE for both algorithms. It does not modify the selected order. */
+	computePathDiagnostic(unit,goal,riskFactor=this.pathRisk,limitMove=this.pathLimitMove)
+	{
+		const ai=unit.player.aiControl,from=[unit.mapX,unit.mapY],debug={};
+		ai.threatSystem?.syncDynamicBlockers?.();
+		const dangerCache=new Map(),width=map.width;
+		const riskPenalty=Number(riskFactor)>0?(x,y)=>{
+			const k=y*width+x;
+			if(!dangerCache.has(k))dangerCache.set(k,Math.max(0,ai.threatSystem.getDangerAt(unit,x,y)));
+			return riskFactor*dangerCache.get(k);
+		}:null;
+		const options={
+			canEnter:(x,y)=>ai.canMacroMoveThroughCell(unit,x,y),
+			occupantAt:(x,y)=>getUnitAtMap(x,y),
+			occupantCost:()=>Math.max(1,unit.config?.features?.move||1),
+			riskPenalty
+		};
+		const trapped=AICellPolicy.assess(unit,unit.mapX,unit.mapY).movePenalty>0;
+		const astar=AIPathfinder.findPath(unit,from,goal,{
+			...options,debug,...(limitMove?{maxSteps:trapped?Math.min(1,unit.features.move):Math.max(0,unit.features.move),
+				...(trapped?{}:{maxCost:Math.max(0,unit.features.move)})}:{})
+		});
+		const forward=ai.getMultiSourceDistanceMap(unit,[from],options).distances;
+		const reverse=ai.getMultiSourceDistanceMap(unit,[goal],{...options,reverse:true}).distances;
+		return{astar,debug,forward,reverse,from,goal,riskFactor,limitMove};
+	},
+
+	refreshPathOverlay(force=false)
+	{
+		const unit=this.debugUnit,goal=this.pathGoal;
+		if(!unit||unit.died||!goal||!unit.scene?.add||!unit.player?.aiControl)
+		{
+			this.clearGuardOverlay();this.guardOverlaySignature=null;
+			this.pathSummary='Select a unit and a diagnostic path goal';return;
+		}
+		const mode=this.guardOverlayMode;
+		const stamp=['path',mode,unit.id,unit.mapX,unit.mapY,unit.features.move,goal.join(','),this.pathRisk,this.pathLimitMove,this.pathViewRadius].join('|');
+		if(!force&&stamp===this.guardOverlaySignature)return;
+		this.guardOverlaySignature=stamp;this.clearGuardOverlay();
+		const r=this.computePathDiagnostic(unit,goal),width=map.width;
+		const route=r.astar?.cells||[],indices=new Map();
+		for(let i=0;i<route.length;i++)indices.set(route[i][1]*width+route[i][0],i+1);
+		const reverseCost=r.reverse[unit.mapY]?.[unit.mapX];
+		this.pathSummary='A*: '+(r.astar?('cost='+r.astar.cost.toFixed(2)+' steps='+route.length):'NO ROUTE')+
+			' | Dijkstra-to-goal='+ (reverseCost>=0?reverseCost.toFixed(2):'unreachable')+
+			' | expansions='+r.debug.expansions+
+			' | risk='+this.pathRisk+(this.pathLimitMove?' | one-turn budget='+unit.features.move:'');
+		const info=this.menu?.querySelector?.('#aiTestPathInfo');if(info)info.textContent=this.pathSummary;
+		console.log('AI PATH DIAGNOSTICS',this.pathSummary,'route',r.astar?.cells||null);
+		const radius=this.pathViewRadius;
+		const inView=(x,y)=>!radius||
+			(Math.max(Math.abs(x-unit.mapX),Math.abs(y-unit.mapY))<=radius)||
+			(Math.max(Math.abs(x-goal[0]),Math.abs(y-goal[1]))<=radius);
+		for(let y=0;y<map.height;y++)for(let x=0;x<map.width;x++)
+		{
+			const k=y*width+x,step=indices.get(k),start=x===unit.mapX&&y===unit.mapY,end=x===goal[0]&&y===goal[1];
+			if(!inView(x,y)&&!step)continue;
+			let value='';
+			if(mode==='path:route')value=step?String(step):'';
+			else if(mode==='path:expanded')value=r.debug.expanded[k]?'●':'';
+			else
+			{
+				const d=mode==='path:astar'?r.debug.g[k]:mode==='path:dijkstra'?r.forward[y][x]:r.reverse[y][x];
+				if(Number.isFinite(d)&&d>=0)value=d.toFixed(d>=100?0:1);
+			}
+			if(start)value='S';if(end)value='G';if(!value)continue;
+			const pos=map.tileToWorldXY(x,y),txt=unit.scene.add.text(pos.x+1,pos.y+1,value,{
+				font:'5px monospace',color:end?'#88ff88':start?'#88ddff':step?'#ffff66':'#ffffff',
+				backgroundColor:'#000000',resolution:6
+			});
+			txt.setDepth(20003);txt.setAlpha(.95);this.guardOverlayObjects.push(txt);
 		}
 	},
 
@@ -641,6 +751,7 @@ const AITest = {
 	{
 		if(this.guardOverlayMode==='none'){this.clearGuardOverlay();return;}
 		if(this.guardOverlayMode==='waypoints'){this.refreshWaypointOverlay(force);return;}
+		if(this.guardOverlayMode.startsWith('path:')){this.refreshPathOverlay(force);return;}
 		if(this.guardOverlayMode.startsWith('hold:')){this.refreshHoldOverlay(force);return;}
 		const ctx=this.getGuardOverlayContext();
 		if(ctx==null||ctx.scene==null||ctx.scene.add==null){this.clearGuardOverlay();return;}
@@ -713,6 +824,11 @@ const AITest = {
 		{
 			const route=AIOrder.state(plan.state.order).navigation;
 			if(route)nav=' navigation[WP='+route.waypoints.map((p,i)=>(i===route.index?'*':'')+(i+1)+':'+p.x+','+p.y).join(' > ')+']';
+		}
+		if(AIOrder.is(plan.state.order,'move_to')&&plan.result.actions?.[0]?.type==='move')
+		{
+			const target=plan.result.actions[0].to,route=plan.unit.player.aiControl.findMacroMovePath(plan.unit,target);
+			nav+=' macroMove['+(route?'steps='+route.length+' '+route.map(c=>c.join(',')).join('>'):'NO EXECUTABLE ROUTE')+']';
 		}
 		if(AIOrder.is(plan.state.order,'guard')&&plan.planner)
 		{
