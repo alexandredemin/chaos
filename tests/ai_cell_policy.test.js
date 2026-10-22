@@ -18,7 +18,7 @@ const checkLineOfSight=()=>true;
 const ScenarioEvents={roundIndex:0,activeTurnPlayerInd:0,getRoomAt(){return null;}};
 class AIThreatSystem{constructor(ai){this.ai=ai}syncDynamicBlockers(){} getDangerAt(){return 0} }
 Object.assign(global,{map,wallsLayer,Entity,checkLineOfSight,units:actors,getUnitAtMap,AICombatValue,AI_TACTICAL_PROFILES,AIThreatSystem,ScenarioEvents});
-for(const fname of ['aiorder.js','aicellpolicy.js','aiguard.js','aihold.js','aitraffic.js','ainavigator.js','aiturnplanner.js','aicontrol.js'])vm.runInThisContext(fs.readFileSync(root+fname,'utf8').replace(/\r\n/g,'\n'),{filename:fname});
+for(const fname of ['aiorder.js','aicellpolicy.js','aiguard.js','aihold.js','aitraffic.js','aipathfinder.js','ainavigator.js','aiturnplanner.js','aicontrol.js'])vm.runInThisContext(fs.readFileSync(root+fname,'utf8').replace(/\r\n/g,'\n'),{filename:fname});
 const fake=(name,x,y,extra=1,canStepOn)=>({config:{name},mapX:x,mapY:y,features:{strength:2},evaluateStep(unit){return name==='web'&&unit.features.webImmunity?0:extra},...(canStepOn?{canStepOn}: {})});
 const fire=fake('fire',3,5,100),web=fake('web',4,5,2),glue=fake('glue_blob',5,5,2),item=fake('item',6,5,1),door=fake('door',7,5,1),cabinet=fake('wardrobe',8,5,1,()=>false);
 objects.push(fire,web,glue,item,door,cabinet);
@@ -35,7 +35,8 @@ assert.equal(assess(immune,3,5).blocked,false,'future fire immunity hook');
 assert.equal(assess(immune,3,5).movePenalty,0,'fire immune no artificial path cost');
 const ai=new AIControl(player);player.aiControl=ai;
 assert.equal(ai.macroMoveCellCost(unit,3,5),null,'macro-MOVE blocks fire');
-assert(ai.macroMoveCellCost(unit,4,5)>ai.macroMoveCellCost(unit,6,5),'macro-MOVE web cost');
+assert.equal(ai.macroMoveCellCost(unit,4,5,2,5),1,'enter Web costs an ordinary step');
+assert(ai.macroMoveCellCost(unit,5,5,4,5)>ai.macroMoveCellCost(unit,6,5,2,5),'leaving Web costs extra');
 assert.equal(ai.getDistanceMap(unit,2,5)[5][3],-1,'distance map blocks fire');
 assert.equal(ai.canMacroMoveThroughCell(unit,3,5),false,'physical next step also blocks');
 assert(!ai.findMacroMovePath(unit,[5,5]).some(p=>p[0]===3&&p[1]===5),'path skirts the active fire');

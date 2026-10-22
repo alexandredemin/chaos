@@ -56,4 +56,60 @@ class AICellPolicy
         }
         return{blocked:false,reason:null,movePenalty,slotPenalty};
     }
+
+    /**
+     * Shared *directed* AI movement edge cost (fromX,fromY) -> (toX,toY).
+     * Web/Glue are charged when LEAVING the source cell, not when entering
+     * the destination. The ordinary step always costs one movement point.
+     *
+     * This is the cost model used by Dijkstra, tactical MOVE, global MOVE_TO
+     * A* and macro-MOVE A*. Risk, when supplied, is charged at the destination
+     * (it represents exposure at a new position, not a movement penalty).
+     *
+     * `options` keeps special-purpose occupancy rules outside the cost model:
+     *   policyAt(x,y), occupantAt(x,y), entitiesAt(x,y) - optional caches
+     *   onEntity(entity), onUnit(unit) - legacy Dijkstra callbacks
+     *   occupantCost(occupant,toX,toY) - custom A* occupancy cost, null=blocked
+     *   canEnter(x,y), penaltyMap, riskPenalty(toX,toY,fromX,fromY)
+     *
+     * Returns null for a forbidden transition, otherwise a nonnegative cost.
+     */
+    static transitionCost(unit,fromX,fromY,toX,toY,options={})
+    {
+        const policyAt=options.policyAt||((x,y)=>this.assess(unit,x,y));
+        const from=policyAt(fromX,fromY),to=policyAt(toX,toY);
+        if(from.blocked||to.blocked)return null;
+        if(options.canEnter&&options.canEnter(toX,toY)===false)return null;
+        const move=Math.max(1,unit.config?.features?.move||1);
+        let cost=1;
+        // Preserve legacy getDistanceMap(onEntity) semantics: such callbacks
+        // explicitly control entities, without movement penalties.
+        if(!options.onEntity)
+            cost+=Math.floor(from.movePenalty+.5)*move;
+        if(options.onEntity)
+        {
+            const entities=options.entitiesAt?options.entitiesAt(toX,toY):Entity.getEntitiesAtMap(toX,toY)||[];
+            if(entities.some(e=>options.onEntity(e)===false))return null;
+        }
+        const occupant=options.occupantAt
+            ?options.occupantAt(toX,toY)
+            :getUnitAtMap(toX,toY,unit.player);
+        if(occupant&&occupant!==unit&&!occupant.died)
+        {
+            if(options.occupantCost)
+            {
+                const extra=options.occupantCost(occupant,toX,toY);
+                if(extra==null||extra===false)return null;
+                cost+=extra;
+            }
+            else if(options.onUnit)
+            {
+                if(options.onUnit(occupant)===false)return null;
+            }
+            else cost+=(occupant.player===unit.player?move:(occupant.config?.features?.health||1)*move);
+        }
+        if(options.penaltyMap)cost+=Number(options.penaltyMap[toY]?.[toX]||0);
+        if(options.riskPenalty)cost+=Number(options.riskPenalty(toX,toY,fromX,fromY)||0);
+        return Number.isFinite(cost)&&cost>=0?cost:null;
+    }
 }

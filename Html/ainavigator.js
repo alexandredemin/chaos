@@ -6,38 +6,6 @@ const AI_NAVIGATION_CONFIG = Object.freeze({
 	riskScale:.5
 });
 
-class AINavHeap
-{
-	items=[];
-	push(item)
-	{
-		const a=this.items;let i=a.length;a.push(item);
-		while(i>0)
-		{
-			const j=(i-1)>>1;if(a[j].f<=item.f)break;
-			a[i]=a[j];i=j;
-		}
-		a[i]=item;
-	}
-	pop()
-	{
-		const a=this.items,result=a[0],last=a.pop();
-		if(a.length)
-		{
-			let i=0;
-			while(i*2+1<a.length)
-			{
-				let j=i*2+1;if(j+1<a.length&&a[j+1].f<a[j].f)j++;
-				if(last.f<=a[j].f)break;
-				a[i]=a[j];i=j;
-			}
-			a[i]=last;
-		}
-		return result;
-	}
-	get length(){return this.items.length;}
-}
-
 class AIMoveToNavigator
 {
 	constructor(ai,config=AI_NAVIGATION_CONFIG)
@@ -56,68 +24,25 @@ class AIMoveToNavigator
 		return this.turnNumber+':'+(this.ai.guardCoordinator?.getGameTurnStamp?.()??'unknown');
 	}
 
-	// Only this global A* considers risk. It does not affect physical distance maps or macro-MOVE.
+	// Shared A*: only this global MOVE_TO navigation supplies a risk penalty.
+	// Physical waypoint distances and same-turn macro-MOVE remain risk-free.
 	findPath(unit,from,to,riskWeight=0)
 	{
-		const [sx,sy]=from,[tx,ty]=to;
-		if(sx<0||sy<0||tx<0||ty<0||sx>=map.width||sy>=map.height||tx>=map.width||ty>=map.height)return null;
-		if(sx===tx&&sy===ty)return{cells:[],cost:0};
-		const width=map.width,size=width*map.height,start=this.key(sx,sy),goal=this.key(tx,ty);
-		const g=new Float64Array(size),parents=new Int32Array(size),closed=new Uint8Array(size);
-		g.fill(Infinity);parents.fill(-1);g[start]=0;
-		const h=(x,y)=>Math.max(Math.abs(x-tx),Math.abs(y-ty)),queue=new AINavHeap();
-		queue.push({x:sx,y:sy,id:start,g:0,f:h(sx,sy)});
-		const dangerCache=new Map();
 		if(riskWeight>0)this.ai.threatSystem.syncDynamicBlockers();
-
-		while(queue.length)
-		{
-			const cur=queue.pop();
-			if(closed[cur.id]||cur.g>g[cur.id]+1e-9)continue;
-			if(cur.id===goal)
+		const danger=new Map(),width=map.width;
+		return AIPathfinder.findPath(unit,from,to,{
+			canEnter:(x,y)=>
+				(x===to[0]&&y===to[1])||this.ai.canMacroMoveThroughCell(unit,x,y),
+			occupantAt:(x,y)=>getUnitAtMap(x,y),
+			occupantCost:(occupant,x,y)=>
+				(x===to[0]&&y===to[1])?0:this.fullMove(unit),
+			riskPenalty:riskWeight>0?(x,y)=>
 			{
-				const cells=[];let at=goal;
-				while(at!==start)
-				{
-					cells.push([at%width,Math.floor(at/width)]);at=parents[at];
-					if(at<0)return null;
-				}
-				cells.reverse();return{cells,cost:g[goal]};
-			}
-			closed[cur.id]=1;
-			for(let y=cur.y-1;y<=cur.y+1;y++)for(let x=cur.x-1;x<=cur.x+1;x++)
-			{
-				if((x===cur.x&&y===cur.y)||x<0||y<0||x>=width||y>=map.height)continue;
-				const id=this.key(x,y);if(closed[id])continue;
-				// A waypoint is a navigation landmark, not a cell that must be occupied.
-				const moveCost=this.cellCost(unit,x,y,id===goal);
-				if(moveCost==null)continue;
-				let cost=moveCost;
-				if(riskWeight>0)
-				{
-					let danger=dangerCache.get(id);
-					if(danger==null){danger=this.ai.threatSystem.getDangerAt(unit,x,y);dangerCache.set(id,danger);}
-					cost+=riskWeight*Math.max(0,danger);
-				}
-				const next=cur.g+cost;
-				if(next>=g[id]-1e-9)continue;
-				g[id]=next;parents[id]=cur.id;
-				queue.push({x,y,id,g:next,f:next+h(x,y)});
-			}
-		}
-		return null;
-	}
-
-	cellCost(unit,x,y,isGoal)
-	{
-		const policy=AICellPolicy.assess(unit,x,y);
-		if(policy.blocked)return null;
-		const occupant=getUnitAtMap(x,y);
-		if(!isGoal&&occupant!=null&&occupant!==unit&&!occupant.died&&
-			!this.ai.canMacroMoveThroughCell(unit,x,y))return null;
-		let cost=1+Math.floor(policy.movePenalty+.5)*this.fullMove(unit);
-		if(occupant!=null&&occupant!==unit&&!isGoal)cost+=this.fullMove(unit);
-		return cost;
+				const k=y*width+x;
+				if(!danger.has(k))danger.set(k,Math.max(0,this.ai.threatSystem.getDangerAt(unit,x,y)));
+				return riskWeight*danger.get(k);
+			}:null
+		});
 	}
 
 	physicalDistance(unit,from,to)

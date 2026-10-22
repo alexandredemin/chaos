@@ -415,62 +415,28 @@ class AIControl
 		return this.traffic.canRequestYield(occupant,this.getTrafficPriority(unit));
 	}
 
-	macroMoveCellCost(unit,x,y)
+	// Compatibility wrapper: callers may supply the actual departure coordinates.
+	// The price of Web/Glue belongs to THAT cell, not the destination.
+	macroMoveCellCost(unit,x,y,fromX=unit.mapX,fromY=unit.mapY)
 	{
-		if(x<0||x>=map.width||y<0||y>=map.height)return null;
-		const policy=AICellPolicy.assess(unit,x,y);
-		if(policy.blocked||!this.canMacroMoveThroughCell(unit,x,y))return null;
-		const occupant=getUnitAtMap(x,y);
-		let cost=1+Math.floor(policy.movePenalty+.5)*Math.max(1,unit.config.features.move||1);
-		if(occupant!=null&&occupant!==unit)cost+=Math.max(1,unit.config.features.move||1);
-		return cost;
+		return AICellPolicy.transitionCost(unit,fromX,fromY,x,y,{
+			canEnter:(tx,ty)=>this.canMacroMoveThroughCell(unit,tx,ty),
+			occupantAt:(tx,ty)=>getUnitAtMap(tx,ty),
+			occupantCost:()=>Math.max(1,unit.config?.features?.move||1)
+		});
 	}
 
 	findMacroMovePath(unit,target)
 	{
-		const sx=unit.mapX,sy=unit.mapY,tx=target[0],ty=target[1];
-		if(sx===tx&&sy===ty)return[];
-		if(tx<0||tx>=map.width||ty<0||ty>=map.height)return null;
-		const targetOccupant=getUnitAtMap(tx,ty);
-		if(targetOccupant!=null&&targetOccupant!==unit)return null;
-
-		const key=(x,y)=>x+':'+y;
-		const h=(x,y)=>Math.max(Math.abs(tx-x),Math.abs(ty-y));
-		const startKey=key(sx,sy),open=[{x:sx,y:sy,g:0,f:h(sx,sy)}];
-		const best=new Map([[startKey,0]]),parent=new Map(),closed=new Set();
-
-		while(open.length>0)
-		{
-			let bi=0;
-			for(let i=1;i<open.length;i++)
-				if(open[i].f<open[bi].f||(open[i].f===open[bi].f&&open[i].g<open[bi].g))bi=i;
-			const cur=open.splice(bi,1)[0],ck=key(cur.x,cur.y);
-			if(closed.has(ck))continue;
-			closed.add(ck);
-			if(cur.x===tx&&cur.y===ty)
-			{
-				const path=[];let k=ck;
-				while(k!==startKey)
-				{
-					const [x,y]=k.split(':').map(Number);path.push([x,y]);k=parent.get(k);
-					if(k==null)return null;
-				}
-				path.reverse();return path;
-			}
-
-			for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)
-			{
-				if(dx===0&&dy===0)continue;
-				const nx=cur.x+dx,ny=cur.y+dy,nk=key(nx,ny);
-				if(closed.has(nk))continue;
-				const stepCost=this.macroMoveCellCost(unit,nx,ny);
-				if(stepCost==null)continue;
-				const ng=cur.g+stepCost;
-				if(best.has(nk)&&best.get(nk)<=ng)continue;
-				best.set(nk,ng);parent.set(nk,ck);open.push({x:nx,y:ny,g:ng,f:ng+h(nx,ny)});
-			}
-		}
-		return null;
+		if(target==null)return null;
+		const occupant=getUnitAtMap(target[0],target[1]);
+		if(occupant&&occupant!==unit)return null;
+		const result=AIPathfinder.findPath(unit,[unit.mapX,unit.mapY],target,{
+			canEnter:(x,y)=>this.canMacroMoveThroughCell(unit,x,y),
+			occupantAt:(x,y)=>getUnitAtMap(x,y),
+			occupantCost:()=>Math.max(1,unit.config?.features?.move||1)
+		});
+		return result?result.cells:null;
 	}
 
 	startMacroMove(unit,target)
@@ -1316,7 +1282,7 @@ class AIControl
         const {reverse=false,maxDist=0,onEntity=null,onUnit=null,onCell=null,penaltyMap=null,canEnter=null}=options;
         const dist=new Float64Array(size),sourceIndex=new Int32Array(size);
         dist.fill(Infinity);sourceIndex.fill(-1);
-        const heap=new AIDistanceMinHeap(),steps=Math.max(1,unit.config?.features?.move||1);
+        const heap=new AIDistanceMinHeap();
         const toIndex=(x,y)=>y*width+x;
         const inBounds=(x,y)=>x>=0&&y>=0&&x<width&&y<height;
         // Compute destination occupancy and source exit costs once per visited cell.
@@ -1362,21 +1328,12 @@ class AIControl
                 // In reverse search this corresponds to the REAL edge nx,ny -> current.
                 const fromX=reverse?nx:current.x,fromY=reverse?ny:current.y;
                 const destX=reverse?current.x:nx,destY=reverse?current.y:ny;
-                if(policyAt(nx,ny).blocked||policyAt(current.x,current.y).blocked)continue;
                 if(onCell&&onCell([nx,ny])===false)continue;
-                const destEntities=entityAt(destX,destY);
-                if(onEntity&&destEntities.some(entity=>onEntity(entity)===false))continue;
-                const occupant=occupantAt(destX,destY);
-                let extra=0;
-                if(occupant&&occupant!==unit&&!occupant.died)
-                {
-                    if(onUnit){if(onUnit(occupant)===false)continue;}
-                    else extra+=(occupant.player===unit.player?steps:(occupant.config?.features?.health||1)*steps);
-                }
-                if(!onEntity)extra+=Math.floor(policyAt(fromX,fromY).movePenalty+.5)*steps;
-                if(penaltyMap)extra+=Number(penaltyMap[destY]?.[destX]||0);
-                const edge=1+extra;
-                if(!Number.isFinite(edge)||edge<0)continue; // Dijkstra requires non-negative costs.
+                const edge=AICellPolicy.transitionCost(unit,fromX,fromY,destX,destY,{
+                    policyAt,entitiesAt:entityAt,occupantAt,
+                    onEntity,onUnit,penaltyMap
+                });
+                if(edge==null)continue;
                 const nd=current.d+edge;
                 if((maxDist>0&&nd>maxDist)||nd>=dist[nk])continue;
                 dist[nk]=nd;sourceIndex[nk]=sourceIndex[k];heap.push({k:nk,x:nx,y:ny,d:nd});
