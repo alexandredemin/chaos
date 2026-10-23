@@ -1,7 +1,7 @@
 // Regression: weighted cheapest A* can take MORE steps than remaining MOVE,
 // and the AITest inspector must display the SAME edge costs as Dijkstra.
 const assert=require('assert'),fs=require('fs'),vm=require('vm'),path=require('path');
-const root=path.join(__dirname,'..','Html')+path.sep;
+const root=path.join(__dirname,'..','Html','aicontrol')+path.sep;
 const W=11,H=9,blocked=new Set(),entities=[],key=(x,y)=>x+':'+y;
 const map={width:W,height:H,tileToWorldXY(x,y){return{x:x*16,y:y*16}}};
 const wallsLayer={getTileAt(x,y){return blocked.has(key(x,y))?{properties:{collides:true}}:null;}};
@@ -9,14 +9,19 @@ class Entity{static getEntitiesAtMap(x,y){return entities.filter(e=>e.mapX===x&&
 const player={name:'AI',units:[],wizard:null};
 const unit={id:1,mapX:2,mapY:4,player,died:false,config:{name:'Chort',features:{move:3}},features:{move:3,abilityPoints:0,attackPoints:0}};
 player.units.push(unit);
-function getUnitAtMap(x,y){return x===unit.mapX&&y===unit.mapY?unit:null;}
+let diagnosticTargetOccupant=null;
+function getUnitAtMap(x,y){
+    if(x===unit.mapX&&y===unit.mapY)return unit;
+    if(diagnosticTargetOccupant&&x===diagnosticTargetOccupant.mapX&&y===diagnosticTargetOccupant.mapY)return diagnosticTargetOccupant;
+    return null;
+}
 const AI_TACTICAL_PROFILES={balanced:{goal:1,offense:2,danger:1}};
 class AIThreatSystem{constructor(){}syncDynamicBlockers(){}getDangerAt(u,x,y){return x===3&&y===4?10:0;}}
 class AITrafficController{constructor(){}canRequestYield(){return false;}}
 class AIGuardCoordinator{constructor(){}getGameTurnStamp(){return 1;}}
 class AIHoldCoordinator{constructor(){}}
 Object.assign(global,{map,wallsLayer,Entity,getUnitAtMap,AI_TACTICAL_PROFILES,AIThreatSystem,AITrafficController,AIGuardCoordinator,AIHoldCoordinator});
-for(const f of ['aiorder.js','aicellpolicy.js','aipathfinder.js','ainavigator.js','aicontrol.js'])vm.runInThisContext(fs.readFileSync(root+f,'utf8'),{filename:f});
+for(const f of ['aiconfig.js','aiheap.js','aiorder.js','aicellpolicy.js','aipathfinder.js','ainavigator.js','aicontrol.js'])vm.runInThisContext(fs.readFileSync(root+f,'utf8'),{filename:f});
 for(let x=0;x<W;x++){blocked.add(key(x,0));blocked.add(key(x,H-1));}
 for(let y=0;y<H;y++){blocked.add(key(0,y));blocked.add(key(W-1,y));}
 // A vertical barrier; straight 3-step path uses Web, cheap detour needs 6 steps.
@@ -53,4 +58,19 @@ assert(AITest.pathSummary.includes('NO ROUTE'),'one-turn weighted budget shown i
 AITest.guardOverlayMode='path:reverse';AITest.refreshGuardOverlay(true);
 assert(sceneLabels.some(x=>x.active&&x.text===globalRoute.cost.toFixed(1)),'distance overlay shows weighted cost');
 AITest.setGuardOverlayMode('none');assert.equal(AITest.guardOverlayObjects.length,0,'overlay cleanup');
+// AITest is a *measurement* tool: unlike runtime movement, occupied destinations
+// must remain valid goals, while blocked transit cells must not become walkable.
+diagnosticTargetOccupant={mapX:dst[0],mapY:dst[1],died:false,player:{name:'enemy'}};
+assert.equal(ai.canMacroMoveThroughCell(unit,...dst),false,'occupied cell remains forbidden to runtime macro-MOVE');
+assert.equal(ai.findMacroMovePath(unit,dst),null,'runtime still cannot step onto enemy');
+const occupied=AITest.computePathDiagnostic(unit,dst,0,false);
+assert(occupied.astar,'diagnostic A* can inspect occupied target');
+assert(occupied.reverse[unit.mapY][unit.mapX]>=0,'reverse Dijkstra reaches occupied target');
+assert.equal(occupied.astar.cost,occupied.reverse[unit.mapY][unit.mapX], 'both algorithms agree on occupied goal');
+AITest.pathGoal=dst;AITest.pathLimitMove=false;AITest.setGuardOverlayMode('path:route');
+assert(!AITest.pathSummary.includes('NO ROUTE'),'occupied goal display no longer says NO ROUTE');
+// The exception belongs ONLY to the exact diagnostic terminal position.
+assert.equal(ai.canMacroMoveThroughCell(unit,...dst),false);
+diagnosticTargetOccupant=null;
+
 console.log('PATH_DIAGNOSTIC_PASS',{cheap:globalRoute.cells.length,bounded:bounded.cells.length,cheapCost:globalRoute.cost,boundedCost:bounded.cost});

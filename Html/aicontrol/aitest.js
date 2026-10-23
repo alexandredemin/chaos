@@ -579,10 +579,17 @@ const AITest = {
 			if(!dangerCache.has(k))dangerCache.set(k,Math.max(0,ai.threatSystem.getDangerAt(unit,x,y)));
 			return riskFactor*dangerCache.get(k);
 		}:null;
+		// Path diagnostics may target an occupied cell (e.g. an enemy).  In a real
+		// macro-MOVE it is rightly forbidden to ENTER that cell.  The inspector,
+		// however, measures a hypothetical path TO it; only the terminal cell is
+		// exempt. No intervening unit or hazardous/impassable entity is bypassed.
+		const terminal=(x,y)=>x===goal[0]&&y===goal[1];
 		const options={
-			canEnter:(x,y)=>ai.canMacroMoveThroughCell(unit,x,y),
+			canEnter:(x,y)=>terminal(x,y)
+				?!AICellPolicy.assess(unit,x,y).blocked
+				:ai.canMacroMoveThroughCell(unit,x,y),
 			occupantAt:(x,y)=>getUnitAtMap(x,y),
-			occupantCost:()=>Math.max(1,unit.config?.features?.move||1),
+			occupantCost:(occupant,x,y)=>terminal(x,y)?0:Math.max(1,unit.config?.features?.move||1),
 			riskPenalty
 		};
 		const trapped=AICellPolicy.assess(unit,unit.mapX,unit.mapY).movePenalty>0;

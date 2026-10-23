@@ -1,52 +1,25 @@
 //---------------------------- AIControl class ----------------------------
 
-// Binary min-heap shared by weighted single/multi-source distance searches.
-class AIDistanceMinHeap
-{
-    constructor(){this.items=[];}
-    push(v)
-    {
-        const a=this.items;let i=a.length;a.push(v);
-        while(i>0){const j=(i-1)>>1;if(a[j].d<=v.d)break;a[i]=a[j];i=j;}
-        a[i]=v;
-    }
-    pop()
-    {
-        const a=this.items,r=a[0],v=a.pop();
-        if(a.length)
-        {
-            let i=0;
-            while(2*i+1<a.length)
-            {
-                let j=2*i+1;if(j+1<a.length&&a[j+1].d<a[j].d)j++;
-                if(v.d<=a[j].d)break;a[i]=a[j];i=j;
-            }
-            a[i]=v;
-        }
-        return r;
-    }
-    get length(){return this.items.length;}
-}
 
 class AIControl
 {
     player = null;
 	availableUnits = null;
 	passStage = 1;
-	normalPassStages = 3;
-	maxPassStages = 12;
+	normalPassStages = AI_CONTROL_CONFIG.normalPassStages;
+	maxPassStages = AI_CONTROL_CONFIG.maxPassStages;
 	currentUnit = null;
 	traffic = null;
 	threats = null;
 	distantThreats = null;
 	detectedInvisibleUnits = null;
-	invisibleMemoryTurns = 2;
+	invisibleMemoryTurns = AI_CONTROL_CONFIG.invisibleMemoryTurns;
 	threatSystem = null;
 	guardCoordinator = null;
 	holdCoordinator = null;
 	navigator = null;
 	aiTestSingleStepUnit = null;
-	tacticalPlannerOptions = {maxDepth:5,beamWidth:16,maxMoveCandidates:10,maxJumpCandidates:10};
+	tacticalPlannerOptions = {...AI_CONTROL_CONFIG.tacticalPlannerOptions};
 
     constructor(player)
     {

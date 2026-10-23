@@ -1,24 +1,6 @@
 //---------------------------- Global GUARD evaluation and coordination ----------------------------
 
-const AI_GUARD_CONFIG = Object.freeze({
-	minRadius: 1,
-	maxRadius: 5,
-	idealRadius: 3.5,
-	minIdealRadius: 1,
-	pressureStartDistance: 4.5,
-	pressureFullDistance: 1.5,
-	proximityBase: 2,
-	proximityFalloff: .4,
-	proximityEmergencyReduction: .75,
-	interceptHalfWidth: 1.5,
-	congestionPenalty: .35,
-	anchorTolerance: 0,
-	slotPoolMultiplier: 2,
-	slotMinDistance: 2,
-	slotNearBestRatio: .9,
-	slotNearBestTolerance: .25,
-	travelWeight: .15
-});
+
 
 // Computes one shared GuardScore field around a guarded unit.
 // It is intentionally frozen for the AI turn; mid-turn it is rebuilt only when the guarded unit moves.
@@ -419,18 +401,10 @@ class AIGuardCoordinator
 		for(const guard of guards)remaining.set(guard,this.buildGuardOptions(guard,group.slots));
 		while(remaining.size>0&&freeSlots.size>0)
 		{
-			let chosenGuard=null,chosen=null,bestRegret=-Infinity,bestUtility=-Infinity;
-			for(const [guard,allOptions] of remaining)
-			{
-				const options=allOptions.filter(o=>freeSlots.has(o.slot));
-				if(!options.length)continue;
-				const best=options[0],second=options[1]||null,regret=second?best.utility-second.utility:1000000;
-				if(regret>bestRegret||(regret===bestRegret&&best.utility>bestUtility))
-				{
-					chosenGuard=guard;chosen=best;bestRegret=regret;bestUtility=best.utility;
-				}
-			}
-			if(chosenGuard==null||chosen==null)break;
+			const pick=AISlotAssignment.bestByRegret(remaining.keys(),
+                guard=>(remaining.get(guard)||[]).filter(option=>freeSlots.has(option.slot)));
+            if(!pick)break;
+            const chosenGuard=pick.unit,chosen=pick.choice;
 			this.storeAssignment(group,chosenGuard,chosen);
 			freeSlots.delete(chosen.slot);
 			remaining.delete(chosenGuard);

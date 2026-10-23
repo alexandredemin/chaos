@@ -1,10 +1,6 @@
 //---------------------------- Global MOVE_TO navigation ----------------------------
 
-const AI_NAVIGATION_CONFIG = Object.freeze({
-	waypointTurns:3,
-	detourTolerance:.25,
-	riskScale:.5
-});
+
 
 class AIMoveToNavigator
 {

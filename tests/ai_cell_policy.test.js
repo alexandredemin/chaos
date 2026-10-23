@@ -1,5 +1,5 @@
 const assert=require('assert'),fs=require('fs'),vm=require('vm'),path=require('path');
-const root=path.join(__dirname,'..','Html')+path.sep;
+const root=path.join(__dirname,'..','Html','aicontrol')+path.sep;
 const W=18,H=14, walls=new Set(),objects=[],actors=[];
 const key=(x,y)=>x+','+y;
 const map={width:W,height:H,tileToWorldXY:(x,y)=>({x:x*16,y:y*16})};
@@ -18,7 +18,7 @@ const checkLineOfSight=()=>true;
 const ScenarioEvents={roundIndex:0,activeTurnPlayerInd:0,getRoomAt(){return null;}};
 class AIThreatSystem{constructor(ai){this.ai=ai}syncDynamicBlockers(){} getDangerAt(){return 0} }
 Object.assign(global,{map,wallsLayer,Entity,checkLineOfSight,units:actors,getUnitAtMap,AICombatValue,AI_TACTICAL_PROFILES,AIThreatSystem,ScenarioEvents});
-for(const fname of ['aiorder.js','aicellpolicy.js','aiguard.js','aihold.js','aitraffic.js','aipathfinder.js','ainavigator.js','aiturnplanner.js','aicontrol.js'])vm.runInThisContext(fs.readFileSync(root+fname,'utf8').replace(/\r\n/g,'\n'),{filename:fname});
+for(const fname of ['aiconfig.js','aiheap.js','aislots.js','aiorder.js','aicellpolicy.js','aiguard.js','aihold.js','aitraffic.js','aipathfinder.js','ainavigator.js','aiturnplanner.js','aicontrol.js'])vm.runInThisContext(fs.readFileSync(root+fname,'utf8').replace(/\r\n/g,'\n'),{filename:fname});
 const fake=(name,x,y,extra=1,canStepOn)=>({config:{name},mapX:x,mapY:y,features:{strength:2},evaluateStep(unit){return name==='web'&&unit.features.webImmunity?0:extra},...(canStepOn?{canStepOn}: {})});
 const fire=fake('fire',3,5,100),web=fake('web',4,5,2),glue=fake('glue_blob',5,5,2),item=fake('item',6,5,1),door=fake('door',7,5,1),cabinet=fake('wardrobe',8,5,1,()=>false);
 objects.push(fire,web,glue,item,door,cabinet);

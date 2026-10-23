@@ -1,6 +1,6 @@
 // Regression for the shared exit-cost transition model and universal A*.
 const assert=require('assert'),fs=require('fs'),vm=require('vm'),path=require('path');
-const root=path.join(__dirname,'..','Html')+path.sep;
+const root=path.join(__dirname,'..','Html','aicontrol')+path.sep;
 const W=14,H=11,obstacles=new Set(),entities=[],key=(x,y)=>y*W+x;
 const map={width:W,height:H},wallKey=(x,y)=>obstacles.has(key(x,y));
 const wallsLayer={getTileAt(x,y){return wallKey(x,y)?{properties:{collides:true}}:null;}};
@@ -14,7 +14,7 @@ class AITrafficController{constructor(){}canRequestYield(){return false;}}
 class AIGuardCoordinator{constructor(){}getGameTurnStamp(){return 1;}}
 class AIHoldCoordinator{constructor(){}}
 Object.assign(global,{map,wallsLayer,Entity,getUnitAtMap,AI_TACTICAL_PROFILES,AIThreatSystem,AIGuardCoordinator,AIHoldCoordinator,AITrafficController});
-for(const f of ['aicellpolicy.js','aipathfinder.js','ainavigator.js','aicontrol.js'])
+for(const f of ['aiconfig.js','aiheap.js','aicellpolicy.js','aipathfinder.js','ainavigator.js','aicontrol.js'])
     vm.runInThisContext(fs.readFileSync(root+f,'utf8'),{filename:f});
 const ai=new AIControl(player);player.aiControl=ai;
 const fake=(name,x,y,penalty)=>({mapX:x,mapY:y,config:{name},features:{},evaluateStep(){return penalty;}});

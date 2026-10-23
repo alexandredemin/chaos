@@ -1,7 +1,6 @@
 //---------------------------- HOLD: shared area geometry, unit scoring and assignments ----------------------------
 
-const AI_HOLD_CONFIG=Object.freeze({defaultRadius:5,slotSpacing:1,travelPenalty:.05,congestionPenalty:.35,
-	fireRayCount:16,fireRayRadius:20,fireExposureTau:16,approachMaxCost:20,approachTurns:4,directionWeight:.7,keepSlotBonus:.12});
+
 
 class AIHoldArea
 {
@@ -351,17 +350,15 @@ class AIHoldCoordinator
 		const used=[];
 		while(remaining.size)
 		{
-			let bestPick=null;
-			for(const unit of remaining)
-			{
-				const candidates=(options.get(unit)||[]).filter(p=>!used.some(u=>u.k===p.cell.k));
-				const scored=candidates.map(p=>({...p,utility:p.base-this.congestion(p.cell,used)})).sort((a,b)=>b.utility-a.utility);
-				if(!scored.length)continue;
-				const regret=scored.length>1?scored[0].utility-scored[1].utility:1e6;
-				if(!bestPick||regret>bestPick.regret||(regret===bestPick.regret&&scored[0].utility>bestPick.p.utility))bestPick={unit,p:scored[0],regret};
-			}
-			if(!bestPick)break;
-			const {unit,p}=bestPick,assignment={x:p.cell.x,y:p.cell.y,score:p.utility,components:{...p.b,directionBonus:p.directionBonus,keepBonus:p.keepBonus,congestion:this.congestion(p.cell,used)},epoch:this.epoch};
+			const pick=AISlotAssignment.bestByRegret(remaining,unit=>
+            {
+                const candidates=(options.get(unit)||[]).filter(p=>!used.some(u=>u.k===p.cell.k));
+                return candidates.map(p=>({...p,utility:p.base-this.congestion(p.cell,used)}))
+                    .sort((a,b)=>b.utility-a.utility);
+            });
+            if(!pick)break;
+            const {unit}=pick,p=pick.choice;
+            const assignment={x:p.cell.x,y:p.cell.y,score:p.utility,components:{...p.b,directionBonus:p.directionBonus,keepBonus:p.keepBonus,congestion:this.congestion(p.cell,used)},epoch:this.epoch};
 			group.assignments.set(unit,assignment);used.push(p.cell);remaining.delete(unit);
 		}
 		for(const unit of remaining)group.assignments.set(unit,{x:unit.mapX,y:unit.mapY,score:0,components:null,epoch:this.epoch});

@@ -1,13 +1,6 @@
 //---------------------------- Deterministic short-turn tactical planner ----------------------------
 
-const AI_TACTICAL_PROFILES = {
-	cautious:   {goal:.5, offense:1, danger:2},
-	balanced:   {goal:1, offense:2, danger:1},
-	aggressive: {goal:.75, offense:3, danger:.5},
-	critical:   {goal:1.5, offense:5, danger:.1}
-};
 
-const AI_MATRIX_EPS = 1e-9;
 
 class AIPlannerMatrixAdapter
 {
