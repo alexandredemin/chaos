@@ -23,6 +23,9 @@ const AITest = {
 	pathLimitMove: false,
 	pathViewRadius: 20,
 	pathSummary: '',
+	geometryConfig: null,
+	geometryCache: null,
+	geometrySummary: '',
 
 	init()
 	{
@@ -339,9 +342,42 @@ const AITest = {
 		pathRow.appendChild(radiusRow);
 		const info=document.createElement('div');info.id='aiTestPathInfo';info.style.cssText='color:#ddd;white-space:pre-wrap;font-size:11px;margin-top:5px';info.textContent=this.pathSummary;pathRow.appendChild(info);
 		test.appendChild(pathRow);
+		// Geometry segmentation is independent of the selected unit and all AI orders.
+		const geoPanel=document.createElement('div');
+		geoPanel.style.cssText='margin-top:10px;padding:8px;border:1px solid #556;background:#18212a';
+		const geoHeading=document.createElement('div');geoHeading.textContent='STRATEGIC GEOMETRY (static walls only)';geoHeading.style.fontWeight='bold';geoPanel.appendChild(geoHeading);
+		if(!this.geometryConfig)this.geometryConfig={...AI_STRATEGIC_GEOMETRY_CONFIG};
+		const parameter=(name,label,min,max,step)=>{
+			const line=document.createElement('label');line.style.cssText='display:block;margin-top:4px';line.append(label+' ');
+			const field=document.createElement('input');field.type='number';field.min=min;field.max=max;field.step=step;
+			field.style.width='70px';field.value=this.geometryConfig[name];
+			field.onchange=()=>{
+				this.geometryConfig[name]=Math.max(min,Math.min(max,Number(field.value)||0));
+				this.geometryCache=null;this.guardOverlaySignature=null;
+				if(this.guardOverlayMode.startsWith('geo:'))this.refreshGuardOverlay(true);
+			};
+			line.appendChild(field);geoPanel.appendChild(line);
+		};
+		parameter('minProminence','Peak-to-saddle prominence:',0,30,.25);
+		parameter('minRelativeProminence','Relative prominence:',0,1,.05);
+		parameter('minRegionArea','Min basin area (cells):',0,1000,1);
+		geoPanel.appendChild(this.button('Rebuild geometry (after map edits)',()=>{
+			this.geometryCache=null;this.guardOverlaySignature=null;
+			if(!this.guardOverlayMode.startsWith('geo:'))this.guardOverlayMode='geo:regions';
+			this.refreshGuardOverlay(true);this.renderMenu();
+		}));
+		const geoInfo=document.createElement('div');geoInfo.id='aiTestGeometryInfo';
+		geoInfo.style.cssText='font-size:11px;color:#ddd;white-space:pre-wrap;margin-top:5px';
+		geoInfo.textContent=this.geometrySummary||'Select a GEOMETRY overlay to calculate regions';
+		geoPanel.appendChild(geoInfo);test.appendChild(geoPanel);
 		const overlayRow=document.createElement('div');overlayRow.style.marginTop='8px';overlayRow.append('AI overlay: ');
 		overlayRow.appendChild(this.select([
 			['none','Off'],
+			['geo:distance','GEOMETRY: clearance (distance to wall)'],
+			['geo:peaks','GEOMETRY: local maxima / plateaus'],
+			['geo:basins','GEOMETRY: raw watershed basins'],
+			['geo:regions','GEOMETRY: merged regions'],
+			['geo:boundaries','GEOMETRY: final boundaries / saddles'],
 			['waypoints','MOVE_TO waypoints (WP)'],
 			['path:route','PATH: A* route / steps'],
 			['path:astar','PATH: A* discovered g-cost'],
@@ -649,6 +685,90 @@ const AITest = {
 		}
 	},
 
+	// Static geometry heatmaps. A single graphics object avoids creating thousands
+	// of Phaser Text objects on larger maps. Region/peak labels are sparse.
+	geometryColor(id)
+	{
+		const palette=[0x58a6ce,0xf0ac52,0x79c58b,0xc48cce,0xe0777b,0x76c4bb,0xdaa663,0x859ad8,0xbaad70,0xd78fb1,0x8ac4dc,0xc4bb84];
+		return palette[(id*7+Math.floor(id/12))%palette.length];
+	},
+
+	refreshGeometryOverlay(force=false)
+	{
+		const scene=this.debugUnit?.scene;
+		if(!scene?.add||typeof map==='undefined'||typeof wallsLayer==='undefined'||!map||!wallsLayer)
+		{this.clearGuardOverlay();this.guardOverlaySignature=null;return;}
+		if(!this.geometryConfig)this.geometryConfig={...AI_STRATEGIC_GEOMETRY_CONFIG};
+		const mode=this.guardOverlayMode;
+		if(!this.geometryCache||this.geometryCache.gameMap!==map||this.geometryCache.layer!==wallsLayer||
+			this.geometryCache.width!==map.width||this.geometryCache.height!==map.height)
+		{
+			const started=typeof performance!=='undefined'?performance.now():Date.now();
+			const result=AIStrategicGeometry.fromTilemap(map,wallsLayer,this.geometryConfig);
+			const millis=(typeof performance!=='undefined'?performance.now():Date.now())-started;
+			this.geometryCache={gameMap:map,layer:wallsLayer,width:map.width,height:map.height,result};
+			this.geometrySummary=`Walkable ${result.stats.walkable} | Peaks ${result.stats.peaks} | Basins ${result.stats.basins} | Final regions ${result.stats.regions} | Merges ${result.stats.merges} | ${millis.toFixed(1)}ms`;
+			console.log('AI STRATEGIC GEOMETRY',this.geometrySummary,result.regions);
+			const info=this.menu?.querySelector?.('#aiTestGeometryInfo');if(info)info.textContent=this.geometrySummary;
+		}
+		const geo=this.geometryCache.result,stamp=['geo',mode,geo,geo.stats.regions].join('|');
+		if(!force&&stamp===this.guardOverlaySignature)return;
+		this.guardOverlaySignature=stamp;this.clearGuardOverlay();
+		const gfx=scene.add.graphics();this.guardOverlayObjects.push(gfx);
+		const tileW=map.tileWidth||16,tileH=map.tileHeight||16;
+		const W=geo.width,H=geo.height;
+		const highlight=new Uint8Array(W*H);
+		if(mode==='geo:boundaries')
+		{
+			for(let y=0;y<H;y++)for(let x=0;x<W;x++)
+			{
+				const i=y*W+x,r=geo.region[i];if(!r)continue;
+				if(x+1<W&&geo.region[i+1]&&r!==geo.region[i+1]){highlight[i]=1;highlight[i+1]=1;}
+				if(y+1<H&&geo.region[i+W]&&r!==geo.region[i+W]){highlight[i]=1;highlight[i+W]=1;}
+			}
+		}
+		for(let y=0;y<H;y++)for(let x=0;x<W;x++)
+		{
+			const i=y*W+x;if(!geo.free[i])continue;
+			let color,alpha=.32;
+			if(mode==='geo:distance')
+			{
+				const t=Math.min(1,geo.distance[i]/10);
+				color=(Math.floor(40+t*190)<<16)|(Math.floor(130-t*30)<<8)|Math.floor(235-t*175);
+			}
+			else if(mode==='geo:peaks')color=0x447c9a;
+			else if(mode==='geo:basins')color=this.geometryColor(geo.basin[i]);
+			else if(mode==='geo:regions')color=this.geometryColor(geo.region[i]);
+			else{color=highlight[i]?0xffd046:this.geometryColor(geo.region[i]);alpha=highlight[i]?.64:.10;}
+			const pos=map.tileToWorldXY(x,y);
+			gfx.fillStyle(color,alpha);gfx.fillRect(pos.x,pos.y,tileW,tileH);
+		}
+		gfx.setDepth(19998);
+		const label=(x,y,str,color='#ffffff')=>{
+			const pos=map.tileToWorldXY(x,y);
+			const text=scene.add.text(pos.x+1,pos.y+1,str,{font:'6px monospace',color,backgroundColor:'#111111',resolution:5});
+			text.setDepth(20004);this.guardOverlayObjects.push(text);
+		};
+		if(mode==='geo:distance')
+		{
+			const stride=Math.max(1,Math.ceil(Math.sqrt(geo.stats.walkable/1400)));
+			for(let y=0;y<H;y+=stride)for(let x=0;x<W;x+=stride)
+				if(geo.free[y*W+x])label(x,y,geo.distance[y*W+x].toFixed(1));
+		}
+		else if(mode==='geo:peaks'||mode==='geo:basins')
+		{
+			for(const p of geo.peaks.slice(0,350))label(p.x,p.y,'P'+p.id,mode==='geo:peaks'?'#ffe780':'#ffffff');
+		}
+		else if(mode==='geo:regions')
+		{
+			for(const r of geo.regions.slice(0,350))label(r.peakX,r.peakY,'R'+r.id,'#ffffff');
+		}
+		else if(mode==='geo:boundaries')
+		{
+			for(const edge of geo.edges.slice(0,150))label(edge.x,edge.y,'S'+edge.saddle.toFixed(1),'#ffdf74');
+		}
+	},
+
 	getHoldOverlayContext()
 	{
 		const unit=this.debugUnit;
@@ -759,6 +879,7 @@ const AITest = {
 		if(this.guardOverlayMode==='none'){this.clearGuardOverlay();return;}
 		if(this.guardOverlayMode==='waypoints'){this.refreshWaypointOverlay(force);return;}
 		if(this.guardOverlayMode.startsWith('path:')){this.refreshPathOverlay(force);return;}
+		if(this.guardOverlayMode.startsWith('geo:')){this.refreshGeometryOverlay(force);return;}
 		if(this.guardOverlayMode.startsWith('hold:')){this.refreshHoldOverlay(force);return;}
 		const ctx=this.getGuardOverlayContext();
 		if(ctx==null||ctx.scene==null||ctx.scene.add==null){this.clearGuardOverlay();return;}

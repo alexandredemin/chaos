@@ -46,3 +46,8 @@ const AI_CONTROL_CONFIG = Object.freeze({
     invisibleMemoryTurns: 2,
     tacticalPlannerOptions: Object.freeze({maxDepth:5,beamWidth:16,maxMoveCandidates:10,maxJumpCandidates:10})
 });
+
+// Static geometry segmentation. Not a tactical scoring weight and not a movement cost.
+const AI_STRATEGIC_GEOMETRY_CONFIG = Object.freeze({
+    minProminence:1.25, minRelativeProminence:0.30, minRegionArea:10
+});

@@ -254,7 +254,7 @@ const MAP_GENERATION_CONFIG = {
 						pursuitRadius: 14, pursuitCooldownTurns: 1, targetAggression: 1, travelAggression: 3, combatAggression: 6 } // Strong-creature roam behavior.
 				},
 				{
-					count: [5, 7], // Count on a 20x20 map before area scaling.
+					count: [3, 5], // Count on a 20x20 map before area scaling.
 					types: ['rat', 'bat'], // Weak roaming creature pool.
 					minDistance: 2, // Minimum Chebyshev spacing between creatures from this profile.
 					behavior: { type: 'roam', minGoalDistance: 8, maxGoalDistance: 24, goalTolerance: 1, stuckTurnLimit: 3, aggroRadius: 4,
