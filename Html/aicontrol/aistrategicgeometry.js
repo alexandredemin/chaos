@@ -167,7 +167,7 @@ class AIStrategicGeometry
         for(const edge of seams)
         {
             let a=root(edge.a),b=root(edge.b);
-            if(a===b)continue;
+            if(a===b||cfg.rawOnly===true)continue;
             const small=Math.min(radii[a],radii[b]);
             const prominence=Math.max(0,small-edge.saddle);
             const weak=prominence<cfg.minProminence || prominence/Math.max(small,1e-6)<cfg.minRelativeProminence;

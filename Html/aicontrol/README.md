@@ -37,7 +37,9 @@ behavior implementations live in `behaviors.js`.
 | `aitraffic.js` | Movement/yield coordination |
 | `aiturnplanner.js` | Short-turn tactical action search |
 | `aicontrol.js` | Strategic orchestration, order lifecycle, Dijkstra and action executor |
-| `aitest.js` | F6/F7/F8 diagnostic overlays and order override |
+| `aistrategicgeometry.js` | Wall distance transform and raw watershed room-like regions |
+| `aitopologygraph.js` | Static G1 graph of zones + physical connections for generated/handmade maps |
+| `aitest.js` | F6/F7/F8 diagnostic overlays (including topology map) and order override |
 | `aimessages.js` | AI messages |
 | `behaviors.js`, `independentai.js` | Independent creature behavior |
 | `aitreesearch.js` | Existing tree-search subsystem, still loaded for compatibility |

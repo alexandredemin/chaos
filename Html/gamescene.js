@@ -26,6 +26,9 @@ var GameScene = new Phaser.Class({
             this.generateMap(cfg);
         }
         else{
+            // Handmade maps have no generated room metadata. Avoid stale metadata
+            // when switching from a previously generated dungeon in this session.
+            if(typeof ScenarioEvents !== 'undefined') ScenarioEvents.setMapMetadata(null);
             map = this.make.tilemap({ key: gameSettings.selectedMap, tileWidth: 16, tileHeight: 16 });
             this.tileset = map.addTilesetImage('dungeon-tiles','tiles2');
             groundLayer = map.createLayer('Ground', this.tileset, 0, 0);

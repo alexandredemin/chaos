@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const dir=path.resolve(__dirname,'..');
 const ctx=vm.createContext({console,document:{addEventListener(){}}});
-for(const file of ['aiconfig.js','aiheap.js','aistrategicgeometry.js','aitest.js'])
+for(const file of ['aiconfig.js','aiheap.js','aistrategicgeometry.js','aitopologygraph.js','aitest.js'])
     vm.runInContext(fs.readFileSync(path.join(dir,'Html/aicontrol',file),'utf8'),ctx,{filename:file});
 const build=vm.runInContext('AIStrategicGeometry.build.bind(AIStrategicGeometry)',ctx);
 const fromMap=vm.runInContext('AIStrategicGeometry.fromTilemap.bind(AIStrategicGeometry)',ctx);
@@ -95,11 +95,13 @@ const gameMap={width:9,height:7,tileWidth:16,tileHeight:16,tileToWorldXY(x,y){re
 const gm=fromMap(gameMap,layer);
 assert.equal(gm.stats.walkable,35);
 const items=[];
-const scene={add:{graphics(){let g={active:true,fillStyle(){return this;},fillRect(){return this;},setDepth(){},destroy(){this.active=false;}};items.push(g);return g;},text(){let t={active:true,setDepth(){},destroy(){this.active=false;}};items.push(t);return t;}}};
+const scene={add:{graphics(){let g={active:true,fillStyle(){return this;},fillRect(){return this;},fillCircle(){return this;},lineStyle(){return this;},beginPath(){return this;},moveTo(){return this;},lineTo(){return this;},strokePath(){return this;},setDepth(){},destroy(){this.active=false;}};items.push(g);return g;},text(){let t={active:true,setDepth(){},destroy(){this.active=false;}};items.push(t);return t;}}};
 ctx.map=gameMap;ctx.wallsLayer=layer;
 ctx.testScene=scene;
-vm.runInContext('AITest.debugUnit={scene:testScene, mapX:3, mapY:3}; AITest.guardOverlayMode="geo:regions"; AITest.refreshGeometryOverlay(true)',ctx);
+vm.runInContext('AITest.debugUnit={scene:testScene, mapX:3, mapY:3}; AITest.guardOverlayMode="geo:basins"; AITest.refreshGeometryOverlay(true)',ctx);
 assert(vm.runInContext('AITest.geometryCache.result.regions.length',ctx)>=1);
+vm.runInContext('AITest.guardOverlayMode="geo:graph"; AITest.refreshGeometryOverlay(true)',ctx);
+assert(vm.runInContext('AITest.geometryCache.graph.zones.length',ctx)>=1);
 assert(items.length<30,'graphics batching / bounded number of labels');
 vm.runInContext('AITest.guardOverlayMode="geo:distance"; AITest.refreshGeometryOverlay(true); AITest.clearGuardOverlay()',ctx);
 assert(items.every(item=>item.active===false),'overlay resources removed after mode change');
