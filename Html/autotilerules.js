@@ -293,90 +293,59 @@ const WALL_TOP_AUTOTILE_RULES = {
     }
 };
 
+// Door-aware post-autotiling rules. Each rule describes the 3x3 neighborhood of
+// the TARGET cell, not an offset from a door. D is a visible door (hidden doors
+// remain ordinary rock). The center is W for an affected wall or D for the door.
+// fromTile is the tile from the completed WALL_AUTOTILE_RULES pass (0 means no wall).
+// directions constrains the door at the D position in the pattern.
+// Rules read a frozen base-wall snapshot; higher score wins, then earlier rule.
 const DOOR_AUTOTILE_RULES = [
-    {
-        directions: ["N", "S"],
-        offsets: [
-            {
-                dx: 0,
-                dy: 0,
-                replacements: {
-                    0: 41
-                }
-            },
-            {
-                dx: -1,
-                dy: 0,
-                replacements: {
-                    12: 11,
-                    19: 11,
-                    13: 32,
-                    14: 34,
-                    16: 20,
-                    17: 22,
-                    21: 31,
-                    23: 30,
-                    33: 36,
-                }
-            },
-            {
-                dx: 1,
-                dy: 0,
-                replacements: {
-                    10: 11,
-                    19: 11,
-                    13: 33,
-                    15: 35,
-                    16: 21,
-                    17: 23,
-                    20: 31,
-                    22: 30,
-                    32: 36,
-                }
-            }
-        ]
-    },
-    {
-        directions: ["W", "E"],
-        offsets: [
-            {
-                dx: 0,
-                dy: 0,
-                replacements: {
-                    0: 40
-                }
-            },
-            {
-                dx: 0,
-                dy: -1,
-                replacements: {
-                    10: 20,
-                    11: 31,
-                    12: 21,
-                    17: 13,
-                    18: 16,
-                    19: 16,
-                    22: 32,
-                    23: 33,
-                    28: 20,
-                    29: 21,
-                    30: 36,
-                }
-            },
-            {
-                dx: 0,
-                dy: 1,
-                replacements: {
-                    10: 28,
-                    //11: 30,
-                    12: 29,
-                    //31: 36,
-                }
-            }
-        ]
-    }
-];
+    // North/South door tile.
+    { pattern: "****D****", directions: ['N', 'S'], fromTile: 0, tile: 41, score: 10 },
 
+    // Left wall of a North/South door.
+    { pattern: "****WD***", directions: ['N', 'S'], fromTile: 12, tile: 11, score: 10 },
+    { pattern: "****WD***", directions: ['N', 'S'], fromTile: 19, tile: 11, score: 10 },
+    { pattern: "****WD***", directions: ['N', 'S'], fromTile: 13, tile: 32, score: 10 },
+    { pattern: "****WD***", directions: ['N', 'S'], fromTile: 14, tile: 34, score: 10 },
+    { pattern: "****WD***", directions: ['N', 'S'], fromTile: 16, tile: 20, score: 10 },
+    { pattern: "****WD***", directions: ['N', 'S'], fromTile: 17, tile: 22, score: 10 },
+    { pattern: "****WD***", directions: ['N', 'S'], fromTile: 21, tile: 31, score: 10 },
+    { pattern: "****WD***", directions: ['N', 'S'], fromTile: 23, tile: 30, score: 10 },
+    { pattern: "****WD***", directions: ['N', 'S'], fromTile: 33, tile: 36, score: 10 },
+
+    // Right wall of a North/South door.
+    { pattern: "***DW****", directions: ['N', 'S'], fromTile: 10, tile: 11, score: 10 },
+    { pattern: "***DW****", directions: ['N', 'S'], fromTile: 19, tile: 11, score: 10 },
+    { pattern: "***DW****", directions: ['N', 'S'], fromTile: 13, tile: 33, score: 10 },
+    { pattern: "***DW****", directions: ['N', 'S'], fromTile: 15, tile: 35, score: 10 },
+    { pattern: "***DW****", directions: ['N', 'S'], fromTile: 16, tile: 21, score: 10 },
+    { pattern: "***DW****", directions: ['N', 'S'], fromTile: 17, tile: 23, score: 10 },
+    { pattern: "***DW****", directions: ['N', 'S'], fromTile: 20, tile: 31, score: 10 },
+    { pattern: "***DW****", directions: ['N', 'S'], fromTile: 22, tile: 30, score: 10 },
+    { pattern: "***DW****", directions: ['N', 'S'], fromTile: 32, tile: 36, score: 10 },
+
+    // West/East door tile.
+    { pattern: "****D****", directions: ['W', 'E'], fromTile: 0, tile: 40, score: 10 },
+
+    // Wall above a West/East door.
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 10, tile: 20, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 11, tile: 31, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 12, tile: 21, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 17, tile: 13, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 18, tile: 16, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 19, tile: 16, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 22, tile: 32, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 23, tile: 33, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 28, tile: 20, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 29, tile: 21, score: 10 },
+    { pattern: "****W**D*", directions: ['W', 'E'], fromTile: 30, tile: 36, score: 10 },
+
+    // Wall below a West/East door.
+    { pattern: "*D**W****", directions: ['W', 'E'], fromTile: 10, tile: 28, score: 10 },
+    { pattern: "*D**W****", directions: ['W', 'E'], fromTile: 12, tile: 29, score: 10 },
+
+];
 
 const WALL_OVERLAY_TILES = new Set([41]);
 

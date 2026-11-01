@@ -7,6 +7,7 @@ class MapAutotiler {
 		this.groundTile = cfg.groundTileIndex || MAP_AUTOTILE_CONFIG.groundTileIndex;
 		this.wallTile = cfg.wallTileIndex || MAP_AUTOTILE_CONFIG.wallTileIndex;
 		this.wallAutotileRules = WALL_AUTOTILE_RULES.slice();
+		this.doorAutotileRules = DOOR_AUTOTILE_RULES.slice();
 	}
 
 	// ----- Main tiling pipeline -----
@@ -55,10 +56,7 @@ class MapAutotiler {
 
 		this._markWallsFromRock(tileTypeMap);
 		this._autoTileWalls(tileTypeMap, map);
-		for (const portal of portals) {
-			if (!portal.doorSuitable || !portal.direction || hiddenPortalIds.has(portal.id)) continue;
-			this._applyDoorAutotileRules(portal.x, portal.y, portal.direction, map);
-		}
+		this._autoTileAroundDoors(tileTypeMap, map, portals, hiddenPortalIds);
 		return { ground: map.ground, walls: map.walls, tileTypeMap };
 	}
 
@@ -75,6 +73,85 @@ class MapAutotiler {
 			cells.push(cell);
 		}
 		return {cells};
+	}
+
+	// Developer helper: re-run both tiling stages on the currently loaded random map.
+	// Saved games store final sprites, not the original F/W/R geometry. Reconstruct
+	// that geometry from collision/passability and the current DoorEntity positions.
+	// This does not regenerate the dungeon or change units, objects or doors.
+	static retileCurrentMap(dryRun = false) {
+		if (typeof map === 'undefined' || map == null ||
+			typeof wallsLayer === 'undefined' || wallsLayer == null ||
+			typeof entities === 'undefined' || !Array.isArray(entities)) {
+			console.warn('[Autotile] Load a game first.');
+			return null;
+		}
+		if (typeof gameSettings !== 'undefined' && gameSettings.selectedMap !== 'random') {
+			console.warn('[Autotile] retileCurrentMap is intended for generated random maps only.');
+			return null;
+		}
+
+		const width = map.width, height = map.height;
+		const kind = [];
+		for (let y = 0; y < height; y++) {
+			kind[y] = [];
+			for (let x = 0; x < width; x++) {
+				const tile = wallsLayer.getTileAt(x,y);
+				const index = tile == null ? null : tile.index;
+				kind[y][x] = index == null || WALL_NO_COLLISION_TILES.has(index) ? '.' : '#';
+			}
+		}
+
+		const portals = [], secretDoors = [];
+		for (const entity of entities) {
+			if (entity == null || entity.config?.name !== 'door' || !entity.features?.direction) continue;
+			const {mapX:x,mapY:y} = entity;
+			if (!Number.isInteger(x) || !Number.isInteger(y) || x<0 || y<0 || x>=width || y>=height) continue;
+			kind[y][x] = '.'; // A hidden door is geometrically a floor cell, temporarily covered by rock.
+			const hidden = entity.features.hidden?.hidden === true;
+			const id = 'runtime-door-' + portals.length;
+			portals.push({id,x,y,direction:entity.features.direction,doorSuitable:true,hiddenByDefault:hidden});
+			if (entity.features.tilePatch != null) secretDoors.push({entity,id,hidden});
+		}
+
+		const tiler = new MapAutotiler();
+		tiler.width = width;
+		tiler.height = height;
+		const dungeon = {layout:{width,height},map:{kind}};
+		const hiddenIds = new Set(portals.filter(p => p.hiddenByDefault).map(p => p.id));
+		const result = tiler._buildState(dungeon,portals,hiddenIds);
+		const patch = {cells:[]};
+		for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+			const current = wallsLayer.getTileAt(x,y);
+			const oldTile = current == null ? null : current.index;
+			const nextTile = result.walls[y][x];
+			if (oldTile !== nextTile) patch.cells.push({x,y,wall:nextTile});
+		}
+
+		const report = {dryRun:dryRun===true,doors:portals.length,secretDoors:secretDoors.length,
+			changedCells:patch.cells.length,changes:patch.cells.slice(0,40)};
+		if (dryRun !== true) {
+			if (typeof MapVisualSystem === 'undefined') {
+				console.warn('[Autotile] MapVisualSystem is unavailable.');
+				return null;
+			}
+			// Keep serialized secret-door patches consistent with the freshly computed sprites.
+			for (const {entity,id,hidden} of secretDoors) {
+				const alternative = new Set(hiddenIds);
+				if (hidden) alternative.delete(id);
+				else alternative.add(id);
+				const otherState = tiler._buildState(dungeon,portals,alternative);
+				const hiddenState = hidden ? result : otherState;
+				const revealedState = hidden ? otherState : result;
+				entity.features.tilePatch = {
+					hidden:tiler._diffStates(revealedState,hiddenState),
+					revealed:tiler._diffStates(hiddenState,revealedState)
+				};
+			}
+			MapVisualSystem.applyPatch(patch);
+		}
+		console.log('[Autotile] Current map retiling:', report);
+		return report;
 	}
 
 	// ----- Wall autotiling helpers -----
@@ -161,21 +238,65 @@ class MapAutotiler {
 		return true;
 	}
 
-	// ----- Door-specific tile corrections -----
+	// ----- Door-aware cell-based post-autotiling -----
 
-	// Applies local wall-tile replacements around one semantic door portal.
-	_applyDoorAutotileRules(x, y, dir, map) {
-		for (const rule of DOOR_AUTOTILE_RULES) {
-			if (!rule.directions.includes(dir)) continue;
-			for (const offset of rule.offsets) {
-				const tx = x + offset.dx, ty = y + offset.dy;
-				if (!this._inMapRect(tx, ty)) continue;
-				let currentTile = map.walls[ty][tx];
-				if (currentTile === null) currentTile = 0;
-				if (Object.prototype.hasOwnProperty.call(offset.replacements, currentTile)) map.walls[ty][tx] = offset.replacements[currentTile];
+	// Reads the completed wall result, but never reads tiles changed by this pass.
+	// Thus the order of the semantic portals cannot affect the final sprites.
+	_autoTileAroundDoors(tileTypeMap, map, portals, hiddenPortalIds = new Set()) {
+		const doors = new Map();
+		const candidates = new Set();
+		for (const portal of portals) {
+			if (!portal.doorSuitable || !portal.direction || hiddenPortalIds.has(portal.id)) continue;
+			if (!this._inMapRect(portal.x, portal.y)) continue;
+			const key = portal.y * this.width + portal.x;
+			doors.set(key, portal.direction);
+			for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+				const x = portal.x + dx, y = portal.y + dy;
+				if (this._inMapRect(x,y)) candidates.add(y * this.width + x);
 			}
 		}
+
+		if (doors.size === 0) return;
+		const baseWalls = map.walls.map(row => row.slice());
+		for (const index of candidates) {
+			const x = index % this.width, y = Math.floor(index / this.width);
+			const pattern = this._buildDoorPattern(x, y, tileTypeMap, doors);
+			const originalTile = baseWalls[y][x] ?? 0;
+			let bestRule = null, bestScore = -Infinity;
+			for (const rule of this.doorAutotileRules) {
+				if (rule.fromTile != null && rule.fromTile !== originalTile) continue;
+				if (!this._matchPattern(pattern, rule.pattern)) continue;
+				if (!this._matchDoorDirections(x,y,rule,doors)) continue;
+				const score = rule.score ?? 0;
+				if (score > bestScore) {bestScore = score; bestRule = rule;}
+			}
+			if (bestRule != null) map.walls[y][x] = bestRule.tile;
+		}
 	}
+
+	_buildDoorPattern(cx,cy,tileTypeMap,doors) {
+		let result = '';
+		for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+			const x=cx+dx,y=cy+dy;
+			result += this._inMapRect(x,y) && doors.has(y*this.width+x)
+				? 'D' : this._tileToSymbol(tileTypeMap,x,y);
+		}
+		return result;
+	}
+
+	// Current rules have one D each. Future multi-door rules can specify the
+	// direction of their anchor with directionAt (0..8, default first D).
+	_matchDoorDirections(cx,cy,rule,doors) {
+		if (!rule.directions) return true;
+		const index = rule.directionAt ?? rule.pattern.indexOf('D');
+		if (index < 0) return false;
+		const x = cx + index % 3 - 1;
+		const y = cy + Math.floor(index / 3) - 1;
+		return rule.directions.includes(doors.get(y * this.width + x));
+	}
+
 }
 
 globalThis.MapAutotiler = MapAutotiler;
+// DevTools: retileCurrentMap(true) previews; retileCurrentMap() applies without regenerating the map.
+globalThis.retileCurrentMap = (dryRun=false) => MapAutotiler.retileCurrentMap(dryRun);
