@@ -265,8 +265,7 @@ class MapAutotiler {
 			let bestRule = null, bestScore = -Infinity;
 			for (const rule of this.doorAutotileRules) {
 				if (rule.fromTile != null && rule.fromTile !== originalTile) continue;
-				if (!this._matchPattern(pattern, rule.pattern)) continue;
-				if (!this._matchDoorDirections(x,y,rule,doors)) continue;
+				if (!this._matchDoorPattern(pattern, rule.pattern)) continue;
 				const score = rule.score ?? 0;
 				if (score > bestScore) {bestScore = score; bestRule = rule;}
 			}
@@ -278,21 +277,23 @@ class MapAutotiler {
 		let result = '';
 		for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
 			const x=cx+dx,y=cy+dy;
-			result += this._inMapRect(x,y) && doors.has(y*this.width+x)
-				? 'D' : this._tileToSymbol(tileTypeMap,x,y);
+			const direction = this._inMapRect(x,y) ? doors.get(y*this.width+x) : null;
+			result += direction ? direction.toLowerCase() : this._tileToSymbol(tileTypeMap,x,y);
 		}
 		return result;
 	}
 
-	// Current rules have one D each. Future multi-door rules can specify the
-	// direction of their anchor with directionAt (0..8, default first D).
-	_matchDoorDirections(cx,cy,rule,doors) {
-		if (!rule.directions) return true;
-		const index = rule.directionAt ?? rule.pattern.indexOf('D');
-		if (index < 0) return false;
-		const x = cx + index % 3 - 1;
-		const y = cy + Math.floor(index / 3) - 1;
-		return rule.directions.includes(doors.get(y * this.width + x));
+	// H/V group door orientations, while n/s/e/w can match an exact direction.
+	_matchDoorPattern(actual,rule) {
+		for (let i=0;i<9;i++) {
+			const expected=rule[i],symbol=actual[i];
+			if (expected === '*') continue;
+			if (expected === 'V' && (symbol === 'n' || symbol === 's')) continue;
+			if (expected === 'H' && (symbol === 'e' || symbol === 'w')) continue;
+			if (expected === 'D' && 'nsew'.includes(symbol)) continue;
+			if (expected !== symbol) return false;
+		}
+		return true;
 	}
 
 }
