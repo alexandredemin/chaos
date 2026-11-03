@@ -344,24 +344,74 @@ const DOOR_AUTOTILE_RULES = [
     { pattern: "*H**W****", fromTile: 10, tile: 28, score: 10 },
     { pattern: "*H**W****", fromTile: 12, tile: 29, score: 10 },
 
-    // Diagonal door pairs: only base sprites supported by BOTH single-door rules.
-    // West + north of target wall: use the rule for the door above.
-    { pattern: "*H*VW****", fromTile: 10, tile: 28, score: 20 },
+    // Diagonal door pairs.
+    // West + North
+    // *H*
+    // VW*
+    // ***
+    { pattern: "*H*VW****", fromTile: 10, tile: 30, score: 20 },
+    { pattern: "*H*VW****", fromTile: 12, tile: 23, score: 20 },
+    { pattern: "*H*VW****", fromTile: 13, tile: 33, score: 20 },
+    { pattern: "*H*VW****", fromTile: 16, tile: 33, score: 20 },
+    { pattern: "*H*VW****", fromTile: 17, tile: 23, score: 20 },
+    { pattern: "*H*VW****", fromTile: 19, tile: 23, score: 20 },
+    { pattern: "*H*VW****", fromTile: 20, tile: 36, score: 20 },
+    { pattern: "*H*VW****", fromTile: 22, tile: 30, score: 20 },
+    { pattern: "*H*VW****", fromTile: 32, tile: 36, score: 20 },
 
-    // East + north of target wall: use the rule for the door above.
-    { pattern: "*H**WV***", fromTile: 12, tile: 29, score: 20 },
+    // East + North
+    // *H*
+    // *WV
+    // ***
+    { pattern: "*H**WV***", fromTile: 10, tile: 22, score: 20 },
+    { pattern: "*H**WV***", fromTile: 12, tile: 30, score: 20 },
+    { pattern: "*H**WV***", fromTile: 13, tile: 32, score: 20 },
+    { pattern: "*H**WV***", fromTile: 16, tile: 32, score: 20 },
+    { pattern: "*H**WV***", fromTile: 17, tile: 22, score: 20 },
+    { pattern: "*H**WV***", fromTile: 19, tile: 22, score: 20 },
+    { pattern: "*H**WV***", fromTile: 21, tile: 36, score: 20 },
+    { pattern: "*H**WV***", fromTile: 23, tile: 30, score: 20 },
+    { pattern: "*H**WV***", fromTile: 33, tile: 36, score: 20 },
 
-    // West + south of target wall: use the rule for the door below.
-    { pattern: "***VW**H*", fromTile: 10, tile: 20, score: 20 },
-    { pattern: "***VW**H*", fromTile: 17, tile: 13, score: 20 },
-    { pattern: "***VW**H*", fromTile: 19, tile: 16, score: 20 },
-    { pattern: "***VW**H*", fromTile: 22, tile: 32, score: 20 },
+    // West + South
+    // ***
+    // VW*
+    // *H*
+    { pattern: "***VW**H*", fromTile: 10, tile: 31, score: 20 },
+    { pattern: "***VW**H*", fromTile: 11, tile: 31, score: 20 },
+    { pattern: "***VW**H*", fromTile: 12, tile: 21, score: 20 },
+    { pattern: "***VW**H*", fromTile: 13, tile: 33, score: 20 },
+    { pattern: "***VW**H*", fromTile: 16, tile: 21, score: 20 },
+    { pattern: "***VW**H*", fromTile: 17, tile: 33, score: 20 },
+    { pattern: "***VW**H*", fromTile: 18, tile: 21, score: 20 },
+    { pattern: "***VW**H*", fromTile: 19, tile: 21, score: 20 },
+    { pattern: "***VW**H*", fromTile: 20, tile: 31, score: 20 },
+    { pattern: "***VW**H*", fromTile: 22, tile: 36, score: 20 },
+    { pattern: "***VW**H*", fromTile: 23, tile: 33, score: 20 },
+    { pattern: "***VW**H*", fromTile: 28, tile: 31, score: 20 },
+    { pattern: "***VW**H*", fromTile: 29, tile: 21, score: 20 },
+    { pattern: "***VW**H*", fromTile: 30, tile: 36, score: 20 },
+    { pattern: "***VW**H*", fromTile: 32, tile: 36, score: 20 },
 
-    // East + south of target wall: use the rule for the door below.
-    { pattern: "****WV*H*", fromTile: 12, tile: 21, score: 20 },
-    { pattern: "****WV*H*", fromTile: 17, tile: 13, score: 20 },
-    { pattern: "****WV*H*", fromTile: 19, tile: 16, score: 20 },
-    { pattern: "****WV*H*", fromTile: 23, tile: 33, score: 20 },
+    // East + South
+    // ***
+    // *WV
+    // *H*
+    { pattern: "****WV*H*", fromTile: 10, tile: 20, score: 20 },
+    { pattern: "****WV*H*", fromTile: 11, tile: 31, score: 20 },
+    { pattern: "****WV*H*", fromTile: 12, tile: 31, score: 20 },
+    { pattern: "****WV*H*", fromTile: 13, tile: 32, score: 20 },
+    { pattern: "****WV*H*", fromTile: 16, tile: 20, score: 20 },
+    { pattern: "****WV*H*", fromTile: 17, tile: 32, score: 20 },
+    { pattern: "****WV*H*", fromTile: 18, tile: 20, score: 20 },
+    { pattern: "****WV*H*", fromTile: 19, tile: 20, score: 20 },
+    { pattern: "****WV*H*", fromTile: 21, tile: 31, score: 20 },
+    { pattern: "****WV*H*", fromTile: 22, tile: 32, score: 20 },
+    { pattern: "****WV*H*", fromTile: 23, tile: 36, score: 20 },
+    { pattern: "****WV*H*", fromTile: 28, tile: 20, score: 20 },
+    { pattern: "****WV*H*", fromTile: 29, tile: 31, score: 20 },
+    { pattern: "****WV*H*", fromTile: 30, tile: 36, score: 20 },
+    { pattern: "****WV*H*", fromTile: 33, tile: 36, score: 20 },
 
 ];
 
