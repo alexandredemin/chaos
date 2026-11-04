@@ -328,6 +328,27 @@ const WALL_AUTOTILE_RULES = [
         tile: 35,
         score: 6
     },
+    // --- T-junction with a thick wall on the opposite side.
+    {
+        pattern: "*WFWWW*WF",
+        tile: 34,
+        score: 6
+    },
+    {
+        pattern: "FW*WWWFW*",
+        tile: 35,
+        score: 6
+    },
+    {
+        pattern: "FWFWWW*W*",
+        tile: 30,
+        score: 6
+    },
+    {
+        pattern: "*W*WWWFWF",
+        tile: 31,
+        score: 6
+    },
 
     // --- cross ---
     {
