@@ -7,6 +7,8 @@ its dependency manifest: preserve the script order when adding a file.
 
 ```
 AIControl / IndependentAIControl
+  ├─ select strategic planner per player (AIStrategicPlannerRegistry)
+  ├─ AILegacyStrategicPlanner -> original order-selection logic (unchanged)
   ├─ choose/maintain structured orders (AIOrder)
   ├─ AIHoldCoordinator  -> HoldArea, fixed geometry, dynamic incoming enemies
   ├─ AIGuardCoordinator -> defense scores, slot assignments
@@ -24,6 +26,7 @@ behavior implementations live in `behaviors.js`.
 
 | File | Responsibility |
 | --- | --- |
+| `aistrategicplanner.js`, `ailegacystrategicplanner.js` | Strategy registry and extracted Legacy policy; Graph S1 will register separately |
 | `aiconfig.js` | Shared constants: tactical profiles, HOLD/GUARD, navigation and turn defaults |
 | `aiheap.js` | Shared binary min-heap used by Dijkstra and A* |
 | `aislots.js` | Regret-greedy choice shared by GUARD and HOLD; scoring stays in coordinators |
@@ -36,10 +39,10 @@ behavior implementations live in `behaviors.js`.
 | `aithreat.js` | Dynamic threat calculations |
 | `aitraffic.js` | Movement/yield coordination |
 | `aiturnplanner.js` | Short-turn tactical action search |
-| `aicontrol.js` | Strategic orchestration, order lifecycle, Dijkstra and action executor |
+| `aicontrol.js` | Strategic planner dispatch, order lifecycle, Dijkstra and action executor |
 | `aistrategicgeometry.js` | Wall distance transform and raw watershed room-like regions |
 | `aitopologygraph.js` | Static G1 graph of zones + physical connections for generated/handmade maps |
-| `aitest.js` | F6/F7/F8 diagnostic overlays (including topology map) and order override |
+| `aitest.js` | F6/F7/F8 diagnostic overlays in categories, per-player strategy selection and order override |
 | `aimessages.js` | AI messages |
 | `behaviors.js`, `independentai.js` | Independent creature behavior |
 | `aitreesearch.js` | Existing tree-search subsystem, still loaded for compatibility |
@@ -82,3 +85,24 @@ constants in `aiconfig.js`, and add order-specific UI visualization to `aitest.j
 For more aggressive splitting of `aicontrol.js`, first create gameplay fixtures
 for MOVE_TO, GUARD, HOLD, ENGAGE, macro-MOVE, traffic/yield, abilities and
 invisible-enemy detection so a regression can be diagnosed objectively.
+
+## Strategic planner interface (S1.0)
+
+`AIStrategicPlannerRegistry.register(id,ai=>new Planner(ai))` registers a planner;
+`Planner.plan(midTurn=false)` is called from `AIControl.planning()` on normal turns
+and on mid-turn invisible-unit discovery. The planner uses the existing
+`AIControl.setOrder()`/`setEngageOrder()` etc. to assign orders; it does not
+execute tactical actions or replace `AITurnPlanner`.
+
+`AIControl.setStrategicPlanner(id)` selects a registered strategy for **that
+player only**; selection is also stored as `player.strategicPlannerId`. F8's
+**Strategy** category shows this choice and can switch it for the player's next
+planning call. With only Legacy registered, that is the sole selection.
+Independent creatures still use `IndependentAIControl.planning()` and their
+own behavior system. The old Legacy planning logic is copied intact except
+for redirecting `this` references to the owning `AIControl` instance.
+
+Graph S1, goal allocation and maxActiveGoals tuning are **not implemented** in
+this infrastructure-only step. Suggested future config: `maxActiveGoals:2`
+(or `3` for comparisons), evaluated over candidate subsets with provisional
+resource allocations before committing any order changes.

@@ -4,6 +4,8 @@
 class AIControl
 {
     player = null;
+    strategicPlanner = null;
+    strategicPlannerId = null;
 	availableUnits = null;
 	passStage = 1;
 	normalPassStages = AI_CONTROL_CONFIG.normalPassStages;
@@ -1492,169 +1494,32 @@ class AIControl
         }
     }
   
+    getStrategicPlannerName()
+    {
+        return this.player?.strategicPlannerId||this.strategicPlannerId||'legacy';
+    }
+
+    // Kept for existing callers and IndependentAIControl's override.
+    // The strategy instance belongs to this player, not to an individual unit.
+    getStrategicPlanner()
+    {
+        const id=this.player?.strategicPlannerId||'legacy';
+        if(!this.strategicPlanner||this.strategicPlannerId!==id)this.setStrategicPlanner(id);
+        return this.strategicPlanner;
+    }
+
+    setStrategicPlanner(id)
+    {
+        const planner=AIStrategicPlannerRegistry.create(id,this);
+        this.strategicPlanner=planner;
+        this.strategicPlannerId=id;
+        if(this.player)this.player.strategicPlannerId=id;
+        return planner;
+    }
+
     planning(midTurn=false)
     {
-        console.log(midTurn ? "replanning" : "planning");
-        let wizard = this.player.wizard;
-        this.computeEnemiesInfo();
-        console.log("Players stats:");
-        for(let pl of players)if(pl.Info)console.log(pl.name + ": " + pl.Info.closeStr + "(" + pl.Info.sumStr + ")");
-        for(const unit of this.player.units){
-            if(midTurn && !this.canStillAct(unit)) continue;
-            const unitAI = this.ensureUnitAIControl(unit);
-            if(midTurn)
-            {
-                unitAI.target = null;
-                unitAI.plan = null;
-                unitAI.action = null;
-            }
-            const activeOrder=unitAI.order,activeTarget=AIOrder.target(activeOrder),activeType=AIOrder.type(activeOrder);
-            // Explicit MOVE_TO persists across strategic turns until its destination is reached.
-            if(activeType==='move_to')
-            {
-                const pos=AIOrder.targetPos(activeOrder);
-                if(pos&&!(unit.mapX===pos[0]&&unit.mapY===pos[1]))continue;
-            }
-            // HOLD remains assigned across turns until explicitly replaced (including intercept).
-            if(activeType==='hold')continue;
-            // Strategic attack persists; interception and cleanup may be reassigned.
-            if(activeType==='engage'&&AIOrder.reason(activeOrder)==='attack'&&activeTarget&&!activeTarget.died&&this.isUnitKnown(activeTarget))continue;
-            this.setMainTarget(unit,null,null,null,null);
-        }
-        if(wizard && !wizard.died){
-            //Note: можно проверить текущее и прошлое положение волшебника и если оно не имзменилось, то не пересчитывать webPlan
-            wizard.webPlan = this.getWebPlanMap(wizard);
-            //Compute enemies
-            let maxDist = 10;
-            let maxTurns = 3;
-            let enemies = [];
-            for(let i=0;i<maxTurns;i++)enemies[i] = [];
-            //+ simple way
-            /*
-            let dMap = this.getDistanceMap(wizard,wizard.mapX,wizard.mapY,function(ent){return true;},function(unt){return true;},null);
-            let startCost = dMap[wizard.mapY][wizard.mapX];
-            for(let pl of players){
-                if (pl == wizard.player)continue;
-                for(let unt of pl.units){
-                    if(dMap[unt.mapY][unt.mapX] > 0 && dMap[unt.mapY][unt.mapX] <= startCost + maxDist){
-                        let turns = Math.ceil((dMap[unt.mapY][unt.mapX] - startCost) / unt.config.features.move);
-                        if(turns <= maxTurns)enemies[turns-1].push(unt);
-                    }
-                }
-            }
-            */
-            //-
-            for(let pl of players){
-                if (pl == wizard.player)continue;
-                for(let unt of pl.units){
-                    if(!this.isUnitKnown(unt)) continue;
-                    if(Math.abs(unt.mapX - wizard.mapX) > maxDist || Math.abs(unt.mapY - wizard.mapY) > maxDist) continue;
-                    let dMap = this.getDistanceMap(unt,unt.mapX,unt.mapY);
-                    let startCost = dMap[unt.mapY][unt.mapX];
-                    let distToWiz = this.getBaseCost(dMap,wizard.mapX,wizard.mapY);
-                    if(dMap[wizard.mapY][wizard.mapX] > 0 && distToWiz <= startCost + maxDist){
-                        let turns = Math.ceil((distToWiz - startCost) / unt.config.features.move);
-                        if(turns <= maxTurns)enemies[turns-1].push(unt);
-                    }
-                }
-            }
-            let threats = [];
-            let distantThreats = [];
-            if(!this.distantThreats) this.distantThreats = [];
-            this.distantThreats = this.distantThreats.filter(unt => !unt.died && this.isUnitKnown(unt));
-            //Threats estimation for defense
-            for (let turns = 0; turns < enemies.length; turns++) {
-                enemies[turns].forEach(enemy => {
-                    if(distantThreats.includes(enemy))distantThreats.splice(distantThreats.indexOf(enemy),1);
-                    threats.push({
-                        enemy,
-                        turns: turns+1,
-                        threatLevel: AICombatValue.unitValue(enemy) * (enemies.length - turns)
-                    });
-                });
-            }
-            distantThreats = this.distantThreats.map(u => {
-                let x = {enemy:u, turns: 2, threatLevel: AICombatValue.unitValue(u)};
-                return x;
-            });
-            //Sort enemies by threat level (from highest)
-            threats.sort((a, b) => b.threatLevel - a.threatLevel);
-            distantThreats.sort((a, b) => b.threatLevel - a.threatLevel);
-            this.threats = threats;
-            //assign targets
-            this.assignTargets(threats,midTurn);
-            this.assignTargets(distantThreats,midTurn);
-            //choose targets for units which doesn't have main target
-            let freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.getOrder(unt)==null && (!midTurn || this.canStillAct(unt)));
-            let sumStrength = 0;
-            for(const unit of freeunits) sumStrength += AICombatValue.unitValue(unit);
-            console.log("Attack strength: " + sumStrength);
-            //Check for attack opportunity
-            if(sumStrength >= 10){
-                let victims = players.filter(pl => pl != this.player && pl.wizard && !pl.wizard.died && this.isUnitKnown(pl.wizard) && pl.Info && pl.Info.closeStr < sumStrength);
-                if(victims.length > 0){
-                    let distToVictim = [];
-                    let capableUnits = [];
-                    for(let i = 0; i < victims.length; i++){
-                        distToVictim[i] = 0;
-                        capableUnits[i] = 0;
-                    }
-                    for(const unit of freeunits){
-                        let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-                        for(let i = 0; i < victims.length; i++){
-                            let pl = victims[i];
-                            let dist = dmap[pl.wizard.mapY][pl.wizard.mapX];
-                            if(dist > 0){
-                                distToVictim[i] += dist;
-                                capableUnits[i] += 1;
-                            }
-                        }
-                    }    
-                    let bestDist = 999999999;
-                    let targetVictim = null;
-                    console.log("Possible victims:")
-                    for(let i = 0; i < victims.length; i++){
-                        if(capableUnits[i] > 0){
-                            let meanDist = distToVictim[i]/capableUnits[i];
-                            if(meanDist < bestDist || (meanDist == bestDist) && (randomInt(0,1) == 1)){
-                                bestDist = meanDist;
-                                targetVictim = victims[i];
-                            }
-                            console.log("- " + victims[i].name + " dist: " + meanDist);
-                        }
-                    }
-                    if(targetVictim){
-                        for(const unit of freeunits) this.setEngageOrder(unit,targetVictim.wizard,{reason:'attack'});
-                    }
-                    //update list of units which don't have main target
-                    freeunits = this.player.units.filter(unt => unt!=this.player.wizard && this.getOrder(unt)==null && (!midTurn || this.canStillAct(unt)));
-                }
-            }
-            //If there are units left that do not have a main goal, assign them to wizard guard duty or defense
-            if(freeunits.length > 0){
-                for(const unit of freeunits){
-                    if(this.threats.length > 0) this.chooseTargetThreat(unit,this.threats);
-                    if(this.getOrder(unit)==null)this.chooseGuardTarget(unit);
-                }
-            }
-        }
-        else{
-        //If no wizard or wizard died
-            for(const unit of this.player.units){
-                if(midTurn && !this.canStillAct(unit)) continue;
-                if(AIOrder.is(this.getOrder(unit),'hold'))continue; // Persistent even without a living wizard.
-                let dmap = this.getDistanceMap(unit,unit.mapX,unit.mapY);
-                let trgtWiz = this.getNearestEnemyWizard(dmap,unit);
-                if(trgtWiz)this.setEngageOrder(unit,trgtWiz,{reason:'attack'});
-            }
-        }
-        if(!midTurn)this.guardCoordinator.prepareTurnAssignments();
-        // HOLD assignments are cached per area and built lazily from the effective orders.
-        for(const unit of this.player.units)
-        {
-            const order=this.getOrder(unit);
-            if(AIOrder.is(order,'hold'))this.holdCoordinator.ensureAssignment(unit,order);
-        }
+        return this.getStrategicPlanner().plan(midTurn);
     }
   
     /*

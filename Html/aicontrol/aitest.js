@@ -5,6 +5,7 @@ const AITest = {
 	pickMode: null,
 	draft: null,
 	menu: null,
+	menuCategory: 'orders',
 	status: null,
 	statusText: null,
 	statusClose: null,
@@ -84,7 +85,7 @@ const AITest = {
 		this.menu = document.createElement('div');
 		Object.assign(this.menu.style, {
 			position:'fixed', left:'50%', top:'50%', transform:'translate(-50%,-50%)', zIndex:'3000001',
-			width:'430px', maxWidth:'calc(100vw - 24px)', background:'rgba(12,12,12,.97)', color:'#fff',
+			width:'430px', maxWidth:'calc(100vw - 24px)', maxHeight:'calc(100vh - 24px)', overflowY:'auto', background:'rgba(12,12,12,.97)', color:'#fff',
 			border:'1px solid #888', padding:'14px', font:'14px monospace', display:'none', boxSizing:'border-box'
 		});
 		document.body.appendChild(this.menu);
@@ -288,41 +289,49 @@ const AITest = {
 		const unitLine=document.createElement('div');unitLine.textContent='Unit: '+this.unitName(unit);unitLine.style.marginBottom='6px';this.menu.appendChild(unitLine);
 		this.menu.appendChild(this.button('Select another unit',()=>{this.closeMenu();this.beginPick('debugUnit');}));
 
+        const categoryLine=document.createElement('div');categoryLine.style.cssText='margin:8px 0';categoryLine.append('Category: ');
+        categoryLine.appendChild(this.select([
+            ['orders','Orders'],['strategy','Strategy'],['path','Pathfinding'],
+            ['geometry','Map geometry'],['guard','Guard'],['hold','Hold'],['danger','Danger']
+        ],this.menuCategory,v=>{this.menuCategory=v;this.renderMenu();}));
+        this.menu.appendChild(categoryLine);
+
 		const game=document.createElement('div');game.id='aiTestCurrentGame';
 		game.style.cssText='margin:10px 0;padding:8px;border:1px solid #444;background:#171717;line-height:1.45';
 		const currentProfile=this.resolveProfile(unit,current);
 		game.innerHTML='<b>Current game AI</b><br>Order: '+(AIOrder.type(current.order)||'none')+'<br>Profile: '+currentProfile+'<br>Target: '+this.targetName(AIOrder.target(current.order),AIOrder.targetPos(current.order));
 		this.menu.appendChild(game);
 
-		const test=document.createElement('div');test.style.cssText='margin:10px 0;padding:8px;border:1px solid #555;line-height:1.7';
+        const test=document.createElement('div');test.style.cssText='margin:10px 0;padding:8px;border:1px solid #555;line-height:1.7';
+        const orderPanel=document.createElement('div');
 		const orderRow=document.createElement('div');orderRow.append('Order: ');
 		orderRow.appendChild(this.select([
 			['','none'],['engage','Engage'],['move_to','Move To'],['guard','Guard'],['hold','Hold']
-		],this.draft.order,v=>{this.draft.order=v;this.renderMenu();}));test.appendChild(orderRow);
+		],this.draft.order,v=>{this.draft.order=v;this.renderMenu();}));orderPanel.appendChild(orderRow);
 		if(this.draft.order==='engage')
         {
             const reasonRow=document.createElement('div');reasonRow.append('Reason: ');
             reasonRow.appendChild(this.select([['attack','Attack'],['intercept','Intercept'],['cleanup','Cleanup']],this.draft.reason||'attack',v=>this.draft.reason=v));
-            test.appendChild(reasonRow);
+            orderPanel.appendChild(reasonRow);
         }
         const profileRow=document.createElement('div');profileRow.append('Profile: ');
 		profileRow.appendChild(this.select([
 			['auto','Auto'],['cautious','Cautious'],['balanced','Balanced'],['aggressive','Aggressive'],['critical','Critical']
-		],this.draft.profile,v=>this.draft.profile=v));test.appendChild(profileRow);
+		],this.draft.profile,v=>this.draft.profile=v));orderPanel.appendChild(profileRow);
 		if(this.draft.order==='hold')
 		{
 			const row=document.createElement('div');row.append('HOLD area: ');
 			row.appendChild(this.select([['room','Room'],['radius','Radius']],this.draft.areaMode||'radius',v=>{this.draft.areaMode=v;this.renderMenu();}));
 			row.append(' radius: ');
 			const radius=document.createElement('input');radius.type='number';radius.min=1;radius.max=30;radius.value=this.draft.radius||5;radius.style.width='55px';
-			radius.onchange=()=>this.draft.radius=Math.max(1,Math.min(30,Number(radius.value)||5));row.appendChild(radius);test.appendChild(row);
+			radius.onchange=()=>this.draft.radius=Math.max(1,Math.min(30,Number(radius.value)||5));row.appendChild(radius);orderPanel.appendChild(row);
 		}
-		const target=document.createElement('div');target.id='aiTestTargetLabel';target.textContent='Target: '+this.targetName(this.draft.target,this.draft.targetPos);test.appendChild(target);
+		const target=document.createElement('div');target.id='aiTestTargetLabel';target.textContent='Target: '+this.targetName(this.draft.target,this.draft.targetPos);orderPanel.appendChild(target);
 		const targetButtons=document.createElement('div');
 		targetButtons.appendChild(this.button('Select unit target',()=>{this.closeMenu();this.beginPick('targetUnit');}));
 		targetButtons.appendChild(this.button('Select position',()=>{this.closeMenu();this.beginPick('targetPosition');}));
 		targetButtons.appendChild(this.button('Clear target',()=>{this.draft.target=null;this.draft.targetPos=null;this.renderMenu();}));
-		test.appendChild(targetButtons);
+		orderPanel.appendChild(targetButtons);
 
 		const pathRow=document.createElement('div');
 		pathRow.style.cssText='margin-top:10px;padding:8px;border:1px solid #555;background:#171717';
@@ -340,7 +349,7 @@ const AITest = {
 		radiusRow.appendChild(this.select([['10','10 cells'],['20','20 cells'],['40','40 cells'],['0','whole map']],String(this.pathViewRadius),v=>{this.pathViewRadius=Number(v);this.refreshGuardOverlay(true);}));
 		pathRow.appendChild(radiusRow);
 		const info=document.createElement('div');info.id='aiTestPathInfo';info.style.cssText='color:#ddd;white-space:pre-wrap;font-size:11px;margin-top:5px';info.textContent=this.pathSummary;pathRow.appendChild(info);
-		test.appendChild(pathRow);
+		if(this.menuCategory==='path')test.appendChild(pathRow);
 		// The topology is read-only. Geometry is derived once from walls and, on
 		// generated maps, from known room rectangles. No merge tuning is needed.
 		const geoPanel=document.createElement('div');
@@ -354,53 +363,61 @@ const AITest = {
 		const geoInfo=document.createElement('div');geoInfo.id='aiTestGeometryInfo';
 		geoInfo.style.cssText='font-size:11px;color:#ddd;white-space:pre-wrap;margin-top:5px';
 		geoInfo.textContent=this.geometrySummary||'Choose GEOMETRY / TOPOLOGY overlay to calculate';
-		geoPanel.appendChild(geoInfo);test.appendChild(geoPanel);
-		const overlayRow=document.createElement('div');overlayRow.style.marginTop='8px';overlayRow.append('AI overlay: ');
-		overlayRow.appendChild(this.select([
-			['none','Off'],
-			['geo:distance','GEOMETRY: clearance (distance to wall)'],
-			['geo:peaks','GEOMETRY: local maxima / plateaus'],
-			['geo:basins','GEOMETRY: raw watershed basins'],
-			['geo:graph','TOPOLOGY: graph over map (zones / connections)'],
-			['waypoints','MOVE_TO waypoints (WP)'],
-			['path:route','PATH: A* route / steps'],
-			['path:astar','PATH: A* discovered g-cost'],
-			['path:expanded','PATH: A* expanded cells'],
-			['path:dijkstra','PATH: Dijkstra from unit'],
-			['path:reverse','PATH: Dijkstra to goal'],
-			['hold:score','HOLD: total HoldScore'],
-			['hold:direction','HOLD: direction bonus'],
-			['hold:assignmentUtility','HOLD: assignment utility'],
-			['hold:entryThreat','HOLD: entry threat weights'],
-			['hold:slotPenalty','HOLD: slot penalty / X blocked'],
-			['hold:fireProtection','HOLD: FireProtection'],
-			['hold:externalExposure','HOLD: ExternalExposure'],
-			['hold:meleeProtection','HOLD: MeleeProtection'],
-			['hold:fireControl','HOLD: FireControl'],
-			['hold:meleeControl','HOLD: MeleeControl'],
-			['hold:congestion','HOLD: congestion'],
-			['hold:area','HOLD: area and slots'],
-			['hold:entry','HOLD: entry cells'],
-			['score','Total GuardScore'],
-			['cellPenalty','GUARD: slot penalty / X blocked'],
-			['proximity','Proximity'],
-			['intercept','Interception'],
-			['fireShield','Fire shield'],
-			['jumpShield','Jump shield'],
-			['congestion','Congestion penalty'],
-			['pressure','Guard pressure'],
-			['goalDistance','Guard path distance'],
-			['danger','Tactical danger total'],
-			['dangerMelee','Danger: melee'],
-			['dangerFire','Danger: fire'],
-			['dangerGas','Danger: gas'],
-			['dangerJump','Danger: jump']
-		],this.guardOverlayMode,v=>this.setGuardOverlayMode(v)));
-		test.appendChild(overlayRow);
-		const overlayButtons=document.createElement('div');
-		overlayButtons.appendChild(this.button('Refresh overlay',()=>this.refreshGuardOverlay(true)));
-		overlayButtons.appendChild(this.button('Hide overlay',()=>this.setGuardOverlayMode('none')));
-		test.appendChild(overlayButtons);
+		geoPanel.appendChild(geoInfo);if(this.menuCategory==='geometry')test.appendChild(geoPanel);
+        const overlays={
+            orders:[['none','Off'],['waypoints','MOVE_TO waypoints (WP)']],
+            strategy:[['none','Off']],
+            path:[['none','Off'],['path:route','A* route / steps'],['path:astar','A* discovered g-cost'],
+                ['path:expanded','A* expanded cells'],['path:dijkstra','Dijkstra from unit'],['path:reverse','Dijkstra to goal']],
+            geometry:[['none','Off'],['geo:distance','Clearance (distance to wall)'],['geo:peaks','Local maxima'],
+                ['geo:basins','Raw watershed basins'],['geo:graph','Topology graph over map']],
+            guard:[['none','Off'],['score','Total GuardScore'],['cellPenalty','Slot penalty / blocked'],
+                ['proximity','Proximity'],['intercept','Interception'],['fireShield','Fire shield'],
+                ['jumpShield','Jump shield'],['congestion','Congestion'],['pressure','Guard pressure'],['goalDistance','Guard path distance']],
+            hold:[['none','Off'],['hold:score','Total HoldScore'],['hold:direction','Direction bonus'],
+                ['hold:assignmentUtility','Assignment utility'],['hold:entryThreat','Entry threat weights'],
+                ['hold:slotPenalty','Slot penalty / blocked'],['hold:fireProtection','FireProtection'],
+                ['hold:externalExposure','ExternalExposure'],['hold:meleeProtection','MeleeProtection'],
+                ['hold:fireControl','FireControl'],['hold:meleeControl','MeleeControl'],
+                ['hold:congestion','Congestion'],['hold:area','Area and slots'],['hold:entry','Entry cells']],
+            danger:[['none','Off'],['danger','Tactical danger total'],['dangerMelee','Melee'],
+                ['dangerFire','Fire'],['dangerGas','Gas'],['dangerJump','Jump']]
+        };
+        if(this.menuCategory==='orders')test.appendChild(orderPanel);
+        if(this.menuCategory==='strategy')
+        {
+            const strategy=document.createElement('div');
+            const controller=unit.player?.aiControl;
+            const isIndependent=controller&&typeof IndependentAIControl!=='undefined'&&controller instanceof IndependentAIControl;
+            const currentId=isIndependent?'independent':controller?.getStrategicPlannerName?.()||'legacy';
+            strategy.append('Player: '+(unit.player?.name||'?'));
+            const row=document.createElement('div');row.style.marginTop='10px';row.append('Strategic planner: ');
+            if(isIndependent)row.append('Independent AI (not selectable)');
+            else if(controller?.setStrategicPlanner)
+                row.appendChild(this.select(AIStrategicPlannerRegistry.list().map(id=>[id,id]),currentId,id=>{
+                    controller.setStrategicPlanner(id);
+                    this.updateStatus('strategic planner changed; next AI planning uses '+id,true);
+                    this.renderMenu();
+                }));
+            else row.append('not available');
+            strategy.appendChild(row);
+            const note=document.createElement('div');note.style.cssText='margin-top:8px;color:#bbb;font-size:12px';
+            note.textContent='Per-player setting. Changes are used at the next strategic planning call; tactical execution and independent units are unchanged.';
+            strategy.appendChild(note);test.appendChild(strategy);
+        }
+        const overlayRow=document.createElement('div');overlayRow.style.marginTop='8px';overlayRow.append('AI overlay: ');
+        const options=overlays[this.menuCategory]||overlays.orders;
+        const visibleMode=options.some(([key])=>key===this.guardOverlayMode)?this.guardOverlayMode:'none';
+        overlayRow.appendChild(this.select(options,visibleMode,v=>this.setGuardOverlayMode(v)));
+        if(this.menuCategory!=='strategy')test.appendChild(overlayRow);
+        if(this.menuCategory!=='strategy')
+        {
+            const overlayButtons=document.createElement('div');
+            overlayButtons.appendChild(this.button('Refresh overlay',()=>this.refreshGuardOverlay(true)));
+            overlayButtons.appendChild(this.button('Hide overlay',()=>this.setGuardOverlayMode('none')));
+            test.appendChild(overlayButtons);
+        }
+
 		this.menu.appendChild(test);
 
 		const actions=document.createElement('div');actions.style.marginTop='10px';
@@ -408,7 +425,8 @@ const AITest = {
 		actions.appendChild(this.button('Use current game AI order',()=>this.useCurrentOrder()));
 		actions.appendChild(this.button('Clear override',()=>this.clearOverride()));
 		actions.appendChild(this.button('Close',()=>this.closeMenu()));
-		this.menu.appendChild(actions);
+		if(this.menuCategory==='orders')this.menu.appendChild(actions);
+        else this.menu.appendChild(this.button('Close',()=>this.closeMenu()));
 
 		const hint=document.createElement('div');hint.style.cssText='margin-top:10px;color:#bbb;font-size:12px';hint.textContent='F6 = plan only   F7 = execute one AI action   F8 = menu';this.menu.appendChild(hint);
 		if(override)
