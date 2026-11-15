@@ -169,7 +169,10 @@ class AITopologyGraph
                 if(!seen[other]){seen[other]=1;queue.push(other);}
             }
         }
-        return {width,height,mode,zones,connections,cellZone:labels,free,adjacency,
+        // `areaZone` is the ORIGINAL room/basin footprint; `cellZone` is the
+        // catchment (which also includes connected corridor cells on generated maps).
+        // HOLD(graphZone) must use areaZone so that a room does not absorb corridors.
+        return {width,height,mode,zones,connections,cellZone:labels,areaZone:zoneSeeds,free,adjacency,
             stats:{zones:zones.length,connections:connections.length,components,
                 walkable:free.reduce((s,x)=>s+x,0),covered:nCatch.reduce((s,x)=>s+x,0)}};
     }

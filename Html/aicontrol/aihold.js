@@ -4,9 +4,10 @@
 
 class AIHoldArea
 {
-	constructor(ai,center,mode,radius,config=AI_HOLD_CONFIG)
+	constructor(ai,center,mode,radius,config=AI_HOLD_CONFIG,zoneMask=null,zoneId=null)
 	{
 		this.ai=ai;this.center=center;this.mode=mode;this.radius=radius;this.config=config;
+		this.zoneMask=zoneMask;this.zoneId=zoneId;
 		this.cells=[];this.keys=new Set();this.entries=[];this.entryBand=[];
 		this.fireMasks=new Map();this.meleeMasks=new Map();this.fireProtection=new Map();this.externalExposure=new Map();this.meleeProtection=new Map();
 		this.unitScores=new WeakMap();
@@ -23,6 +24,7 @@ class AIHoldArea
 	{
 		const [cx,cy]=this.center;
 		if(!this.passable(cx,cy))return;
+        if(this.mode==='graphZone'&&(!this.zoneMask||this.zoneMask[this.key(cx,cy)]!==this.zoneId))return;
 		const room=this.mode==='room'&&typeof ScenarioEvents!=='undefined'?ScenarioEvents.getRoomAt(cx,cy):null;
 		this.room=room||null;
 		const queue=[[cx,cy,0]],seen=new Set([this.key(cx,cy)]);
@@ -35,11 +37,12 @@ class AIHoldArea
 				if(!dx&&!dy)continue;
 				const nx=x+dx,ny=y+dy,nk=this.key(nx,ny);
 				if(seen.has(nk)||!this.passable(nx,ny))continue;
+                if(this.mode==='graphZone'&&(Math.abs(dx)+Math.abs(dy)!==1||this.zoneMask[nk]!==this.zoneId))continue;
 				if(room)
 				{
 					if(ScenarioEvents.getRoomAt(nx,ny)!==room)continue;
 				}
-				else if(dist>=this.radius)continue;
+				else if(this.mode!=='graphZone'&&dist>=this.radius)continue;
 				seen.add(nk);queue.push([nx,ny,dist+1]);
 			}
 		}
@@ -228,6 +231,7 @@ class AIHoldCoordinator
 	{
 		const pos=AIOrder.targetPos(order),s=AIOrder.state(order);
 		if(!pos)return null;
+        if(s.areaMode==='graphZone'&&Number.isInteger(s.zoneId))return 'graphZone:'+s.zoneId;
 		if(s.areaMode==='room'&&typeof ScenarioEvents!=='undefined')
 		{
 			const room=ScenarioEvents.getRoomAt(pos[0],pos[1]);
@@ -242,7 +246,12 @@ class AIHoldCoordinator
 		if(!this.areas.has(key))
 		{
 			const s=AIOrder.state(order),pos=AIOrder.targetPos(order);
-			this.areas.set(key,new AIHoldArea(this.ai,pos,s.areaMode==='room'?'room':'radius',s.radius||this.config.defaultRadius,this.config));
+            const graph=s.areaMode==='graphZone'?this.ai.getTopologyGraph():null;
+            const zone=graph?.zones.find(z=>z.id===s.zoneId);
+            if(s.areaMode==='graphZone'&&(!zone||!graph.areaZone))return null;
+            const center=s.areaMode==='graphZone'?[zone.x,zone.y]:pos;
+			this.areas.set(key,new AIHoldArea(this.ai,center,s.areaMode==='graphZone'?'graphZone':s.areaMode==='room'?'room':'radius',
+                s.radius||this.config.defaultRadius,this.config,graph?.areaZone||null,s.zoneId||null));
 		}
 		return this.areas.get(key);
 	}

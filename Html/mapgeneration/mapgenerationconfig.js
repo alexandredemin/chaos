@@ -231,7 +231,7 @@ const MAP_GENERATION_CONFIG = {
 			excludedUnitTypes: ['wizard', 'rat', 'bat'], // Units that must never be selected as treasure guards.
 			minContainersInRoom: 2, // Minimum container count before a room becomes guard-eligible.
 			extraGuardChance: .40, // Chance to use maxGuardsPerRoom instead of a single guard.
-			maxGuardsPerRoom: 2, // Maximum guards placed in one eligible room.
+			maxGuardsPerRoom: 0, //2, // Maximum guards placed in one eligible room.
 			minAggroRadius: 4, // Minimum aggro radius regardless of room size.
 			leashExtra: 3, // Additional cells beyond aggro radius before a guard gives up pursuit.
 			patrolRadius: 3, // Patrol radius around the guard's home cell.
@@ -247,14 +247,14 @@ const MAP_GENERATION_CONFIG = {
 			centralRoomFraction: .5, // Fraction of nearest-to-center rooms retained as fallback spawn regions.
 			profiles: [
 				{
-					count: [1, 2], // Count on a 20x20 map before area scaling.
+					count: [0, 0], //[1, 2], // Count on a 20x20 map before area scaling.
 					types: ['chort', 'muddy', 'demon', 'troll'], // Strong roaming creature pool.
 					minDistance: 3, // Minimum Chebyshev spacing between creatures from this profile.
 					behavior: { type: 'roam', minGoalDistance: 16, maxGoalDistance: 40, goalTolerance: 1, stuckTurnLimit: 3, aggroRadius: 7,
 						pursuitRadius: 14, pursuitCooldownTurns: 1, targetAggression: 1, travelAggression: 3, combatAggression: 6 } // Strong-creature roam behavior.
 				},
 				{
-					count: [3, 5], // Count on a 20x20 map before area scaling.
+					count: [0, 0], //[3, 5], // Count on a 20x20 map before area scaling.
 					types: ['rat', 'bat'], // Weak roaming creature pool.
 					minDistance: 2, // Minimum Chebyshev spacing between creatures from this profile.
 					behavior: { type: 'roam', minGoalDistance: 8, maxGoalDistance: 24, goalTolerance: 1, stuckTurnLimit: 3, aggroRadius: 4,

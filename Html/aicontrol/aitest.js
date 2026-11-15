@@ -358,6 +358,7 @@ const AITest = {
 		geoPanel.appendChild(this.button('Show topology graph on map',()=>this.setGuardOverlayMode('geo:graph')));
 		geoPanel.appendChild(this.button('Rebuild geometry and graph (after map edits)',()=>{
 			this.geometryCache=null;this.guardOverlaySignature=null;
+			if(typeof AITopologyRuntime!=='undefined')AITopologyRuntime.invalidate();
 			this.guardOverlayMode='geo:graph';this.refreshGuardOverlay(true);this.renderMenu();
 		}));
 		const geoInfo=document.createElement('div');geoInfo.id='aiTestGeometryInfo';
@@ -366,7 +367,7 @@ const AITest = {
 		geoPanel.appendChild(geoInfo);if(this.menuCategory==='geometry')test.appendChild(geoPanel);
         const overlays={
             orders:[['none','Off'],['waypoints','MOVE_TO waypoints (WP)']],
-            strategy:[['none','Off']],
+            strategy:[['none','Off'],['strategy:goals','Graph S1 active goals']],
             path:[['none','Off'],['path:route','A* route / steps'],['path:astar','A* discovered g-cost'],
                 ['path:expanded','A* expanded cells'],['path:dijkstra','Dijkstra from unit'],['path:reverse','Dijkstra to goal']],
             geometry:[['none','Off'],['geo:distance','Clearance (distance to wall)'],['geo:peaks','Local maxima'],
@@ -401,6 +402,33 @@ const AITest = {
                 }));
             else row.append('not available');
             strategy.appendChild(row);
+            const planner=currentId==='graph'?controller?.getStrategicPlanner?.():null;
+            if(typeof GraphStrategicPlanner!=='undefined'&&planner instanceof GraphStrategicPlanner)
+            {
+                const limit=document.createElement('div');limit.style.marginTop='8px';limit.append('Max active goals: ');
+                limit.appendChild(this.select([['1','1'],['2','2'],['3','3']],String(planner.config.maxActiveGoals),v=>{
+                    planner.config.maxActiveGoals=Number(v);
+                    this.updateStatus('Graph maxActiveGoals='+v+' (applies next planning)',true);
+                }));
+                strategy.appendChild(limit);
+                const details=document.createElement('div');details.style.cssText='white-space:pre-wrap;font:11px monospace;margin-top:8px;max-height:270px;overflow:auto;color:#ddd';
+                const d=planner.lastDecision;
+                if(!d)details.textContent='Graph S1 has not planned yet. Advance a strategic AI turn.';
+                else
+                {
+                    const lines=['TURN '+d.turn+'  score '+(d.score??0).toFixed(2)+' | '+(d.reason||'')+
+                        ' | free '+(d.available??0)+' | interceptors '+(d.reserved?.length||0)];
+                    for(const g of d.goals||[])lines.push(g.type+' Z'+g.zoneId+' '+g.status+
+                        ' value='+g.value.toFixed(1)+' strength='+g.strength.toFixed(1)+'/'+g.required.toFixed(1)+
+                        ' ready='+Math.round(g.readiness*100)+'% ['+g.assigned.map(a=>a.unit.config?.name||a.unit.id).join(',')+']');
+                    lines.push('Candidates:');
+                    for(const g of d.candidates||[])lines.push('  '+g.type+' Z'+g.zoneId+' value='+g.value.toFixed(1)+' req='+g.required.toFixed(1));
+                    for(const u of d.reserved||[])lines.push('INTERCEPT '+(u.config?.name||u.id));
+                    details.textContent=lines.join('\n');
+                }
+                strategy.appendChild(details);
+                strategy.appendChild(this.button('Show Graph S1 goals on map',()=>this.setGuardOverlayMode('strategy:goals')));
+            }
             const note=document.createElement('div');note.style.cssText='margin-top:8px;color:#bbb;font-size:12px';
             note.textContent='Per-player setting. Changes are used at the next strategic planning call; tactical execution and independent units are unchanged.';
             strategy.appendChild(note);test.appendChild(strategy);
@@ -409,8 +437,8 @@ const AITest = {
         const options=overlays[this.menuCategory]||overlays.orders;
         const visibleMode=options.some(([key])=>key===this.guardOverlayMode)?this.guardOverlayMode:'none';
         overlayRow.appendChild(this.select(options,visibleMode,v=>this.setGuardOverlayMode(v)));
-        if(this.menuCategory!=='strategy')test.appendChild(overlayRow);
-        if(this.menuCategory!=='strategy')
+        test.appendChild(overlayRow);
+        if(this.menuCategory!=='strategy'||unit.player?.aiControl?.getStrategicPlannerName?.()==='graph')
         {
             const overlayButtons=document.createElement('div');
             overlayButtons.appendChild(this.button('Refresh overlay',()=>this.refreshGuardOverlay(true)));
@@ -707,7 +735,9 @@ const AITest = {
 		{
 			const started=typeof performance!=='undefined'?performance.now():Date.now();
 			const result=AIStrategicGeometry.fromTilemap(map,wallsLayer,{rawOnly:true});
-			const graph=AITopologyGraph.fromTilemap(map,wallsLayer,metadata,result);
+            // The overlay uses the same cached graph as the strategy.
+            const graph=typeof AITopologyRuntime!=='undefined'
+                ?AITopologyRuntime.get():AITopologyGraph.fromTilemap(map,wallsLayer,metadata,result);
 			const millis=(typeof performance!=='undefined'?performance.now():Date.now())-started;
 			this.geometryCache={gameMap:map,layer:wallsLayer,metadata,width:map.width,height:map.height,result,graph};
 			this.geometrySummary=`${graph.mode} | Zones ${graph.stats.zones} | Links ${graph.stats.connections} | Components ${graph.stats.components} | Floor ${graph.stats.walkable}/${graph.stats.covered} | Raw basins ${result.stats.basins} | ${millis.toFixed(1)}ms`;
@@ -887,10 +917,46 @@ const AITest = {
 		return 0;
 	},
 
+	// Diagnostic-only drawing. Graph S1 never modifies unit orders here.
+    refreshStrategyOverlay(force=false)
+    {
+        const ai=this.debugUnit?.player?.aiControl,scene=this.debugUnit?.scene;
+        const planner=ai?.getStrategicPlanner?.();
+        if(typeof GraphStrategicPlanner==='undefined'||!(planner instanceof GraphStrategicPlanner)||!scene?.add||!planner.lastGraph)
+        {this.clearGuardOverlay();this.guardOverlaySignature=null;return;}
+        const d=planner.lastDecision,stamp=['strategy',planner.turn,d?.score,planner.activeKeys.join(','),this.debugUnit?.id].join('|');
+        if(!force&&stamp===this.guardOverlaySignature)return;
+        this.guardOverlaySignature=stamp;this.clearGuardOverlay();
+        const gfx=scene.add.graphics();this.guardOverlayObjects.push(gfx);
+        const W=map.tileWidth||16,H=map.tileHeight||16;
+        const anchor=(x,y)=>{const p=map.tileToWorldXY(x,y);return {x:p.x+W/2,y:p.y+H/2};};
+        for(const g of d?.goals||[])
+        {
+            const a=anchor(g.x,g.y),color=g.type==='HOLD_ZONE'?0x64d89c:g.type==='CAPTURE_ZONE'?0xffc04a:0xff7070;
+            gfx.lineStyle(2,color,.95);gfx.strokeCircle(a.x,a.y,Math.max(5,W*.38));
+            const name=(g.type==='HOLD_ZONE'?'H':g.type==='CAPTURE_ZONE'?'C':'A')+' Z'+g.zoneId+' '+Math.round(g.readiness*100)+'%';
+            const p=map.tileToWorldXY(g.x,g.y),label=scene.add.text(p.x,p.y-6,name,
+                {font:'6px monospace',color:'#ffffff',backgroundColor:'#222222',resolution:5});
+            label.setDepth(20004);this.guardOverlayObjects.push(label);
+            for(const {unit} of g.assigned)
+            {
+                const b=anchor(unit.mapX,unit.mapY);
+                gfx.lineStyle(1,color,.65);gfx.lineBetween(b.x,b.y,a.x,a.y);
+            }
+        }
+        for(const u of d?.reserved||[])
+        {
+            const p=map.tileToWorldXY(u.mapX,u.mapY),label=scene.add.text(p.x,p.y-6,'DEF',
+                {font:'6px monospace',color:'#ff7777',backgroundColor:'#000000',resolution:5});
+            label.setDepth(20004);this.guardOverlayObjects.push(label);
+        }
+    },
+
 	refreshGuardOverlay(force=false)
 	{
 		if(this.guardOverlayMode==='none'){this.clearGuardOverlay();return;}
 		if(this.guardOverlayMode==='waypoints'){this.refreshWaypointOverlay(force);return;}
+        if(this.guardOverlayMode==='strategy:goals'){this.refreshStrategyOverlay(force);return;}
 		if(this.guardOverlayMode.startsWith('path:')){this.refreshPathOverlay(force);return;}
 		if(this.guardOverlayMode.startsWith('geo:')){this.refreshGeometryOverlay(force);return;}
 		if(this.guardOverlayMode.startsWith('hold:')){this.refreshHoldOverlay(force);return;}

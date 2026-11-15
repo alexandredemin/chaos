@@ -1,7 +1,7 @@
 // S1.0: per-player strategy registry, Legacy extraction invariance and caller compatibility.
 const assert=require('assert'),fs=require('fs'),vm=require('vm'),crypto=require('crypto'),path=require('path');
 const root=path.join(__dirname,'..','Html','aicontrol');
-const legacy=fs.readFileSync(path.join(root,'ailegacystrategicplanner.js'),'utf8');
+const legacy=fs.readFileSync(path.join(root,'ailegacystrategicplanner.js'),'utf8').replace(/\r\n/g,'\n');
 const begin=legacy.indexOf('        const ai=this.ai;');
 const finish=legacy.indexOf('\n    }\n}\n\nAIStrategicPlannerRegistry.register',begin);
 assert(begin>=0&&finish>begin,'legacy method exists');

@@ -51,3 +51,14 @@ const AI_CONTROL_CONFIG = Object.freeze({
 const AI_STRATEGIC_GEOMETRY_CONFIG = Object.freeze({
     minProminence:1.25, minRelativeProminence:0.30, minRegionArea:10
 });
+
+// Graph S1: provisional strategic weights. Tactical profiles are unchanged.
+const AI_GRAPH_S1_CONFIG = Object.freeze({
+    maxActiveGoals:2, maxCandidates:8, maxHoldArea:160,
+    reserveDefenseTurns:3, interceptCost:12,
+    attackStrengthFactor:1.25, captureStrengthFactor:1.35,
+    minAttackStrength:10, minCaptureStrength:4, minHoldStrength:3,
+    travelWeight:.17, switchWeight:.65, persistenceBonus:.7,
+    replacementMargin:.65, readinessFloor:.20,
+    preparingTimeout:5, minProgress:0.1
+});

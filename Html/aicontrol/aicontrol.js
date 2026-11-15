@@ -1517,6 +1517,9 @@ class AIControl
         return planner;
     }
 
+    // Graph is shared by every unit and HOLD zone in this game/map snapshot.
+    getTopologyGraph(){return AITopologyRuntime.get();}
+
     planning(midTurn=false)
     {
         return this.getStrategicPlanner().plan(midTurn);
@@ -1679,7 +1682,7 @@ class AIControl
         const old=ai.order,same=AIOrder.type(old)===type&&AIOrder.target(old)===target&&
             AIOrder.reason(old)===AIOrder.reason(order)&&
             ((type!=='move_to'&&type!=='hold')||String(AIOrder.targetPos(old))===String(targetPos))&&
-            (type!=='hold'||(AIOrder.state(old).areaMode===AIOrder.state(order).areaMode&&AIOrder.state(old).radius===AIOrder.state(order).radius));
+            (type!=='hold'||(AIOrder.state(old).areaMode===AIOrder.state(order).areaMode&&AIOrder.state(old).radius===AIOrder.state(order).radius&&AIOrder.state(old).zoneId===AIOrder.state(order).zoneId));
         if(!same)
         {
             ai.macroMove=null;
