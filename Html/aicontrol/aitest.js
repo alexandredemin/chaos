@@ -208,6 +208,13 @@ const AITest = {
 		this.updateCurrentGamePanel();
 		if(this.statusVisible&&this.status!=null&&this.status.style.display!=='none')this.updateStatus();
 		if(this.guardOverlayMode!=='none')this.refreshGuardOverlay();
+        const report=this.menu?.querySelector?.('#aiTestGraphDetails');
+        if(report&&this.debugUnit?.player?.aiControl)
+        {
+            const planner=this.debugUnit.player.aiControl.getStrategicPlanner?.();
+            if(typeof GraphStrategicPlanner!=='undefined'&&planner instanceof GraphStrategicPlanner)
+                report.textContent=this.formatGraphDecision(planner);
+        }
 	},
 
 	updateCurrentGamePanel()
@@ -411,21 +418,9 @@ const AITest = {
                     this.updateStatus('Graph maxActiveGoals='+v+' (applies next planning)',true);
                 }));
                 strategy.appendChild(limit);
-                const details=document.createElement('div');details.style.cssText='white-space:pre-wrap;font:11px monospace;margin-top:8px;max-height:270px;overflow:auto;color:#ddd';
-                const d=planner.lastDecision;
-                if(!d)details.textContent='Graph S1 has not planned yet. Advance a strategic AI turn.';
-                else
-                {
-                    const lines=['TURN '+d.turn+'  score '+(d.score??0).toFixed(2)+' | '+(d.reason||'')+
-                        ' | free '+(d.available??0)+' | interceptors '+(d.reserved?.length||0)];
-                    for(const g of d.goals||[])lines.push(g.type+' Z'+g.zoneId+' '+g.status+
-                        ' value='+g.value.toFixed(1)+' strength='+g.strength.toFixed(1)+'/'+g.required.toFixed(1)+
-                        ' ready='+Math.round(g.readiness*100)+'% ['+g.assigned.map(a=>a.unit.config?.name||a.unit.id).join(',')+']');
-                    lines.push('Candidates:');
-                    for(const g of d.candidates||[])lines.push('  '+g.type+' Z'+g.zoneId+' value='+g.value.toFixed(1)+' req='+g.required.toFixed(1));
-                    for(const u of d.reserved||[])lines.push('INTERCEPT '+(u.config?.name||u.id));
-                    details.textContent=lines.join('\n');
-                }
+                const details=document.createElement('div');details.id='aiTestGraphDetails';
+                details.style.cssText='white-space:pre-wrap;font:11px monospace;margin-top:8px;max-height:270px;overflow:auto;color:#ddd';
+                details.textContent=this.formatGraphDecision(planner);
                 strategy.appendChild(details);
                 strategy.appendChild(this.button('Show Graph S1 goals on map',()=>this.setGuardOverlayMode('strategy:goals')));
             }
@@ -917,6 +912,41 @@ const AITest = {
 		return 0;
 	},
 
+    // The menu and map overlay read the LIVE assignment map. `lastDecision.goals`
+    // alone is a turn-start snapshot and misses casualties / temporary intercepts.
+    formatGraphDecision(planner)
+    {
+        const d=planner.lastDecision;
+        if(!d)return 'Graph S1 has not planned yet. Advance a strategic AI turn.';
+        const available=d.available??0,guardCount=planner.ai.player.units.filter(u=>u&&!u.died&&
+            u!==planner.ai.player.wizard&&!planner.assignments.has(u)&&
+            !AIOrder.is(planner.ai.getOrder(u),'intercept')).length;
+        const interceptors=planner.ai.player.units.filter(u=>u&&!u.died&&AIOrder.is(planner.ai.getOrder(u),'intercept'));
+        const lines=['TURN '+d.turn+' score '+(d.score??0).toFixed(2)+' | '+(d.reason||'')+
+            ' | available '+available+' | GUARD '+guardCount+' | interceptors '+interceptors.length];
+        for(const g of d.goals||[])
+        {
+            const live=planner.goalReport(g),ratio=Math.round(live.supplyRatio*100);
+            lines.push(g.type+' Z'+g.zoneId+' '+g.status+' value='+g.value.toFixed(1)+
+                ' strength='+live.effective.toFixed(1)+'/'+g.required.toFixed(1)+
+                (g.status==='EXECUTING'?' supply='+ratio+'%':' ready='+Math.round(g.readiness*100)+'%')+
+                ' ['+live.members.map(u=>(u.config?.name||u.id)+
+                    (live.detached.includes(u)?'(INT)':'')).join(',')+']');
+        }
+        lines.push('Candidates:');
+        for(const g of d.candidates||[])
+            lines.push('  '+g.type+' Z'+g.zoneId+' value='+g.value.toFixed(1)+' req='+g.required.toFixed(1));
+        for(const u of interceptors)
+        {
+            const enemy=AIOrder.target(planner.ai.getOrder(u)),key=planner.assignments.get(u);
+            lines.push('INTERCEPT '+(u.config?.name||u.id)+' → '+(enemy?.config?.name||enemy?.id||'?')+
+                (key?' (assigned '+key+')':''));
+        }
+        for(const e of planner.goalEvents.slice(-3))
+            lines.push(e.status+' '+e.key+' ('+e.reason+')');
+        return lines.join('\n');
+    },
+
 	// Diagnostic-only drawing. Graph S1 never modifies unit orders here.
     refreshStrategyOverlay(force=false)
     {
@@ -924,7 +954,18 @@ const AITest = {
         const planner=ai?.getStrategicPlanner?.();
         if(typeof GraphStrategicPlanner==='undefined'||!(planner instanceof GraphStrategicPlanner)||!scene?.add||!planner.lastGraph)
         {this.clearGuardOverlay();this.guardOverlaySignature=null;return;}
-        const d=planner.lastDecision,stamp=['strategy',planner.turn,d?.score,planner.activeKeys.join(','),this.debugUnit?.id].join('|');
+        const d=planner.lastDecision;
+        const liveUnits=ai.player.units.filter(u=>u&&!u.died);
+        // Movement, orders, intercepts, deaths and assignment changes invalidate
+        // the overlay. AITest.tick() already throttles redraws to ~250 ms; no
+        // instrumentation is needed in Unit, GameScene or the tactical executor.
+        const stamp=['strategy',planner.turn,d?.score,planner.activeKeys.join(','),this.debugUnit?.id,
+            ...liveUnits.map((u,i)=>{
+                const order=ai.getOrder(u),state=order?AIOrder.state(order):null;
+                const target=AIOrder.target(order);
+                return [i,u.mapX,u.mapY,AIOrder.type(order),AIOrder.reason(order),
+                    planner.assignments.get(u)||'',state?.graphGoalKey||'',target?.id||'',target?.died||false].join(':');
+            })].join('|');
         if(!force&&stamp===this.guardOverlaySignature)return;
         this.guardOverlaySignature=stamp;this.clearGuardOverlay();
         const gfx=scene.add.graphics();this.guardOverlayObjects.push(gfx);
@@ -932,23 +973,37 @@ const AITest = {
         const anchor=(x,y)=>{const p=map.tileToWorldXY(x,y);return {x:p.x+W/2,y:p.y+H/2};};
         for(const g of d?.goals||[])
         {
-            const a=anchor(g.x,g.y),color=g.type==='HOLD_ZONE'?0x64d89c:g.type==='CAPTURE_ZONE'?0xffc04a:0xff7070;
+            const live=planner.goalReport(g),a=anchor(g.x,g.y);
+            const color=g.type==='HOLD_ZONE'?0x64d89c:g.type==='CAPTURE_ZONE'?0xffc04a:0xff7070;
             gfx.lineStyle(2,color,.95);gfx.strokeCircle(a.x,a.y,Math.max(5,W*.38));
-            const name=(g.type==='HOLD_ZONE'?'H':g.type==='CAPTURE_ZONE'?'C':'A')+' Z'+g.zoneId+' '+Math.round(g.readiness*100)+'%';
+            const ratio=g.status==='EXECUTING'?live.supplyRatio:g.readiness;
+            const percentage=Math.round(ratio*100);
+            const name=(g.type==='HOLD_ZONE'?'H':g.type==='CAPTURE_ZONE'?'C':'A')+' Z'+g.zoneId+
+                ' '+(g.status==='EXECUTING'?'SUP ':'READY ')+percentage+'%';
             const p=map.tileToWorldXY(g.x,g.y),label=scene.add.text(p.x,p.y-6,name,
                 {font:'6px monospace',color:'#ffffff',backgroundColor:'#222222',resolution:5});
             label.setDepth(20004);this.guardOverlayObjects.push(label);
-            for(const {unit} of g.assigned)
+            for(const unit of live.members)
             {
-                const b=anchor(unit.mapX,unit.mapY);
-                gfx.lineStyle(1,color,.65);gfx.lineBetween(b.x,b.y,a.x,a.y);
+                const b=anchor(unit.mapX,unit.mapY),detached=live.detached.includes(unit);
+                gfx.lineStyle(1,color,detached?.25:.65);gfx.lineBetween(b.x,b.y,a.x,a.y);
             }
         }
-        for(const u of d?.reserved||[])
+        for(const unit of liveUnits)
         {
-            const p=map.tileToWorldXY(u.mapX,u.mapY),label=scene.add.text(p.x,p.y-6,'DEF',
-                {font:'6px monospace',color:'#ff7777',backgroundColor:'#000000',resolution:5});
-            label.setDepth(20004);this.guardOverlayObjects.push(label);
+            if(unit===ai.player.wizard)continue;
+            const order=ai.getOrder(unit),type=AIOrder.type(order),reason=AIOrder.reason(order);
+            const key=planner.assignments.get(unit),zone=key?.startsWith('zone:')?key.slice(5):null;
+            let labelText=type==='engage'?(reason==='intercept'?'INT':'ENG'):
+                type==='move_to'?'MOVE':type==='hold'?'HOLD':type==='guard'?'GUARD':(type||'IDLE').toUpperCase();
+            if(type==='engage'&&reason==='intercept')
+                labelText+='→'+(AIOrder.target(order)?.config?.name||'?');
+            else if(zone)labelText+=' Z'+zone;
+            else if(key?.startsWith('wizard:'))labelText+=' ATTACK';
+            const p=map.tileToWorldXY(unit.mapX,unit.mapY),label=scene.add.text(p.x,p.y-7,labelText,
+                {font:'6px monospace',color:reason==='intercept'?'#ff7777':'#ffffff',
+                    backgroundColor:'#161616',resolution:5});
+            label.setDepth(20005);this.guardOverlayObjects.push(label);
         }
     },
 

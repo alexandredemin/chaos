@@ -60,5 +60,6 @@ const AI_GRAPH_S1_CONFIG = Object.freeze({
     minAttackStrength:10, minCaptureStrength:4, minHoldStrength:3,
     travelWeight:.17, switchWeight:.65, persistenceBonus:.7,
     replacementMargin:.65, readinessFloor:.20,
-    preparingTimeout:5, minProgress:0.1
+    preparingTimeout:5, minProgress:0.1, reinforcementBonus:2.5,
+    reinforcementThreshold:.75
 });

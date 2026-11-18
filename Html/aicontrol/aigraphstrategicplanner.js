@@ -8,17 +8,20 @@ class GraphStrategicPlanner
         this.ai=ai;this.config={...config};
         this.goals=new Map();this.assignments=new Map();this.activeKeys=[];
         this.turn=0;this.lastGraph=null;this.lastDecision=null;this.cooldowns=new Map();
+        this.goalEvents=[];
         // Recover only the lightweight intent from persisted structured orders.
         // Map geometry and resource allocations are recalculated on the next turn.
         for(const u of ai.player?.units||[])
         {
             if(!u||u.died||u===ai.player.wizard)continue;
-            const order=ai.getOrder(u),state=order&&AIOrder.state(order),key=state?.graphGoalKey;
+            const order=ai.getOrder(u),state=order&&AIOrder.state(order);
+            const saved=u.aiControl?.graphAssignment,key=state?.graphGoalKey||saved?.key;
             if(!key)continue;
             this.assignments.set(u,key);
             if(!this.activeKeys.includes(key))this.activeKeys.push(key);
-            if(!this.goals.has(key))this.goals.set(key,{key,type:state.graphGoalType||'HOLD_ZONE',
-                status:'EXECUTING',lastProgressTurn:0,lastStrength:0});
+            if(!this.goals.has(key))this.goals.set(key,{key,type:state?.graphGoalType||saved?.type||'HOLD_ZONE',
+                status:saved?.status||'EXECUTING',readiness:saved?.readiness??1,
+                lastProgressTurn:0,lastStrength:0});
         }
     }
 
@@ -205,12 +208,33 @@ class GraphStrategicPlanner
         return this.config.switchWeight*(type==='hold'?1.45:type==='engage'?1.7:1);
     }
 
-    // Pure trial allocation, one unit belongs to one goal. No AIOrder or game
-    // state is changed during portfolio enumeration.
+    // The existing EXECUTING operation is a commitment, not a score bonus.
+    // It remains in every trial portfolio until it has genuinely completed or
+    // becomes invalid (dead target, topology change, etc.). PREPARING is mutable.
+    committedGoals(candidates)
+    {
+        return candidates.filter(g=>g.type!=='HOLD_ZONE'&&this.activeKeys.includes(g.key)&&
+            this.goals.get(g.key)?.status==='EXECUTING');
+    }
+
+    // Pure trial allocation, including fixed members of continuing operations.
+    // Interceptors are NOT in `available`; their strategic membership is kept
+    // separately in this.assignments and is restored when interception ends.
+    // Never change orders, assignments or lifecycle state during enumeration.
     evaluatePortfolio(goals,available,maps)
     {
         const assigned=new Map(goals.map(g=>[g.key,[]])),strengths=new Map(goals.map(g=>[g.key,0]));
         const unused=new Set(available),cfg=this.config;
+        for(const u of available)
+        {
+            const key=this.assignments.get(u),g=goals.find(g=>g.key===key);
+            if(!g)continue;
+            const travel=this.travelTurns(u,g,maps);
+            // Preserve an existing commitment even if the map currently has a
+            // transient obstruction. The tactical layer handles actual movement.
+            assigned.get(key).push({unit:u,travel:Number.isFinite(travel)?travel:0});
+            strengths.set(key,strengths.get(key)+this.strength(u));unused.delete(u);
+        }
         while(unused.size)
         {
             let best=null;
@@ -220,7 +244,12 @@ class GraphStrategicPlanner
                 if(before>=g.required||value<=0)continue;
                 const travel=this.travelTurns(u,g,maps);if(!Number.isFinite(travel))continue;
                 const gain=g.value*Math.min(value,g.required-before)/g.required;
-                const utility=gain-cfg.travelWeight*travel-this.switchPenalty(u,g)+
+                // Reinforce a fighting operation before initiating a new one.
+                // The lower its current supply ratio, the larger this bonus.
+                const executing=this.goals.get(g.key)?.status==='EXECUTING';
+                const reinforcement=executing&&before/g.required<cfg.reinforcementThreshold
+                    ?cfg.reinforcementBonus*(cfg.reinforcementThreshold-before/g.required)/cfg.reinforcementThreshold:0;
+                const utility=gain+reinforcement-cfg.travelWeight*travel-this.switchPenalty(u,g)+
                     (this.assignments.get(u)===g.key?cfg.persistenceBonus*.5:0);
                 if(!best||utility>best.utility||utility===best.utility&&g.key<best.goal.key)
                     best={unit:u,goal:g,utility,travel};
@@ -234,19 +263,22 @@ class GraphStrategicPlanner
         for(const g of goals)
         {
             const group=assigned.get(g.key),strength=strengths.get(g.key);
-            const readiness=Math.min(1,strength/g.required);
-            const status=strength<g.required?'PREPARING':'EXECUTING';
-            if(!group.length)continue;
+            const old=this.goals.get(g.key);
+            const continued=old?.status==='EXECUTING';
+            const readiness=Math.min(1,strength/g.required),supplyRatio=strength/g.required;
+            // LATCH: once the operation starts, losses NEVER return it to PREPARING.
+            const status=continued||g.type==='HOLD_ZONE'||strength>=g.required?'EXECUTING':'PREPARING';
+            if(!group.length&&!continued)continue;
             if(status==='PREPARING'&&g.type!=='HOLD_ZONE')preparing++;
             const travel=group.reduce((v,x)=>v+x.travel,0);
             const switches=group.reduce((v,x)=>v+this.switchPenalty(x.unit,g),0);
             score+=g.value*(cfg.readinessFloor+(1-cfg.readinessFloor)*readiness)
                 -cfg.travelWeight*travel-switches;
             if(this.activeKeys.includes(g.key))score+=cfg.persistenceBonus;
-            details.push({...g,assigned:group,strength,readiness,status,travel,switches});
+            details.push({...g,assigned:group,strength,readiness:continued?1:readiness,
+                supplyRatio,status,travel,switches});
         }
         if(preparing>1)return null;
-        // Exclude goals with zero allocated units from the actual portfolio.
         if(!details.length)return {goals:[],score:0,assignments:new Map()};
         const allocation=new Map();
         for(const g of details)for(const item of g.assigned)allocation.set(item.unit,g.key);
@@ -255,17 +287,50 @@ class GraphStrategicPlanner
 
     allPortfolios(candidates,available,maps)
     {
-        const max=Math.min(candidates.length,Math.max(1,this.config.maxActiveGoals));
-        const plans=[];
+        const locked=this.committedGoals(candidates),lockedKeys=new Set(locked.map(g=>g.key));
+        // Lowering maxActiveGoals must not silently abort an existing attack.
+        const max=Math.max(locked.length,Math.min(candidates.length,Math.max(1,this.config.maxActiveGoals)));
+        const optional=candidates.filter(g=>!lockedKeys.has(g.key)),plans=[];
         const enumerate=(chosen,next)=>{
-            if(chosen.length){const result=this.evaluatePortfolio(chosen,available,maps);if(result)plans.push(result);}
-            if(chosen.length===max)return;
-            for(let i=next;i<candidates.length;i++)enumerate(chosen.concat(candidates[i]),i+1);
+            const goals=locked.concat(chosen);
+            if(goals.length)
+            {
+                const result=this.evaluatePortfolio(goals,available,maps);
+                if(result)plans.push(result);
+            }
+            if(goals.length===max)return;
+            for(let i=next;i<optional.length;i++)enumerate(chosen.concat(optional[i]),i+1);
         };
         enumerate([],0);
-        plans.push({goals:[],score:0,assignments:new Map()});
+        if(!locked.length)plans.push({goals:[],score:0,assignments:new Map()});
         plans.sort((a,b)=>b.score-a.score||a.goals.map(g=>g.key).join('|').localeCompare(b.goals.map(g=>g.key).join('|')));
         return plans;
+    }
+
+    // Dynamic supply is for reinforcements and diagnostics, NEVER for undoing
+    // EXECUTING. An interceptor is still a member of its strategic operation,
+    // but its strength is temporarily unavailable to that operation.
+    goalReport(goal)
+    {
+        const members=[],deployed=[];
+        for(const [unit,key] of this.assignments)
+        {
+            if(key!==goal.key||unit.died)continue;
+            members.push(unit);
+            if(!AIOrder.is(this.ai.getOrder(unit),'intercept'))deployed.push(unit);
+        }
+        const total=members.reduce((v,u)=>v+this.strength(u),0);
+        const effective=deployed.reduce((v,u)=>v+this.strength(u),0);
+        return {members,deployed,total,effective,supplyRatio:effective/goal.required,
+            detached:members.filter(u=>!deployed.includes(u))};
+    }
+
+    finishGoal(key,status,reason)
+    {
+        const old=this.goals.get(key);
+        if(!old)return;
+        this.goalEvents.push({key,type:old.type,status,reason,turn:this.turn});
+        if(this.goalEvents.length>20)this.goalEvents.shift();
     }
 
     // Stable nearest currently known defender for each capturing soldier;
@@ -320,40 +385,81 @@ class GraphStrategicPlanner
         }
     }
 
+    // Every unassigned living soldier gets a REAL defensive order. GUARD is
+    // the fallback job, not a missing strategic assignment (and not free IDLE).
+    fallbackGuard(unit)
+    {
+        const ai=this.ai,order=ai.getOrder(unit),wizard=ai.player.wizard;
+        if(wizard&&!wizard.died)
+        {
+            const state=order?AIOrder.state(order):null;
+            if(AIOrder.is(order,'guard')&&AIOrder.target(order)===wizard&&!state?.graphGoalKey)return;
+            ai.setOrder(unit,null);
+            ai.chooseGuardTarget(unit);
+        }
+        else if(!AIOrder.is(order,'hold')||AIOrder.state(order)?.graphGoalKey)
+        {
+            ai.setOrder(unit,null);
+            ai.setHoldOrder(unit,[unit.mapX,unit.mapY],{radius:2});
+        }
+    }
+
     commit(plan,graph,available,midTurn,reserved)
     {
         const before=new Map(this.assignments),newAssignments=new Map();
         for(const g of plan.goals)for(const item of g.assigned)newAssignments.set(item.unit,g.key);
-        const active=new Set(plan.goals.map(g=>g.key));
+        const active=new Set(plan.goals.map(g=>g.key)),next=new Map();
+        // Do not drop a strategic member merely because a tactical INTERCEPT
+        // temporarily borrowed it. Its order is left to wizard defense.
+        for(const [unit,key] of before)
+        {
+            if(unit&&!unit.died&&reserved.has(unit)&&active.has(key))next.set(unit,key);
+            else if(midTurn&&!this.ai.canStillAct(unit)&&active.has(key))next.set(unit,key);
+        }
+        for(const [unit,key] of newAssignments)next.set(unit,key);
         for(const unit of this.ai.player.units)
         {
-            if(!unit||unit.died||unit===this.ai.player.wizard||reserved.has(unit))continue;
+            if(!unit||unit.died||unit===this.ai.player.wizard)continue;
             if(midTurn&&!this.ai.canStillAct(unit))continue;
-            const key=newAssignments.get(unit),g=plan.goals.find(g=>g.key===key);
+            if(reserved.has(unit))continue;
+            const key=next.get(unit),g=plan.goals.find(g=>g.key===key);
             if(g)this.applyOrder(unit,g,graph);
-            else
-            {
-                const order=this.ai.getOrder(unit),state=order?AIOrder.state(order):null;
-                if(state?.graphGoalKey||AIOrder.is(order,'intercept')&&
-                    (!AIOrder.target(order)||!this.ai.threats.some(t=>t.enemy===AIOrder.target(order))))
-                    this.ai.setOrder(unit,null);
-                if(this.ai.getOrder(unit)==null&&this.ai.player.wizard&&!this.ai.player.wizard.died)this.ai.chooseGuardTarget(unit);
-            }
+            else this.fallbackGuard(unit);
         }
-        this.assignments=new Map([...before].filter(([u])=>midTurn&&!this.ai.canStillAct(u)));
-        for(const [u,key] of newAssignments)this.assignments.set(u,key);
+        this.assignments=next;
         this.activeKeys=plan.goals.map(g=>g.key);
         for(const g of plan.goals)
         {
             const old=this.goals.get(g.key),state=old||{started:this.turn,preparingSince:null,lastProgressTurn:this.turn,lastStrength:0};
+            const status=old?.status==='EXECUTING'?'EXECUTING':g.status;
+            if(old?.type==='CAPTURE_ZONE'&&g.type==='HOLD_ZONE')
+                this.finishGoal(g.key,'COMPLETED','zone captured; hold begins');
             if(g.strength>state.lastStrength+this.config.minProgress)state.lastProgressTurn=this.turn;
-            if(g.status==='PREPARING')state.preparingSince??=this.turn;
+            if(status==='PREPARING')state.preparingSince??=this.turn;
             else state.preparingSince=null;
-            Object.assign(state,{key:g.key,type:g.type,status:g.status,requiredStrength:g.required,
-                assignedStrength:g.strength,readiness:g.readiness,lastStrength:g.strength});
+            if(status==='EXECUTING'&&(old?.status!=='EXECUTING'||old?.type!==g.type))state.activatedTurn=this.turn;
+            Object.assign(state,{key:g.key,type:g.type,status,requiredStrength:g.required,
+                assignedStrength:g.strength,readiness:status==='EXECUTING'?1:g.readiness,
+                supplyRatio:g.supplyRatio,lastStrength:g.strength});
             this.goals.set(g.key,state);
         }
-        for(const key of [...this.goals.keys()])if(!active.has(key))this.goals.delete(key);
+        for(const [key,old] of [...this.goals])if(!active.has(key))
+        {
+            const targetOld=old.type==='ATTACK_WIZARD'&&units.find(u=>
+                this.keyOfWizard(u)===key&&u===u.player?.wizard);
+            const completed=targetOld?.died;
+            this.finishGoal(key,completed?'COMPLETED':'ABORTED',completed?'goal reached':'goal not available');
+            this.goals.delete(key);
+        }
+        // Preserve intent outside the current order, which can temporarily be
+        // overwritten by intercept. This permits reconstructing the planner.
+        for(const unit of this.ai.player.units)
+        {
+            if(!unit||unit.died||unit===this.ai.player.wizard)continue;
+            const key=next.get(unit),state=key?this.goals.get(key):null;
+            if(unit.aiControl)unit.aiControl.graphAssignment=state?{
+                key,type:state.type,status:state.status,readiness:state.readiness}:null;
+        }
     }
 
     plan(midTurn=false)
@@ -372,6 +478,11 @@ class GraphStrategicPlanner
         // Major portfolio changes happen on the next normal strategic turn.
         if(midTurn&&this.lastDecision)
         {
+            // Newly summoned troops are not part of a committed portfolio yet;
+            // give them GUARD immediately instead of leaving them without a job.
+            for(const unit of ai.player.units)
+                if(unit&&!unit.died&&unit!==ai.player.wizard&&!reserved.has(unit)&&
+                    !this.assignments.has(unit)&&ai.canStillAct(unit))this.fallbackGuard(unit);
             this.lastDecision={...this.lastDecision,reserved:[...reserved],reason:'mid-turn defense'};
             return;
         }
@@ -380,24 +491,21 @@ class GraphStrategicPlanner
         {
             // A revealed secret gate may relabel zones. Do not carry old zone
             // IDs or HOLD geometry across a changed physical topology snapshot.
+            for(const key of this.activeKeys)this.finishGoal(key,'ABORTED','topology changed');
             this.goals.clear();this.assignments.clear();this.activeKeys=[];this.cooldowns.clear();
+            for(const u of ai.player.units)if(u?.aiControl)u.aiControl.graphAssignment=null;
             ai.holdCoordinator?.areas?.clear();ai.holdCoordinator?.groups?.clear();
         }
         this.lastGraph=graph;
         if(!graph||!graph.zones.length)
         {
+            for(const key of this.activeKeys)this.finishGoal(key,'ABORTED','topology unavailable');
+            this.goals.clear();this.assignments.clear();this.activeKeys=[];
+            for(const u of ai.player.units)if(u?.aiControl)u.aiControl.graphAssignment=null;
             for(const unit of ai.player.units)
             {
                 if(!unit||unit.died||unit===ai.player.wizard||reserved.has(unit)||midTurn&&!ai.canStillAct(unit))continue;
-                if(ai.getOrder(unit))continue;
-                if(ai.player.wizard&&!ai.player.wizard.died)ai.chooseGuardTarget(unit);
-                else
-                {
-                    const target=players.map(p=>p.wizard).filter(w=>w&&!w.died&&ai.isUnitKnown(w))
-                        .sort((a,b)=>Math.max(Math.abs(unit.mapX-a.mapX),Math.abs(unit.mapY-a.mapY))-
-                            Math.max(Math.abs(unit.mapX-b.mapX),Math.abs(unit.mapY-b.mapY)))[0];
-                    if(target)ai.setEngageOrder(unit,target,{reason:'attack'});
-                }
+                this.fallbackGuard(unit);
             }
             this.lastDecision={turn:this.turn,reason:'no topology',score:0,goals:[],reserved:[...reserved],candidates:[]};
             return;
@@ -425,7 +533,8 @@ class GraphStrategicPlanner
         this.lastDecision={turn:this.turn,score:chosen.score,goals:chosen.goals,
             candidates,available:available.length,reserved:[...reserved],
             allocations:[...this.assignments].map(([u,key])=>({unit:u,key})),
-            alternative:plans[0]?.score,reason:chosen===previous&&chosen!==plans[0]?'persistence':'best allocation'};
+            alternative:plans[0]?.score,reason:chosen===previous&&chosen!==plans[0]?'persistence':'best allocation',
+            guardCount:available.filter(u=>!this.assignments.has(u)).length};
     }
 }
 
