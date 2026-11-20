@@ -24,6 +24,8 @@ const AITest = {
 	pathLimitMove: false,
 	pathViewRadius: 20,
 	pathSummary: '',
+	dangerRadius: 10,
+	tacticalRadius: 15,
 	geometryCache: null,
 	geometrySummary: '',
 
@@ -298,8 +300,9 @@ const AITest = {
 
         const categoryLine=document.createElement('div');categoryLine.style.cssText='margin:8px 0';categoryLine.append('Category: ');
         categoryLine.appendChild(this.select([
-            ['orders','Orders'],['strategy','Strategy'],['path','Pathfinding'],
-            ['geometry','Map geometry'],['guard','Guard'],['hold','Hold'],['danger','Danger']
+            ['orders','Orders'],['strategy','Strategy'],['engage','Engage'],
+            ['move_to','Move To'],['path','Pathfinding'],['geometry','Map geometry'],
+            ['guard','Guard'],['hold','Hold'],['danger','Danger']
         ],this.menuCategory,v=>{this.menuCategory=v;this.renderMenu();}));
         this.menu.appendChild(categoryLine);
 
@@ -373,7 +376,15 @@ const AITest = {
 		geoInfo.textContent=this.geometrySummary||'Choose GEOMETRY / TOPOLOGY overlay to calculate';
 		geoPanel.appendChild(geoInfo);if(this.menuCategory==='geometry')test.appendChild(geoPanel);
         const overlays={
-            orders:[['none','Off'],['waypoints','MOVE_TO waypoints (WP)']],
+            orders:[['none','Off']],
+            engage:[['none','Off'],['tactical:goalMap','Distance TO target (Dijkstra)'],
+                ['tactical:goal','Goal progress'],['tactical:attack','Attack score'],
+                ['tactical:fire','Fire score'],['tactical:gas','Gas score'],
+                ['tactical:web','Web score'],['tactical:score','Combined profile score'],
+                ['tactical:move','Reachable MOVE cost']],
+            move_to:[['none','Off'],['waypoints','MOVE_TO waypoints (WP)'],
+                ['tactical:goalMap','Distance TO waypoint'],['tactical:goal','Goal progress'],
+                ['tactical:score','Combined profile score'],['tactical:move','Reachable MOVE cost']],
             strategy:[['none','Off'],['strategy:goals','Graph S1 active goals']],
             path:[['none','Off'],['path:route','A* route / steps'],['path:astar','A* discovered g-cost'],
                 ['path:expanded','A* expanded cells'],['path:dijkstra','Dijkstra from unit'],['path:reverse','Dijkstra to goal']],
@@ -391,6 +402,26 @@ const AITest = {
             danger:[['none','Off'],['danger','Tactical danger total'],['dangerMelee','Melee'],
                 ['dangerFire','Fire'],['dangerGas','Gas'],['dangerJump','Jump']]
         };
+        if(this.menuCategory==='danger')
+        {
+            const row=document.createElement('div');row.append('Show danger radius: ');
+            row.appendChild(this.select([['6','6 cells'],['10','10 cells'],['15','15 cells'],['20','20 cells']],
+                String(this.dangerRadius),v=>{this.dangerRadius=Number(v);this.refreshGuardOverlay(true);}));
+            test.appendChild(row);
+        }
+        if(this.menuCategory==='move_to')
+        {
+            const hint=document.createElement('div');hint.style.cssText='color:#bbb;font-size:11px;margin-top:6px';
+            hint.textContent='Waypoints appear only when the ACTIVE (not draft) order is MOVE_TO and a route exists. Apply an override in Orders if needed.';
+            test.appendChild(hint);
+        }
+        if(this.menuCategory==='engage'||this.menuCategory==='move_to')
+        {
+            const row=document.createElement('div');row.append('Tactical matrix radius: ');
+            row.appendChild(this.select([['8','8 cells'],['15','15 cells'],['20','20 cells']],
+                String(this.tacticalRadius),v=>{this.tacticalRadius=Number(v);this.refreshGuardOverlay(true);}));
+            test.appendChild(row);
+        }
         if(this.menuCategory==='orders')test.appendChild(orderPanel);
         if(this.menuCategory==='strategy')
         {
@@ -448,8 +479,9 @@ const AITest = {
 		actions.appendChild(this.button('Use current game AI order',()=>this.useCurrentOrder()));
 		actions.appendChild(this.button('Clear override',()=>this.clearOverride()));
 		actions.appendChild(this.button('Close',()=>this.closeMenu()));
-		if(this.menuCategory==='orders')this.menu.appendChild(actions);
+        if(this.menuCategory==='orders')this.menu.appendChild(actions);
         else this.menu.appendChild(this.button('Close',()=>this.closeMenu()));
+        this.menu.appendChild(this.button('Export game save + AI diagnostics (.json)',()=>this.exportGameDiagnostics()));
 
 		const hint=document.createElement('div');hint.style.cssText='margin-top:10px;color:#bbb;font-size:12px';hint.textContent='F6 = plan only   F7 = execute one AI action   F8 = menu';this.menu.appendChild(hint);
 		if(override)
@@ -571,6 +603,10 @@ const AITest = {
 		const labels={
 			'path:route':'A* route','path:astar':'A* best discovered g','path:expanded':'A* expanded cells',
 			'path:dijkstra':'Dijkstra from unit','path:reverse':'Dijkstra to goal',
+            'tactical:goalMap':'Tactical goal distance','tactical:goal':'Tactical goal progress',
+            'tactical:attack':'Tactical attack','tactical:fire':'Tactical fire',
+            'tactical:gas':'Tactical gas','tactical:web':'Tactical Web',
+            'tactical:score':'Tactical profile utility','tactical:move':'Tactical MOVE reachability',
 			'hold:score':'HOLD: HoldScore','hold:direction':'HOLD: Direction bonus','hold:assignmentUtility':'HOLD: Assignment utility','hold:entryThreat':'HOLD: Entry threat weights','hold:slotPenalty':'HOLD: slot penalty','hold:fireProtection':'HOLD: FireProtection','hold:externalExposure':'HOLD: ExternalExposure','hold:meleeProtection':'HOLD: MeleeProtection',
 			'hold:fireControl':'HOLD: FireControl','hold:meleeControl':'HOLD: MeleeControl','hold:congestion':'HOLD: congestion',
 			'hold:area':'HOLD area','hold:entry':'HOLD entries',waypoints:'MOVE_TO waypoints',cellPenalty:'GUARD slot penalty',score:'GuardScore',proximity:'Proximity',intercept:'Interception',fireShield:'Fire shield',jumpShield:'Jump shield',congestion:'Congestion penalty',pressure:'Guard pressure',goalDistance:'Guard path distance',danger:'Danger total',dangerMelee:'Danger melee',dangerFire:'Danger fire',dangerGas:'Danger gas',dangerJump:'Danger jump'};
@@ -610,12 +646,37 @@ const AITest = {
 	refreshWaypointOverlay(force=false)
 	{
 		const ctx=this.getWaypointOverlayContext(),nav=ctx?.navigation;
-		if(!ctx?.scene?.add||!nav){this.clearGuardOverlay();this.guardOverlaySignature=null;return;}
+        if(!ctx?.scene?.add||!nav)
+        {
+            this.clearGuardOverlay();this.guardOverlaySignature=null;
+            const unit=this.debugUnit;
+            if(unit?.scene?.add)
+            {
+                const state=this.getEffectiveState(unit),hasOrder=AIOrder.is(state.order,'move_to');
+                const pos=map.tileToWorldXY(unit.mapX,unit.mapY);
+                const txt=unit.scene.add.text(pos.x,pos.y-12,
+                    hasOrder?'WP: NO ROUTE':'WP: requires MOVE_TO',{
+                        font:'6px monospace',color:'#ff9999',backgroundColor:'#111111',resolution:5
+                    });
+                txt.setDepth(20004);this.guardOverlayObjects.push(txt);
+            }
+            return;
+        }
 		const stamp=['wp',ctx.unit.id,ctx.unit.mapX,ctx.unit.mapY,nav.index,
 			...nav.waypoints.map(p=>p.x+','+p.y)].join('|');
 		if(!force&&stamp===this.guardOverlaySignature)return;
 		this.guardOverlaySignature=stamp;
 		this.clearGuardOverlay();
+        const g=ctx.scene.add.graphics(),start=map.tileToWorldXY(ctx.unit.mapX,ctx.unit.mapY);
+        const tileW=map.tileWidth||16,tileH=map.tileHeight||16;
+        g.lineStyle(1.6,0xffcf65,.85);g.beginPath();
+        g.moveTo(start.x+tileW/2,start.y+tileH/2);
+        for(let i=nav.index;i<nav.waypoints.length;i++)
+        {
+            const p=map.tileToWorldXY(nav.waypoints[i].x,nav.waypoints[i].y);
+            g.lineTo(p.x+tileW/2,p.y+tileH/2);
+        }
+        g.strokePath();g.setDepth(19999);this.guardOverlayObjects.push(g);
 		for(let i=0;i<nav.waypoints.length;i++)
 		{
 			const wp=nav.waypoints[i],current=i===nav.index,last=i===nav.waypoints.length-1;
@@ -869,6 +930,171 @@ const AITest = {
 		}
 	},
 
+    // All orders share the same AIThreatSystem. Danger visualization must not
+    // depend on GUARD/HOLD assignment or their evaluation geometry.
+    refreshDangerOverlay(force=false)
+    {
+        const unit=this.debugUnit,scene=unit?.scene,ai=unit?.player?.aiControl;
+        if(!unit||unit.died||!scene?.add||!ai){this.clearGuardOverlay();return;}
+        ai.threatSystem.syncDynamicBlockers();
+        const stamp=['danger',this.guardOverlayMode,unit.id,unit.mapX,unit.mapY,
+            unit.features.health,this.dangerRadius,ai.threatSystem.dynamicRevision].join('|');
+        if(!force&&this.guardOverlaySignature===stamp)return;
+        this.guardOverlaySignature=stamp;this.clearGuardOverlay();
+        const radius=this.dangerRadius,mode=this.guardOverlayMode;
+        const y1=Math.max(0,unit.mapY-radius),y2=Math.min(map.height-1,unit.mapY+radius);
+        const x1=Math.max(0,unit.mapX-radius),x2=Math.min(map.width-1,unit.mapX+radius);
+        for(let y=y1;y<=y2;y++)for(let x=x1;x<=x2;x++)
+        {
+            if(AICellPolicy.assess(unit,x,y).blocked)continue;
+            const d=ai.threatSystem.getDangerBreakdown(unit,x,y);
+            const value=mode==='dangerMelee'?d.melee:mode==='dangerFire'?d.fire:
+                mode==='dangerGas'?d.gas:mode==='dangerJump'?d.jump:d.total;
+            if(!Number.isFinite(value))continue;
+            const p=map.tileToWorldXY(x,y),txt=scene.add.text(p.x+1,p.y+1,value.toFixed(2),{
+                font:'5px monospace',color:value>0?'#ffb987':'#bbbbbb',
+                backgroundColor:'#000000',resolution:6
+            });
+            txt.setDepth(20002);txt.setAlpha(.92);this.guardOverlayObjects.push(txt);
+        }
+    },
+
+    // Tactical matrices are derived from the same AITurnPlanner/F6 code path,
+    // with no dependence on whether the active order is GUARD, HOLD or ENGAGE.
+    refreshTacticalOverlay(force=false)
+    {
+        const unit=this.debugUnit,scene=unit?.scene,ai=unit?.player?.aiControl;
+        if(!unit||unit.died||!scene?.add||!ai){this.clearGuardOverlay();return;}
+        const state=this.getEffectiveState(unit),goal=this.resolveGoal(state);
+        if(!goal){this.clearGuardOverlay();return;}
+        ai.threatSystem.syncDynamicBlockers();
+        const stamp=['tactical',this.guardOverlayMode,unit.id,unit.mapX,unit.mapY,
+            unit.features.move,unit.features.abilityPoints,unit.features.attackPoints,
+            goal.join(','),AIOrder.type(state.order),this.tacticalRadius,
+            ai.threatSystem.dynamicRevision].join('|');
+        if(!force&&this.guardOverlaySignature===stamp)return;
+        this.guardOverlaySignature=stamp;this.clearGuardOverlay();
+        const profile=this.resolveProfile(unit,state);
+        const planner=new AITurnPlanner(ai,unit,goal,{...ai.tacticalPlannerOptions,profile,order:state.order});
+        const matrices=planner.matricesFor(planner.rootState()),cells=new Map();
+        for(const p of matrices.places)cells.set(p.cell[1]*map.width+p.cell[0],p);
+        const mode=this.guardOverlayMode,r=this.tacticalRadius;
+        const draw=(x,y,value)=>{
+            if(!Number.isFinite(value))return;
+            const p=map.tileToWorldXY(x,y),label=scene.add.text(p.x+1,p.y+1,value.toFixed(2),{
+                font:'5px monospace',color:'#ffffff',backgroundColor:'#000000',resolution:6
+            });
+            label.setDepth(20002);label.setAlpha(.92);this.guardOverlayObjects.push(label);
+        };
+        if(mode==='tactical:goalMap')
+        {
+            for(let y=Math.max(0,unit.mapY-r);y<=Math.min(map.height-1,unit.mapY+r);y++)
+                for(let x=Math.max(0,unit.mapX-r);x<=Math.min(map.width-1,unit.mapX+r);x++)
+                    if(planner.goalMap[y][x]>=0)draw(x,y,planner.goalMap[y][x]);
+            return;
+        }
+        const fields={'tactical:goal':'goalScore','tactical:attack':'attackScore',
+            'tactical:fire':'fireWeight','tactical:gas':'gasWeight',
+            'tactical:web':'webWeight','tactical:score':profile+'Score',
+            'tactical:move':'dist'};
+        const field=fields[mode];if(!field)return;
+        for(const p of matrices.places)
+        {
+            const x=p.cell[0],y=p.cell[1];
+            if(Math.max(Math.abs(x-unit.mapX),Math.abs(y-unit.mapY))>r)continue;
+            draw(x,y,p[field]);
+        }
+    },
+
+    // Download a faithful game save plus the runtime AI information omitted
+    // by Unit.serialize(): orders, goals and the tactical goal distance matrix.
+    // Nothing is added to game save/load semantics or to Phaser classes.
+    exportGameDiagnostics()
+    {
+        try
+        {
+            if(typeof saveGame==='function')saveGame();
+            const saved=localStorage.getItem('savedGame');
+            const orderInfo=u=>{
+                const order=u.aiControl?.order||null,target=AIOrder.target(order),state=order?.state||{};
+                return{
+                    unitId:u.id,player:u.player?.name,name:u.config?.name,x:u.mapX,y:u.mapY,
+                    move:u.features?.move,ap:u.features?.abilityPoints,attackPoints:u.features?.attackPoints,
+                    health:u.features?.health,dead:!!u.died,
+                    order:AIOrder.type(order),reason:AIOrder.reason(order),profile:order?.profile,
+                    targetId:target?.id??null,targetName:target?.config?.name??null,
+                    targetPos:AIOrder.targetPos(order),graphGoalKey:state.graphGoalKey??null,
+                    graphGoalType:state.graphGoalType??null,assignment:state.assignment?
+                        {x:state.assignment.x,y:state.assignment.y}:null
+                };
+            };
+            const allUnits=(typeof units!=='undefined'?units:[]).filter(Boolean);
+            const data={
+                format:'chaos-ai-debug-v1',generatedAt:new Date().toISOString(),
+                gameSave:saved?JSON.parse(saved):null,
+                units:allUnits.map(orderInfo),selectedUnit:this.debugUnit?.id??null
+            };
+            const unit=this.debugUnit;
+            if(unit&&!unit.died&&unit.player?.aiControl)
+            {
+                try
+                {
+                    const plan=this.buildPlan();
+                    if(plan.error)data.tactical={error:plan.error};
+                    else
+                    {
+                        const root=plan.planner.rootState();
+                        const d=plan.planner.goalMap;
+                        data.tactical={
+                            goal:plan.goal,profile:plan.profile,rootGoalDistance:plan.planner.rootGoalDistance,
+                            rootScore:plan.planner.finalScore(root),score:plan.result.score,
+                            actions:(plan.result.actions||[]).map(a=>({type:a.type,label:a.label,
+                                to:a.to,score:a.score,targetId:a.target?.id??null})),
+                            goalDistanceMap:d
+                        };
+                    }
+                }
+                catch(error){data.tactical={error:String(error?.stack||error)};}
+                const ai=unit.player.aiControl;
+                let graph=null;
+                try{graph=ai.getStrategicPlanner?.();}
+                catch(error){data.strategyError=String(error);}
+                if(graph&&typeof GraphStrategicPlanner!=='undefined'&&graph instanceof GraphStrategicPlanner)
+                {
+                    data.graph={turn:graph.turn,activeKeys:[...(graph.activeKeys||[])],
+                        assignments:[...(graph.assignments||new Map())].map(([u,key])=>[u?.id,key]),
+                        goals:(graph.lastDecision?.goals||[]).map(g=>({key:g.key,type:g.type,
+                            status:g.status,required:g.required,value:g.value,zoneId:g.zoneId,
+                            x:g.x,y:g.y,readiness:g.readiness}))};
+                }
+                try
+                {
+                    const radius=10,fields=[];
+                    ai.threatSystem?.syncDynamicBlockers?.();
+                    for(let y=Math.max(0,unit.mapY-radius);y<=Math.min(map.height-1,unit.mapY+radius);y++)
+                        for(let x=Math.max(0,unit.mapX-radius);x<=Math.min(map.width-1,unit.mapX+radius);x++)
+                        {
+                            const d=ai.threatSystem.getDangerBreakdown(unit,x,y);
+                            fields.push({x,y,total:d.total,melee:d.melee,fire:d.fire,gas:d.gas,jump:d.jump});
+                        }
+                    data.danger=fields;
+                }
+                catch(error){data.dangerError=String(error);}
+            }
+            const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+            const url=URL.createObjectURL(blob),a=document.createElement('a');
+            a.href=url;a.download='chaos-ai-debug-'+Date.now()+'.json';
+            document.body.appendChild(a);a.click();a.remove();
+            setTimeout(()=>URL.revokeObjectURL(url),1000);
+            this.updateStatus('Exported game save + AI diagnostics',true);
+        }
+        catch(error)
+        {
+            console.error('AITest export failed',error);
+            this.updateStatus('Export failed: '+String(error),true);
+        }
+    },
+
 	getGuardOverlayContext()
 	{
 		const unit=this.debugUnit;
@@ -1011,6 +1237,8 @@ const AITest = {
 	{
 		if(this.guardOverlayMode==='none'){this.clearGuardOverlay();return;}
 		if(this.guardOverlayMode==='waypoints'){this.refreshWaypointOverlay(force);return;}
+        if(this.guardOverlayMode.startsWith('tactical:')){this.refreshTacticalOverlay(force);return;}
+        if(this.guardOverlayMode.startsWith('danger')){this.refreshDangerOverlay(force);return;}
         if(this.guardOverlayMode==='strategy:goals'){this.refreshStrategyOverlay(force);return;}
 		if(this.guardOverlayMode.startsWith('path:')){this.refreshPathOverlay(force);return;}
 		if(this.guardOverlayMode.startsWith('geo:')){this.refreshGeometryOverlay(force);return;}

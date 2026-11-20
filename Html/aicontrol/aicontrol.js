@@ -735,6 +735,16 @@ class AIControl
 
         switch(action.type)
         {
+            case 'traffic_request':
+            {
+                const blocker=getUnitAtMap(action.to[0],action.to[1]);
+                if(blocker&&blocker===action.blocker&&blocker.player===unit.player&&
+                    this.traffic.canRequestYield(blocker,this.getTrafficPriority(unit)))
+                    this.traffic.onFriendlyBlock(unit,action.to,blocker);
+                else fail();
+                return;
+            }
+
             case 'move':
                 if(!this.startMacroMove(unit,action.to)) fail();
                 return;

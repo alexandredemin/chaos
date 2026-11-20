@@ -165,6 +165,35 @@ class AIMoveActionProvider extends AITurnActionProvider
 	}
 }
 
+// Last-resort action only. A traffic request is NOT a movement move and may not
+// be added to the beam when a normal MOVE candidate exists.
+class AITrafficRequestActionProvider extends AITurnActionProvider
+{
+	getActions(state,ctx)
+	{
+		const planner=this.planner,unit=planner.unit;
+		if(state.actions.length||state.move<=0||ctx.moveCandidates.length)return[];
+		if(state.x!==unit.mapX||state.y!==unit.mapY)return[];
+		if(planner.rootGoalDistance<0)return[];
+		const options=[];
+		for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)
+		{
+			if(dx===0&&dy===0)continue;
+			const x=state.x+dx,y=state.y+dy;
+			if(x<0||y<0||x>=map.width||y>=map.height)continue;
+			if(wallsLayer.getTileAt(x,y)?.properties?.collides===true)continue;
+			if(AICellPolicy.assess(unit,x,y).blocked)continue;
+			const blocker=getUnitAtMap(x,y);
+			if(!blocker||blocker===unit||blocker.died||blocker.player!==unit.player)continue;
+			if(!planner.ai.traffic.canRequestYield(blocker,planner.ai.getTrafficPriority(unit)))continue;
+			const progress=planner.goalProgressAt(x,y);
+			if(progress<=AI_MATRIX_EPS)continue;
+			options.push({type:'traffic_request',to:[x,y],blocker,progress,label:'TRAFFIC_REQUEST('+x+','+y+')'});
+		}
+		return options.sort((a,b)=>b.progress-a.progress).slice(0,1);
+	}
+}
+
 class AIAttackActionProvider extends AITurnActionProvider
 {
 	getActions(state,ctx)
@@ -344,9 +373,15 @@ class AITurnPlanner
 		const assignment=this.orderType==='guard'?AIOrder.state(this.order)?.assignment:null;
 		this.guardPressure=assignment&&assignment.components?Math.max(0,Math.min(1,assignment.components.pressure||0)):0;
 		this.adapter=new AIPlannerMatrixAdapter(this);
-		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
+		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this),new AITrafficRequestActionProvider(this)];
 		this.matrixCache=new Map();this._terminalPositionScore=null;
-		this.goalMap=this.ai.getMultiSourceDistanceMap(unit,[goal],{reverse:true,onCell:cell=>this.ai.canMacroMoveThroughCell(unit,cell[0],cell[1])}).distances;
+		// Goal progress is a GEOMETRIC heuristic, not a real movement order.
+		// A moving formation or enemies guarding a narrow corridor must not make
+		// an otherwise accessible ENGAGE goal appear permanently unreachable.
+		// Actual MOVE candidates retain live occupancy / traffic restrictions.
+		this.goalMap=this.ai.getMultiSourceDistanceMap(unit,[goal],{
+			reverse:true,onUnit:()=>true
+		}).distances;
 		this.rootGoalDistance=this.goalMap&&this.goalMap[unit.mapY]&&this.goalMap[unit.mapY][unit.mapX]!=null?this.goalMap[unit.mapY][unit.mapX]:-1;
 	}
 
@@ -356,7 +391,15 @@ class AITurnPlanner
 	knownEnemies(){return this.adapter.knownEnemies();}
 	focusScore(target,score){return this.focusTarget===target?score*1.1:score;}
 	positionDangerAt(x,y){return this.ai.threatSystem.getDangerAt(this.unit,x,y);}
-	goalProgressAt(x,y){const gd=this.goalMap[y]?this.goalMap[y][x]:-1;return this.rootGoalDistance>=0&&gd>=0?this.rootGoalDistance-gd:-1000;}
+	goalProgressAt(x,y)
+	{
+		const gd=this.goalMap[y]?this.goalMap[y][x]:-1;
+		// Do not turn an inaccessible/stale goal into a -1000 hard freeze.
+		// Such a case is diagnostic information, not a valid tactical utility.
+		if(this.rootGoalDistance<0)return 0;
+		if(gd<0)return -Math.min(10,this.rootGoalDistance);
+		return this.rootGoalDistance-gd;
+	}
 	getProfileWeights(profile=this.profile)
 	{
 		const base=AI_TACTICAL_PROFILES[profile]||AI_TACTICAL_PROFILES.balanced;
@@ -371,7 +414,7 @@ class AITurnPlanner
 	positionScoreAt(x,y,profile=this.profile){const p=this.getProfileWeights(profile);return p.goal*this.goalProgressAt(x,y)-p.danger*this.positionDangerAt(x,y);}
 	actionAndPositionScore(actionUtility,endUtility,profile=this.profile){const p=this.getProfileWeights(profile);return p.offense*actionUtility+endUtility;}
 	terminalPositionScore(){if(this._terminalPositionScore!=null)return this._terminalPositionScore;const root=this.rootState(),m=this.matricesFor(root);let worst=Infinity;for(const p of m.places)if(p.dist>=0&&p.dist<=root.move)worst=Math.min(worst,this.positionScoreAt(p.cell[0],p.cell[1]));this._terminalPositionScore=Number.isFinite(worst)?worst:0;return this._terminalPositionScore;}
-	endPositionScore(s){return s.terminal?this.terminalPositionScore():this.positionScoreAt(s.x,s.y);}
+	endPositionScore(s){return s.actions?.[0]?.type==='traffic_request'?this.positionScoreAt(s.x,s.y):s.terminal?this.terminalPositionScore():this.positionScoreAt(s.x,s.y);}
 	finalScore(s){return this.actionAndPositionScore(s.actionScore,this.endPositionScore(s));}
 
 	buildContext(state)
@@ -382,10 +425,11 @@ class AITurnPlanner
 
 	informativeBest(places,key,state)
 	{
-		const eligible=places.filter(p=>p.dist>0&&p.dist<=state.move);if(!eligible.length)return null;
-		let min=Infinity,max=-Infinity;for(const p of eligible){const v=p[key];if(!Number.isFinite(v))continue;min=Math.min(min,v);max=Math.max(max,v);}
-		if(!Number.isFinite(min)||max-min<=AI_MATRIX_EPS)return null;
-		return eligible.slice().sort((a,b)=>(b[key]??-Infinity)-(a[key]??-Infinity)||a.dist-b.dist)[0]||null;
+		const eligible=places.filter(p=>p.dist>0&&p.dist<=state.move&&Number.isFinite(p[key]));if(!eligible.length)return null;
+		let min=Infinity,max=-Infinity;for(const p of eligible){min=Math.min(min,p[key]);max=Math.max(max,p[key]);}
+		// One legal cell is informative even though min === max.
+		if(eligible.length>1&&max-min<=AI_MATRIX_EPS)return null;
+		return eligible.slice().sort((a,b)=>b[key]-a[key]||a.dist-b.dist)[0]||null;
 	}
 
 	generateMoveCandidates(state,ctx)
@@ -423,10 +467,19 @@ class AITurnPlanner
 			const n={...state,used:new Set(state.used),actions:state.actions.concat([a]),lastAction:a.type};
 			if(a.type==='move'){n.x=a.to[0];n.y=a.to[1];n.move=Math.max(0,n.move-a.cost);}
 			else if(a.type==='attack'){if(n.move<=0||n.attackPoints<=0)continue;n.move=Math.max(0,n.move-a.costMove);n.attackPoints=Math.max(0,n.attackPoints-a.costAttack);n.actionScore+=a.score||0;}
+			else if(a.type==='traffic_request')n.terminal=true;
 			else{if((a.costAP||0)>n.ap)continue;n.ap-=a.costAP||0;n.actionScore+=a.score||0;if(a.to){n.x=a.to[0];n.y=a.to[1];}if(a.mark)n.used.add(a.mark);if(a.terminal)n.terminal=true;}
+			// A movement-only plan that comes back to its initial position is useless.
+			if(this.isEmptyMoveCycle(n))continue;
 			out.push(n);
 		}
 		return out;
+	}
+
+	isEmptyMoveCycle(state)
+	{
+		return state.actions.length>0&&state.actions.every(a=>a.type==='move')&&
+			state.x===this.unit.mapX&&state.y===this.unit.mapY;
 	}
 
 	isCommittedOrder()
@@ -447,6 +500,10 @@ class AITurnPlanner
 	isProgressState(state)
 	{
 		if(state==null||!state.actions||state.actions.length===0)return false;
+		if(this.isEmptyMoveCycle(state))return false;
+		// Last-resort request must be executable even if its endpoint does not
+		// itself make progress: it asks an ally to free the next cell.
+		if(state.actions[0].type==='traffic_request')return true;
 		if(state.actionScore>AI_MATRIX_EPS)return true;
 		return this.goalProgressAt(state.x,state.y)>AI_MATRIX_EPS;
 	}
