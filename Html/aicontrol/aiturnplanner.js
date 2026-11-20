@@ -165,14 +165,14 @@ class AIMoveActionProvider extends AITurnActionProvider
 	}
 }
 
-// Last-resort action only. A traffic request is NOT a movement move and may not
-// be added to the beam when a normal MOVE candidate exists.
+// Traffic is a fallback AFTER tactical planning chooses HOLD, not a beam candidate.
+// It does not consume movement or add synthetic utility.
 class AITrafficRequestActionProvider extends AITurnActionProvider
 {
-	getActions(state,ctx)
+	getActions(state)
 	{
 		const planner=this.planner,unit=planner.unit;
-		if(state.actions.length||state.move<=0||ctx.moveCandidates.length)return[];
+		if(state.actions.length||state.move<=0)return[];
 		if(state.x!==unit.mapX||state.y!==unit.mapY)return[];
 		if(planner.rootGoalDistance<0)return[];
 		const options=[];
@@ -373,7 +373,8 @@ class AITurnPlanner
 		const assignment=this.orderType==='guard'?AIOrder.state(this.order)?.assignment:null;
 		this.guardPressure=assignment&&assignment.components?Math.max(0,Math.min(1,assignment.components.pressure||0)):0;
 		this.adapter=new AIPlannerMatrixAdapter(this);
-		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this),new AITrafficRequestActionProvider(this)];
+		this.providers=[new AIMoveActionProvider(this),new AIAttackActionProvider(this),new AIFireActionProvider(this),new AIGasActionProvider(this),new AIWebActionProvider(this),new AIJumpActionProvider(this)];
+		this.trafficFallback=new AITrafficRequestActionProvider(this);
 		this.matrixCache=new Map();this._terminalPositionScore=null;
 		// Goal progress is a GEOMETRIC heuristic, not a real movement order.
 		// A moving formation or enemies guarding a narrow corridor must not make
@@ -536,6 +537,13 @@ class AITurnPlanner
 		// because every advancing option is risky. GUARD is committed to its coordinator slot,
 		// but negative goal-progress movement is filtered above unless it performs useful combat.
 		if(best.actions.length===0&&this.isCommittedOrder()&&bestProgress!=null)best=bestProgress;
+		// Only an actual HOLD can ask an ally to yield. An ordinary tactical action
+		// always wins, even if MOVE candidates existed but were not selected.
+		if(best.actions.length===0)
+		{
+			const request=this.trafficFallback.getActions(root)[0];
+			if(request)best={...root,actions:[request],lastAction:request.type,terminal:true};
+		}
 		return{best,score:this.finalScore(best),actions:best.actions};
 	}
 }
