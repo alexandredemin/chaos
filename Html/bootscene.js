@@ -33,6 +33,7 @@ var BootScene = new Phaser.Class({
         this.load.spritesheet('glue_blob', 'img/glue_blob.png', { frameWidth: 128, frameHeight: 128 } );
         this.load.spritesheet('frog', 'img/gas1.png', { frameWidth: 128, frameHeight: 128 } );
         this.load.spritesheet('door', 'img/doors.png', { frameWidth: 27, frameHeight: 30 } );
+        this.load.spritesheet('door_locked', 'img/doors_locked.png', { frameWidth: 27, frameHeight: 30 } );
         this.load.spritesheet('chest', 'img/chest.png', { frameWidth: 16, frameHeight: 16 } );
         this.load.spritesheet('wardrobe', 'img/wardrobe.png', { frameWidth: 106, frameHeight: 135 } );
         this.load.spritesheet('hole', 'img/hole.png', { frameWidth: 16, frameHeight: 16 } );

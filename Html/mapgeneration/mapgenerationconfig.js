@@ -266,7 +266,7 @@ const MAP_GENERATION_CONFIG = {
 		// Persistent monster-generator entities distributed through eligible rooms.
 		monsterGenerators: {
 			baseArea: 20 * 20, // Map area used as the scaling baseline for generator count.
-			maxPerMap: 5, // Absolute maximum number of monster-generator entities.
+			maxPerMap: 0, // 5, // Absolute maximum number of monster-generator entities.
 			roomsPerGeneratorCap: 3, // At most roughly one generator per this many eligible rooms.
 			minScaleFactor: 1.5, // Lower area-based multiplier used to choose generator count.
 			maxScaleFactor: 2, // Upper area-based multiplier used to choose generator count.

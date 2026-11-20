@@ -80,8 +80,8 @@ const entityConfigs = {
     'door': {
         name: 'door',
         sprite: 'door',
-        spriteLocked: null,
-        framesLocked: null,
+        spriteLocked: 'door_locked',
+        framesLocked: { W: 0, N: 2, E: 4, S: 6 },
         scale: 1.0,
         displayOrigin: {x:13,y:18},
         features: {

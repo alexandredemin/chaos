@@ -849,6 +849,8 @@ class MapContentGenerator {
 
 	// Places guards near valuable containers while respecting starts, doors and occupied cells.
 	_placeTreasureGuards(chests = [], wardrobes = [], startPositions = [], occupiedObjects = []) {
+		// A zero cap disables treasure guards, including the single-guard fallback.
+		if (this.settings.guards.maxGuardsPerRoom <= 0)return [];
 		const result=[], containers=chests.concat(wardrobes), occupied=this._collectOccupied(occupiedObjects), doorCells=this._doorCells(occupiedObjects);
 		const guardTypes=Object.keys(unitConfigs).filter(n => !this.settings.guards.excludedUnitTypes.includes(n));
 		if (!guardTypes.length)return result;
@@ -865,7 +867,7 @@ class MapContentGenerator {
 			}
 			if (!cells.length)continue;
 			this._shuffle(cells);
-			const count=Math.min(this._random()<this.settings.guards.extraGuardChance?this.settings.guards.maxGuardsPerRoom: 1, cells.length), type=guardTypes[this._rand(0, guardTypes.length-1)], aggro=Math.max(this.settings.guards.minAggroRadius, Math.ceil(Math.max(room.w, room.h)/2)+1);
+			const count=Math.min(this.settings.guards.maxGuardsPerRoom, this._random()<this.settings.guards.extraGuardChance?this.settings.guards.maxGuardsPerRoom: 1, cells.length), type=guardTypes[this._rand(0, guardTypes.length-1)], aggro=Math.max(this.settings.guards.minAggroRadius, Math.ceil(Math.max(room.w, room.h)/2)+1);
 			for (let i=0;i<count;i++){
 				const c=cells[i];
 				result.push({type: 'independent_unit', name: type, x: c.x*this.tileSize, y: c.y*this.tileSize, factionId: this.settings.factionId,
@@ -882,11 +884,13 @@ class MapContentGenerator {
 		const profiles=this.settings.roamingCreatures.profiles.map(profile => ({
 			...profile,
 			count: this._rand(
-				Math.max(1, Math.round(profile.count[0]*scale)),
-				Math.max(1, Math.round(profile.count[1]*scale))
+				Math.max(0, Math.round(profile.count[0]*scale)),
+				Math.max(0, Math.round(profile.count[1]*scale))
 			),
 			dist: profile.minDistance
 		}));
+		// Do not search spawn rooms when every profile explicitly requests zero.
+		if (profiles.every(profile => profile.count === 0))return result;
 		const occupied=this._collectOccupied(occupiedObjects), doors=this._doorCells(occupiedObjects), placed=[];
 		const arena=this.rooms.find(r => this._zoneForRoom(r)?.type==='arena'&&!this._roomHasObject(r, startPositions));
 		let central=this.rooms.filter(r => !r.special&&this._zoneForRoom(r)?.type!=='special'&&!this._roomHasObject(r, startPositions)&&r!==arena);
